@@ -1,0 +1,28 @@
+{
+    "name": "FirstSymbol.Vectra.Editor.Tests",
+    "rootNamespace": "FirstSymbol.Vectra.Editor.Tests",
+    "references": [
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "FirstSymbol.Vectra",
+        "FirstSymbol.Vectra.Editor",
+        "Unity.Collections",
+        "Unity.Mathematics",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

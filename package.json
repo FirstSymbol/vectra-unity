@@ -1,0 +1,30 @@
+{
+  "name": "com.firstsymbol.vectra",
+  "version": "0.1.0",
+  "displayName": "Vectra Vector Graphics",
+  "description": "Vector shapes for uGUI Canvas and world space: analytic SDF primitives, arbitrary paths, boolean operations, gradients, strokes with dashes, shadows, glows, bevels and other effects, SVG import and export. Burst-accelerated geometry and one batchable material for everything.",
+  "unity": "6000.0",
+  "author": {
+    "name": "FirstSymbol",
+    "email": "firstsymbol.0@gmail.com"
+  },
+  "keywords": ["vector", "svg", "shapes", "sdf", "ui", "ugui", "gradient", "boolean", "path"],
+  "dependencies": {
+    "com.unity.burst": "1.8.18",
+    "com.unity.collections": "2.5.1",
+    "com.unity.mathematics": "1.3.2",
+    "com.unity.ugui": "2.0.0"
+  },
+  "samples": [
+    {
+      "displayName": "Shapes Gallery",
+      "description": "Analytic primitives, path generators, paints, strokes, effects and boolean operations on one Canvas.",
+      "path": "Samples~/ShapesGallery"
+    },
+    {
+      "displayName": "SVG Showcase",
+      "description": "SVG documents rendered in Canvas and world space.",
+      "path": "Samples~/SvgShowcase"
+    }
+  ]
+}
