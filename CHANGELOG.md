@@ -4,6 +4,35 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-10-30
+
+### Added
+- `VectraMask`: stencil mask that follows the exact outline, and a soft mode (feather, inset, invert) evaluated per
+  pixel for child Vectra graphics.
+- `VectraPalette` and `VectraTheme`: named colours per theme; paints reference them through colour tokens.
+- Animation: `VectraTween` fluent tweens (trim, colours, opacity, width, dash offset, rotation, fill amount,
+  dissolve, morph, generic floats; eases, delays, loops, yoyo) and `VectraAnimatedProperties` for Animator and
+  Timeline.
+- Effects: pixelate, outline, colour overlay, gradient overlay. Gradients are dithered.
+- SVG: `VectraSvg.Parse / Load / Download / Expand` (document to an editable `VectraShape` hierarchy, clip paths kept)
+  and `VectraFontMap` for `font-family` to TextMeshPro fonts.
+- Editor: Scene view overlay (point modes, snapping, handle toggles), drop shadow handle, drag-to-reorder cards,
+  palette picker, Copy/Paste Vectra Style, Export as Sprite Asset, Expand to Hierarchy, Atlas Debugger and SVG Import
+  Report windows, inspectors for the new components, default font map setting.
+- Optional `FirstSymbol.Vectra.Editor.Cli` assembly with `unity command vectra …` commands (needs com.unity.pipeline).
+- Play mode tests: rendered pixels, masks, palettes, batching, garbage-free rebuilds, tweens, SVG expansion.
+- Samples: Effects & Masks, Boolean Operations, Animation, World Space, URP Backdrop.
+- Documentation in English and Russian (`Documentation~`).
+
+### Changed
+- `VectraBackdropFeature` captures before transparent objects into persistent targets (default event
+  `BeforeRenderingTransparents`). Use a camera stack to blur other UI.
+
+### Fixed
+- Backdrop shapes sampled a capture taken after them (stale or released), which darkened blend modes and glass.
+- `VectraBooleanGroup` allocated every frame while checking its children.
+- FXC warning about a potentially uninitialized variable in the shape distance function.
+
 ## [0.1.0] - 2026-10-30
 
 ### Added
