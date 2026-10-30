@@ -1,6 +1,6 @@
 {
   "name": "com.firstsymbol.vectra",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "displayName": "Vectra Vector Graphics",
   "description": "Vector shapes for uGUI Canvas and world space: analytic SDF primitives, arbitrary paths, boolean operations, gradients, strokes with dashes, shadows, glows, bevels and other effects, SVG import and export. Burst-accelerated geometry and one batchable material for everything.",
   "unity": "6000.0",

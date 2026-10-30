@@ -30,7 +30,9 @@ namespace FirstSymbol.Vectra
                 key = key * 397 ^ alphaThreshold.GetHashCode();
                 key = key * 397 ^ resolution;
                 key = key * 397 ^ simplify.GetHashCode();
+#if UNITY_EDITOR
                 key = key * 397 ^ sprite.texture.imageContentsHash.GetHashCode();
+#endif
             }
 
             if (s_Cache.TryGetValue(key, out var cached)) return cached;

@@ -33,7 +33,7 @@ allocate managed memory.
 ## Installation
 
 Package Manager → **+** → **Add package from git URL…** →
-`https://github.com/FirstSymbol/vectra-unity.git` (a specific version: append `#0.2.0`).
+`https://github.com/FirstSymbol/vectra-unity.git` (a specific version: append `#0.2.1`).
 
 Samples: **Package Manager → Vectra Vector Graphics → Samples**.
 

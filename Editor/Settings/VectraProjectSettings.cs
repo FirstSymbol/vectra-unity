@@ -45,7 +45,7 @@ namespace FirstSymbol.Vectra.Editor
                 page.style.maxWidth = 640;
                 root.Add(page);
                 var header = VxUI.IconHeader(VxIcon.Kind.Shape, "Vectra Vector Graphics", "Project settings", out var chips);
-                chips.Add(VxUI.Chip("v0.2.0", "accent"));
+                chips.Add(VxUI.Chip("v0.2.1", "accent"));
                 page.Add(header);
                 page.Add(new VisualElement { style = { height = 8 } });
 

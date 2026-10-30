@@ -34,7 +34,7 @@ Vectra рисует векторные фигуры в **uGUI Canvas** и в **w
 
 ## Установка
 
-Package Manager → **+** → **Add package from git URL…** → `https://github.com/FirstSymbol/vectra-unity.git`. Чтобы поставить конкретную версию, добавьте к адресу `#0.2.0`.
+Package Manager → **+** → **Add package from git URL…** → `https://github.com/FirstSymbol/vectra-unity.git`. Чтобы поставить конкретную версию, добавьте к адресу `#0.2.1`.
 
 Сэмплы находятся в **Package Manager → Vectra Vector Graphics → Samples**.
 
