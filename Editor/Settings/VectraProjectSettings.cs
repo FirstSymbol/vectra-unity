@@ -16,6 +16,8 @@ namespace FirstSymbol.Vectra.Editor
         public VectraQuality defaultQuality = VectraQuality.High;
         [Tooltip("Maximum size of the shared signed-distance atlas.")]
         public int sdfAtlasMaxSize = 2048;
+        [Tooltip("Font map given to SVG images created from the menu.")]
+        public Svg.VectraFontMap defaultFontMap;
 
         public void Save() => Save(true);
 
@@ -71,6 +73,8 @@ namespace FirstSymbol.Vectra.Editor
 
                     Debug.Log($"Vectra: {n} SVG file(s) now use the Vectra importer.");
                 }));
+                svg.Add(VxFields.For(so.FindProperty("defaultFontMap"), t, "Default font map"));
+                svg.Add(VxUI.Text("Maps SVG font-family names to TextMeshPro fonts for new SVG images (Assets > Create > Vectra > SVG Font Map).", "vx-hint"));
                 page.Add(VxUI.TitledCard("vectra.settings.svg", VxIcon.Kind.Document, "SVG import", svg));
 
                 var render = new VisualElement();

@@ -196,7 +196,7 @@ namespace FirstSymbol.Vectra.Editor
                 bool built = s.vertices > 0;
                 bool analytic = built ? s.analytic : IsAnalytic(content, ctx.getSize());
                 chips.Add(VxUI.Chip(analytic ? "Analytic SDF" : "Tessellated", analytic ? "green" : "orange"));
-                if (s.usesSdf) chips.Add(VxUI.Chip("Distance field", "accent"));
+                if (s.usesSdf) chips.Add(VxUI.Chip($"Distance field {s.sdfWidth}×{s.sdfHeight}", "accent"));
                 if (built)
                 {
                     chips.Add(VxUI.Chip($"{s.vertices} verts"));
@@ -570,6 +570,7 @@ namespace FirstSymbol.Vectra.Editor
             body.Bind(so);
 
             var card = VxUI.Card(list.propertyPath + "." + index, header, body, index == 0);
+            header.Insert(1, VxReorder.Grip(card, index, (from, to) => MoveTo(so, list, from, to, rebuild)));
 
             void Update()
             {
@@ -593,6 +594,16 @@ namespace FirstSymbol.Vectra.Editor
             card.TrackPropertyValue(e, _ => Update());
             Update();
             return card;
+        }
+
+        static void MoveTo(SerializedObject so, SerializedProperty list, int from, int to, Action rebuild)
+        {
+            so.Update();
+            to = Mathf.Clamp(to, 0, list.arraySize - 1);
+            if (from == to) return;
+            list.MoveArrayElement(from, to);
+            so.ApplyModifiedProperties();
+            rebuild();
         }
 
         static void Move(SerializedObject so, SerializedProperty list, int index, int delta, Action rebuild)
@@ -660,6 +671,10 @@ namespace FirstSymbol.Vectra.Editor
             if (t == typeof(ColorAdjustEffect)) return VxIcon.Kind.FxAdjust;
             if (t == typeof(FillAmountEffect)) return VxIcon.Kind.FxFillAmount;
             if (t == typeof(DissolveEffect)) return VxIcon.Kind.FxDissolve;
+            if (t == typeof(PixelateEffect)) return VxIcon.Kind.PaintChecker;
+            if (t == typeof(OutlineEffect)) return VxIcon.Kind.Stroke;
+            if (t == typeof(ColorOverlayEffect)) return VxIcon.Kind.PaintSolid;
+            if (t == typeof(GradientOverlayEffect)) return VxIcon.Kind.PaintLinear;
             return VxIcon.Kind.Effects;
         }
 
@@ -699,6 +714,7 @@ namespace FirstSymbol.Vectra.Editor
                     VxFields.AddChildren(body, e, fx.GetType(), "enabled");
                     body.Bind(so);
                     var card = VxUI.Card(list.propertyPath + "." + i, header, body, true);
+                    header.Insert(1, VxReorder.Grip(card, index, (from, to) => MoveTo(so, list, from, to, Rebuild)));
                     card.EnableInClassList("vx-card--disabled", !fx.enabled);
                     card.TrackPropertyValue(e.FindPropertyRelative("enabled"), p => card.EnableInClassList("vx-card--disabled", !p.boolValue));
                     items.Add(card);

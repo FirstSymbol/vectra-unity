@@ -1212,4 +1212,61 @@ namespace FirstSymbol.Vectra.Editor
             }
         }
     }
-}
+
+    /// <summary>Drag-to-reorder for cards in a vertical list: drag the grip of a card onto the slot it should take.</summary>
+    public static class VxReorder
+    {
+        /// <summary>Creates a grip that drags <paramref name="card"/>; <paramref name="move"/> receives (from, to).</summary>
+        public static VisualElement Grip(VisualElement card, int index, Action<int, int> move)
+        {
+            var grip = new VisualElement { tooltip = "Drag to reorder" };
+            grip.AddToClassList("vx-grip");
+            grip.Add(new VxIcon(VxIcon.Kind.More, 12));
+            bool dragging = false;
+            float startY = 0f;
+
+            grip.RegisterCallback<ClickEvent>(e => e.StopPropagation());
+            grip.RegisterCallback<PointerDownEvent>(e =>
+            {
+                if (e.button != 0) return;
+                dragging = true;
+                startY = e.position.y;
+                grip.CapturePointer(e.pointerId);
+                card.AddToClassList("vx-card--dragging");
+                e.StopPropagation();
+            });
+            grip.RegisterCallback<PointerMoveEvent>(e =>
+            {
+                if (!dragging) return;
+                card.style.translate = new Translate(0, e.position.y - startY);
+            });
+            grip.RegisterCallback<PointerUpEvent>(e =>
+            {
+                if (!dragging) return;
+                dragging = false;
+                grip.ReleasePointer(e.pointerId);
+                card.RemoveFromClassList("vx-card--dragging");
+                card.style.translate = StyleKeyword.Null;
+                e.StopPropagation();
+                var list = card.parent;
+                if (list == null) return;
+                // Target slot: how many other cards have their centre above the pointer.
+                int target = 0;
+                foreach (var other in list.Children())
+                {
+                    if (other == card || !other.ClassListContains("vx-card")) continue;
+                    if (other.worldBound.center.y < e.position.y) target++;
+                }
+
+                if (target != index) move(index, target);
+            });
+            grip.RegisterCallback<PointerCaptureOutEvent>(_ =>
+            {
+                if (!dragging) return;
+                dragging = false;
+                card.RemoveFromClassList("vx-card--dragging");
+                card.style.translate = StyleKeyword.Null;
+            });
+            return grip;
+        }
+    }}

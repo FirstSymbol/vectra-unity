@@ -474,3 +474,21 @@
 
 .vx-effect-tile:hover { border-color: var(--vx-accent); background-color: var(--vx-accent-soft); }
 .vx-effect-tile__label { font-size: 10px; color: var(--vx-dim); margin-top: 3px; }
+
+.vx-grip {
+    width: 14px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    cursor: move-arrow;
+    opacity: 0.55;
+}
+
+.vx-grip:hover {
+    opacity: 1;
+}
+
+.vx-card--dragging {
+    opacity: 0.85;
+    border-color: rgb(80, 140, 255);
+}

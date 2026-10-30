@@ -25,6 +25,8 @@ namespace FirstSymbol.Vectra.Rendering
         public bool usesSdf;
         public int trapezoids;
         public double milliseconds;
+        /// <summary>Size of the distance-field region in the shared atlas (0 when none).</summary>
+        public int sdfWidth, sdfHeight;
     }
 
     /// <summary>Everything a shape renderer needs to build a mesh.</summary>
@@ -288,6 +290,11 @@ namespace FirstSymbol.Vectra.Rendering
             if (smooth) EnsureSmoothSdf((BooleanShape)geometry, sdfReach + m_Margin * 2f, tol, input.quality);
             else if (needSdf) EnsureSdf(sdfReach + m_Margin * 2f, input.quality);
             stats.usesSdf = needSdf && m_Sdf.IsValid;
+            if (m_Sdf.IsValid)
+            {
+                stats.sdfWidth = m_Sdf.rect.width;
+                stats.sdfHeight = m_Sdf.rect.height;
+            }
 
             // Behind the fill: shadows, glows, strokes marked "behind".
             foreach (var e in s_Before) EmitEffect(e, analytic);

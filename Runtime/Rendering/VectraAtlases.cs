@@ -129,6 +129,9 @@ namespace FirstSymbol.Vectra.Rendering
 
         public static int Height => s_Height;
 
+        /// <summary>Number of rows currently in use (diagnostics).</summary>
+        public static int UsedRows => s_Used != null ? CountUsed() : 0;
+
         static void Ensure()
         {
             if (s_Texture != null) return;
@@ -405,6 +408,13 @@ namespace FirstSymbol.Vectra.Rendering
         public static int Generation => s_Generation;
         public static int Size => s_Size;
         public static int AllocationCount => s_Allocs.Count;
+
+        /// <summary>Collects the allocated regions, padding included (diagnostics).</summary>
+        public static void GetAllocations(List<RectInt> result)
+        {
+            result.Clear();
+            foreach (var a in s_Allocs.Values) result.Add(a.outer);
+        }
         public static Texture2D Texture
         {
             get

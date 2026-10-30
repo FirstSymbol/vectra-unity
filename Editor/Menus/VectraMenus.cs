@@ -51,6 +51,7 @@ namespace FirstSymbol.Vectra.Editor
         static void UISvg(MenuCommand c)
         {
             var go = CreateUIObject("Vectra SVG Image", c, typeof(VectraSvgImage));
+            go.GetComponent<VectraSvgImage>().FontMap = VectraProjectSettings.instance.defaultFontMap;
             if (Selection.activeObject is VectraSvgDocument doc) go.GetComponent<VectraSvgImage>().Document = doc;
         }
 
@@ -76,6 +77,7 @@ namespace FirstSymbol.Vectra.Editor
             if (!(Selection.activeObject is VectraSvgDocument doc)) return;
             var go = CreateUIObject(doc.name, new MenuCommand(null), typeof(VectraSvgImage));
             var img = go.GetComponent<VectraSvgImage>();
+            img.FontMap = VectraProjectSettings.instance.defaultFontMap;
             img.Document = doc;
             img.SetNativeSize();
         }

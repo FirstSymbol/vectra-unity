@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -308,6 +309,7 @@ namespace FirstSymbol.Vectra.Editor
             {
                 case PaintType.Solid:
                     m_Body.Add(F("color", "Color"));
+                    m_Body.Add(VxUI.Row("Palette", new VxPaletteToken(P("colorToken")), "Use a named colour of the active palette instead"));
                     break;
                 case PaintType.LinearGradient:
                 case PaintType.RadialGradient:
@@ -345,6 +347,7 @@ namespace FirstSymbol.Vectra.Editor
                 case PaintType.Texture:
                     m_Body.Add(F("texture", "Texture"));
                     m_Body.Add(F("color", "Tint"));
+                    m_Body.Add(VxUI.Row("Palette", new VxPaletteToken(P("colorToken")), "Palette colour for the tint"));
                     m_Body.Add(VxUI.Row("Fit", VxSegmented.ForEnum(P("textureFit"))));
                     m_Body.Add(F("textureScale", "Scale"));
                     m_Body.Add(F("textureOffset", "Offset"));
@@ -357,6 +360,8 @@ namespace FirstSymbol.Vectra.Editor
                 default:
                     m_Body.Add(F("color", "Color A"));
                     m_Body.Add(F("secondaryColor", "Color B"));
+                    m_Body.Add(VxUI.Row("Palette A", new VxPaletteToken(P("colorToken"))));
+                    m_Body.Add(VxUI.Row("Palette B", new VxPaletteToken(P("secondaryColorToken"))));
                     var size = new Slider(1f, 128f) { showInputField = true };
                     size.BindProperty(P("patternSize"));
                     m_Body.Add(VxUI.Row("Cell Size", size, "Size of one pattern cell in local units"));
@@ -592,4 +597,35 @@ namespace FirstSymbol.Vectra.Editor
             return root;
         }
     }
-}
+
+    /// <summary>Picks a colour name from the palettes of the project (empty = use the plain colour).</summary>
+    public class VxPaletteToken : VisualElement
+    {
+        const string None = "— none —";
+
+        public VxPaletteToken(SerializedProperty token)
+        {
+            style.flexDirection = FlexDirection.Row;
+            style.flexGrow = 1;
+            var names = new List<string> { None };
+            foreach (var guid in AssetDatabase.FindAssets("t:" + nameof(VectraPalette)))
+            {
+                var palette = AssetDatabase.LoadAssetAtPath<VectraPalette>(AssetDatabase.GUIDToAssetPath(guid));
+                if (palette == null) continue;
+                foreach (var e in palette.entries)
+                    if (e != null && !string.IsNullOrEmpty(e.name) && !names.Contains(e.name)) names.Add(e.name);
+            }
+
+            if (!string.IsNullOrEmpty(token.stringValue) && !names.Contains(token.stringValue)) names.Add(token.stringValue);
+            var field = new DropdownField(names, string.IsNullOrEmpty(token.stringValue) ? None : token.stringValue) { style = { flexGrow = 1 } };
+            field.tooltip = names.Count == 1 ? "Create a palette (Assets > Create > Vectra > Palette) to use named colours" : "Palette colour";
+            field.RegisterValueChangedCallback(ev =>
+            {
+                token.serializedObject.Update();
+                token.stringValue = ev.newValue == None ? string.Empty : ev.newValue;
+                token.serializedObject.ApplyModifiedProperties();
+            });
+            field.TrackPropertyValue(token, p => field.SetValueWithoutNotify(string.IsNullOrEmpty(p.stringValue) ? None : p.stringValue));
+            Add(field);
+        }
+    }}

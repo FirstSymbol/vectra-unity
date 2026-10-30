@@ -255,6 +255,8 @@ namespace FirstSymbol.Vectra.Editor
                     i.SetNativeSize();
                 }
             }, "Resize the RectTransform to the document's width and height"));
+            actions.Add(VxUI.Button("Expand to hierarchy", () => VectraContextMenus.Expand(img),
+                "Replace the image by one editable Vectra Shape per element (the original is hidden, undoable)"));
             doc.Add(actions);
             doc.Add(VxFields.For(so.FindProperty("m_PreserveAspect"), t, "Preserve aspect"));
             root.Add(VxUI.TitledCard("vectra.svg.doc", VxIcon.Kind.Document, "Document", doc));
@@ -270,8 +272,9 @@ namespace FirstSymbol.Vectra.Editor
 
             var text = new VisualElement();
             text.Add(VxFields.For(so.FindProperty("m_GenerateText"), t, "Generate text"));
-            text.Add(VxFields.For(so.FindProperty("m_Font"), t, "Font").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
-            text.Add(VxUI.Text("<text> elements become TextMeshPro children (generated, not saved). Leave the font empty to use the TMP default.", "vx-hint"));
+            text.Add(VxFields.For(so.FindProperty("m_FontMap"), t, "Font map").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
+            text.Add(VxFields.For(so.FindProperty("m_Font"), t, "Fallback font").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
+            text.Add(VxUI.Text("<text> elements become TextMeshPro children (generated, not saved). The font map picks a font per font-family (Assets > Create > Vectra > SVG Font Map); without a match the fallback font, then the TMP default, is used.", "vx-hint"));
             root.Add(VxUI.TitledCard("vectra.svg.text", VxIcon.Kind.Text, "Text", text, null, false));
 
             root.Add(VxUI.TitledCard("vectra.svg.overrides", VxIcon.Kind.Select, "Overrides", VxSvg.Overrides(so, so.FindProperty("m_Overrides"), () => img != null ? img.Document : null)));
