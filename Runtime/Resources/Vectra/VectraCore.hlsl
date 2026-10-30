@@ -456,41 +456,43 @@ float SdTexture(float2 p, float4 s1, float2 s2)
     return d + length(t - tc) / max(s1.x, 1e-12);
 }
 
+// Single exit point: FXC reports the result of a long early-return chain as "potentially uninitialized".
 float ShapeDistance(uint shape, uint style, float2 p, float4 s1, float4 s2)
 {
+    float d = 1e5;
     if (shape == SHAPE_RECT)
     {
         float m = min(s1.x, s1.y);
         float2 a = Unpack12(s1.z) * m;
         float2 b = Unpack12(s1.w) * m;
-        return SdRect(p, s1.xy, float4(a.x, a.y, b.x, b.y), style, s2.x);
+        d = SdRect(p, s1.xy, float4(a.x, a.y, b.x, b.y), style, s2.x);
     }
-    if (shape == SHAPE_ELLIPSE) return SdEllipse(p, s1.xy);
-    if (shape == SHAPE_ARC) return SdArc(p, s1.x, s1.y, s1.z, s1.w, style);
-    if (shape == SHAPE_STAR) return SdStar(p, s1.x, s1.y, s1.z, s1.w, s2.x);
-    if (shape == SHAPE_TRIANGLE)
+    else if (shape == SHAPE_ELLIPSE) d = SdEllipse(p, s1.xy);
+    else if (shape == SHAPE_ARC) d = SdArc(p, s1.x, s1.y, s1.z, s1.w, style);
+    else if (shape == SHAPE_STAR) d = SdStar(p, s1.x, s1.y, s1.z, s1.w, s2.x);
+    else if (shape == SHAPE_TRIANGLE)
     {
         float2 hs = s1.xy;
         float2 a = (Unpack12(s1.z) * 2.0 - 1.0) * hs;
         float2 b = (Unpack12(s1.w) * 2.0 - 1.0) * hs;
         float2 c = (Unpack12(s2.x) * 2.0 - 1.0) * hs;
-        return SdTriangle(p, a, b, c) - s2.y;
+        d = SdTriangle(p, a, b, c) - s2.y;
     }
-    if (shape == SHAPE_SEGMENT) return SdSegment(p, s1.xy, s1.zw, s2.x, style);
-    if (shape == SHAPE_CROSS) return SdCross(p, s1.xy, s1.z, s1.w);
-    if (shape == SHAPE_HEART) return SdHeart((p - float2(0.0, s1.y)) / s1.x) * s1.x;
-    if (shape == SHAPE_RHOMBUS) return SdRhombus(p, s1.xy) - s1.z;
-    if (shape == SHAPE_TRAPEZOID_SHAPE) return SdTrapezoid(p, s1.x, s1.y, s1.z) - s1.w;
-    if (shape == SHAPE_PARALLELOGRAM) return SdParallelogram(p, s1.x, s1.y, s1.z) - s1.w;
-    if (shape == SHAPE_MOON) return SdMoon(p, s1.z, s1.x, s1.y);
-    if (shape == SHAPE_EGG) return SdEgg(p - float2(0.0, s1.z), s1.x, s1.y);
-    if (shape == SHAPE_VESICA) return SdVesica(p, s1.x, s1.y);
-    if (shape == SHAPE_SQUIRCLE) return SdSquircle(p, s1.xy, s1.z);
-    if (shape == SHAPE_FLOWER) return SdFlower(p, s1.x, s1.y, s1.z, s1.w);
-    if (shape == SHAPE_ARROW) return SdArrow(p, s1.x, s1.y, s1.z, s1.w);
-    if (shape == SHAPE_CHEVRON) return SdChevron(p, s1.xy, s1.z);
-    if (shape == SHAPE_SDF_TEXTURE) return SdTexture(p, s1, s2.xy);
-    return 1e5;
+    else if (shape == SHAPE_SEGMENT) d = SdSegment(p, s1.xy, s1.zw, s2.x, style);
+    else if (shape == SHAPE_CROSS) d = SdCross(p, s1.xy, s1.z, s1.w);
+    else if (shape == SHAPE_HEART) d = SdHeart((p - float2(0.0, s1.y)) / s1.x) * s1.x;
+    else if (shape == SHAPE_RHOMBUS) d = SdRhombus(p, s1.xy) - s1.z;
+    else if (shape == SHAPE_TRAPEZOID_SHAPE) d = SdTrapezoid(p, s1.x, s1.y, s1.z) - s1.w;
+    else if (shape == SHAPE_PARALLELOGRAM) d = SdParallelogram(p, s1.x, s1.y, s1.z) - s1.w;
+    else if (shape == SHAPE_MOON) d = SdMoon(p, s1.z, s1.x, s1.y);
+    else if (shape == SHAPE_EGG) d = SdEgg(p - float2(0.0, s1.z), s1.x, s1.y);
+    else if (shape == SHAPE_VESICA) d = SdVesica(p, s1.x, s1.y);
+    else if (shape == SHAPE_SQUIRCLE) d = SdSquircle(p, s1.xy, s1.z);
+    else if (shape == SHAPE_FLOWER) d = SdFlower(p, s1.x, s1.y, s1.z, s1.w);
+    else if (shape == SHAPE_ARROW) d = SdArrow(p, s1.x, s1.y, s1.z, s1.w);
+    else if (shape == SHAPE_CHEVRON) d = SdChevron(p, s1.xy, s1.z);
+    else if (shape == SHAPE_SDF_TEXTURE) d = SdTexture(p, s1, s2.xy);
+    return d;
 }
 
 // Cuts applied to analytic distances (fill amount / progress).
