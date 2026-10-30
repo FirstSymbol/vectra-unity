@@ -154,11 +154,10 @@ namespace FirstSymbol.Vectra
                 if (t.m_Killed || (t.m_HasTarget && t.m_Target == null) || !t.Advance(t.m_Unscaled ? udt : dt))
                 {
                     s_Active.RemoveAt(i);
-                    if (!t.m_Killed && (!t.m_HasTarget || t.m_Target != null))
-                    {
-                        t.m_Killed = true;
-                        t.m_OnComplete?.Invoke();
-                    }
+                    // Finished naturally (not killed, target alive): run the completion callback.
+                    bool completed = !t.m_Killed && (!t.m_HasTarget || t.m_Target != null);
+                    t.m_Killed = true;
+                    if (completed) t.m_OnComplete?.Invoke();
                 }
             }
         }
