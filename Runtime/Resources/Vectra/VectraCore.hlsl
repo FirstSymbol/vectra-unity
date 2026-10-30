@@ -51,6 +51,7 @@
 #define PAINT_GRID 10
 #define PAINT_NOISE 11
 #define PAINT_FREEFORM 12
+#define PAINT_CONTOUR 13
 
 // Modifiers (3 bits)
 #define MOD_NONE 0
@@ -59,6 +60,7 @@
 #define MOD_RADIAL 3
 #define MOD_DISSOLVE 4
 #define MOD_PIXELATE 5
+#define MOD_DEFORM 6
 
 sampler2D _MainTex;
 float4 _MainTex_TexelSize;
@@ -116,6 +118,17 @@ float2 Unpack12(float v)
 }
 
 // Three 8-bit unsigned values packed as a * 65536 + b * 256 + c, returned normalized to [0, 1].
+// Four 6-bit values packed as ((a * 64 + b) * 64 + c) * 64 + d, normalized to [0, 1].
+float4 Unpack6(float v)
+{
+    float a = floor(v / 262144.0);
+    float r = v - a * 262144.0;
+    float b = floor(r / 4096.0);
+    r -= b * 4096.0;
+    float c = floor(r / 64.0);
+    return float4(a, b, c, r - c * 64.0) * (1.0 / 63.0);
+}
+
 float3 Unpack8(float v)
 {
     float a = floor(v * (1.0 / 65536.0));
@@ -724,11 +737,23 @@ float4 VectraShade(VectraFragmentInput i)
             p = (floor(p / cell) + 0.5) * cell;
             px = min(px, cell * 1e-3);
         }
+        else if (h.modifier == MOD_DEFORM)
+        {
+            // hdr.y = (log amplitude, log wavelength, drift, phase); waves travel with time, no rebuild needed.
+            float4 q = Unpack6(i.hdr.y);
+            float amp = exp2(q.x * 14.0 - 4.0);
+            float k = VECTRA_TAU / exp2(q.y * 14.0 - 2.0);
+            float ph = q.w * VECTRA_TAU + (q.z * 8.0 - 4.0) * _Time.y * VECTRA_TAU;
+            p += amp * float2(sin(p.y * k + ph), cos(p.x * k + ph * 1.3));
+        }
 
         float d = ShapeDistance(h.shape, h.style, p, i.s1, i.s2);
         d = ApplyModifier(h, d, p, i.hdr.y);
         float2 lp = i.s2.zw;
         color = EvaluatePaint(h, i.g, dgdx, dgdy, i.hdr.z, i.hdr.w, i.color);
+        // Contour gradients: position along the gradient = depth below the outline / span (paint param).
+        if (h.paint == PAINT_CONTOUR)
+            color = SampleGradient(SpreadT(-d / max(i.hdr.w, 1e-5), h.spread), i.hdr.z) * i.color;
 
         if (h.layer == LAYER_FILL)
         {
@@ -796,7 +821,7 @@ float4 VectraShade(VectraFragmentInput i)
     }
 
     // Gradients are dithered by +-0.5 of an 8-bit step to hide banding.
-    if ((h.paint >= PAINT_LINEAR && h.paint <= PAINT_FOCAL) || h.paint == PAINT_FREEFORM)
+    if ((h.paint >= PAINT_LINEAR && h.paint <= PAINT_FOCAL) || h.paint >= PAINT_FREEFORM)
         color.rgb += (Hash21(floor(i.p / px)) - 0.5) * (1.0 / 255.0);
 
     color.a *= alpha;

@@ -190,7 +190,7 @@ namespace FirstSymbol.Vectra.Editor
             {
                 if (ctx.so.targetObject == null) return;
                 var content = ctx.getContent();
-                title.text = content?.geometry?.DisplayName ?? "No shape";
+                title.text = content?.ActiveGeometry?.DisplayName ?? "No shape";
                 var s = ctx.stats();
                 chips.Clear();
                 bool built = s.vertices > 0;
@@ -228,9 +228,9 @@ namespace FirstSymbol.Vectra.Editor
 
         static bool IsAnalytic(VectraShapeContent content, Vector2 size)
         {
-            if (content?.geometry == null || content.forcePath) return false;
+            if (content?.ActiveGeometry == null || content.forcePath) return false;
             var frame = new ShapeFrame { rect = new Rect(-size * 0.5f, size), pixelSize = 1f };
-            return content.geometry.TryGetAnalytic(frame, out _);
+            return content.ActiveGeometry.TryGetAnalytic(frame, out _);
         }
 
         // ---------------------------------------------------------------------------------------------------
@@ -240,7 +240,68 @@ namespace FirstSymbol.Vectra.Editor
         static VisualElement ShapePage(Context ctx, Action<bool> refreshHeader)
         {
             var page = new VisualElement();
-            var geometry = ctx.content.FindPropertyRelative("geometry");
+            var assetProp = ctx.content.FindPropertyRelative("shapeAsset");
+
+            // Shared shape row: a VectraShapeAsset replaces the local geometry (shape library).
+            var assetRow = VxUI.El("vx-row");
+            assetRow.Add(new VxIcon(VxIcon.Kind.Shape, 14) { style = { marginRight = 6 } });
+            var assetField = new ObjectField { objectType = typeof(VectraShapeAsset), allowSceneObjects = false, style = { flexGrow = 1 } };
+            assetField.BindProperty(assetProp);
+            assetRow.Add(assetField);
+            assetRow.Add(VxUI.Button("Save", () => SaveAsShape(ctx), "Save the geometry as a reusable Shape asset"));
+            assetRow.Add(VxUI.Button("Detach", () =>
+            {
+                foreach (var t in ctx.so.targetObjects)
+                {
+                    Undo.RecordObject(t, "Detach Vectra Shape");
+                    ContentOf(t)?.DetachShape();
+                    EditorUtility.SetDirty(t);
+                    (t as IVectraShape)?.SetShapeDirty();
+                }
+
+                ctx.so.Update();
+            }, "Copy the shared shape into this object to edit it locally"));
+            page.Add(assetRow);
+            var inner = new VisualElement();
+            page.Add(inner);
+
+            void Rebuild()
+            {
+                inner.Clear();
+                ctx.so.Update();
+                var asset = assetProp.objectReferenceValue as VectraShapeAsset;
+                var target = ctx;
+                SerializedProperty geometry;
+                if (asset != null)
+                {
+                    var so = new SerializedObject(asset);
+                    target = new Context
+                    {
+                        so = so, content = ctx.content, componentType = ctx.componentType, componentFields = ctx.componentFields,
+                        kind = ctx.kind, stats = ctx.stats, getContent = ctx.getContent, getSize = ctx.getSize
+                    };
+                    geometry = so.FindProperty("geometry");
+                    inner.Add(VxUI.Text($"Editing the shared shape \"{asset.name}\": every object that uses it changes.", "vx-hint"));
+                    inner.TrackSerializedObjectValue(so, _ => asset.NotifyChanged());
+                }
+                else geometry = ctx.content.FindPropertyRelative("geometry");
+
+                inner.Add(ShapeEditor(target, geometry, refreshHeader));
+                refreshHeader(true);
+            }
+
+            assetField.RegisterValueChangedCallback(_ =>
+            {
+                foreach (var t in ctx.so.targetObjects) (t as IVectraShape)?.SetShapeDirty();
+                Rebuild();
+            });
+            Rebuild();
+            return page;
+        }
+
+        static VisualElement ShapeEditor(Context ctx, SerializedProperty geometry, Action<bool> refreshHeader)
+        {
+            var page = new VisualElement();
 
             // Current shape + picker.
             var head = new VisualElement();
@@ -277,6 +338,55 @@ namespace FirstSymbol.Vectra.Editor
             return page;
         }
 
+        /// <summary>Shape picker and parameters for a <see cref="VectraShapeAsset"/> inspector.</summary>
+        internal static VisualElement BuildShapeAssetEditor(SerializedObject so, VectraShapeAsset asset)
+        {
+            var ctx = new Context { so = so, componentType = typeof(VectraShape), kind = "Shape asset" };
+            var root = VxUI.Root();
+            root.Add(VxUI.IconHeader(VxIcon.Kind.Shape, asset.name, "Shared shape: every object that references it updates", out var chips));
+            chips.Add(VxUI.Chip(asset.geometry?.DisplayName ?? "None", "accent"));
+            root.Add(ShapeEditor(ctx, so.FindProperty("geometry"), _ => { }));
+            var more = new VisualElement();
+            more.Add(VxFields.For(so.FindProperty("defaultStyle"), typeof(VectraShapeAsset), "Default style"));
+            more.Add(VxUI.Text("Place it with Assets > Create > Vectra > Shape in Scene, or assign it in the Shape tab of any Vectra Shape or Renderer.", "vx-hint"));
+            root.Add(VxUI.TitledCard("vectra.shapeasset.more", VxIcon.Kind.Style, "Library", more));
+            root.TrackSerializedObjectValue(so, _ => asset.NotifyChanged());
+            root.Bind(so);
+            return root;
+        }
+        /// <summary>Replaces the geometry by an editable Bezier path with the same outline (undoable).</summary>
+        static void ConvertToPath(Context ctx, SerializedProperty geometry)
+        {
+            ctx.so.Update();
+            var g = geometry.managedReferenceValue as VectraShapeGeometry;
+            if (g == null) return;
+            var size = ctx.getSize?.Invoke() ?? new Vector2(100f, 100f);
+            var frame = new ShapeFrame { rect = new Rect(-size * 0.5f, size), pixelSize = 1f };
+            var path = VectraPathConverter.ToPathShape(g, frame);
+            if (path.contours.Count == 0) return;
+            geometry.managedReferenceValue = path;
+            ctx.so.ApplyModifiedProperties();
+            foreach (var t in ctx.so.targetObjects)
+            {
+                (t as IVectraShape)?.SetShapeDirty();
+                (t as VectraShapeAsset)?.NotifyChanged();
+            }
+        }
+        static void SaveAsShape(Context ctx)
+        {
+            var c = ContentOf(ctx.so.targetObject);
+            if (c?.ActiveGeometry == null) return;
+            string path = EditorUtility.SaveFilePanelInProject("Save Vectra Shape", c.ActiveGeometry.DisplayName, "asset", "Save the geometry as a shared shape");
+            if (string.IsNullOrEmpty(path)) return;
+            var asset = ScriptableObject.CreateInstance<VectraShapeAsset>();
+            asset.geometry = c.ActiveGeometry.Clone();
+            asset.defaultStyle = c.style;
+            AssetDatabase.CreateAsset(asset, path);
+            AssetDatabase.SaveAssets();
+            ctx.so.Update();
+            ctx.content.FindPropertyRelative("shapeAsset").objectReferenceValue = asset;
+            ctx.so.ApplyModifiedProperties();
+        }
         static void BuildPicker(Context ctx, VisualElement picker, SerializedProperty geometry, Action changed)
         {
             string filter = SessionState.GetString("vectra.picker.filter", "All");
@@ -390,6 +500,9 @@ namespace FirstSymbol.Vectra.Editor
                 body.Add(VxUI.SectionTitle("Transform"));
                 body.Add(VxFields.For(geometry.FindPropertyRelative("rotation"), type, "Rotation"));
             }
+
+            if (!(g is PathShape) && !(g is BooleanShape))
+                body.Add(VxUI.AddButton("Convert to editable path", () => ConvertToPath(ctx, geometry)));
 
             body.Bind(ctx.so);
         }
@@ -675,6 +788,8 @@ namespace FirstSymbol.Vectra.Editor
             if (t == typeof(OutlineEffect)) return VxIcon.Kind.Stroke;
             if (t == typeof(ColorOverlayEffect)) return VxIcon.Kind.PaintSolid;
             if (t == typeof(GradientOverlayEffect)) return VxIcon.Kind.PaintLinear;
+            if (t == typeof(ExtrudeEffect)) return VxIcon.Kind.Duplicate;
+            if (t == typeof(DeformEffect)) return VxIcon.Kind.PaintNoise;
             return VxIcon.Kind.Effects;
         }
 

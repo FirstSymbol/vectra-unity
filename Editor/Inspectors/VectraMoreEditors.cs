@@ -32,9 +32,9 @@ namespace FirstSymbol.Vectra.Editor
             void Refresh()
             {
                 var c = content();
-                if (c?.geometry == null) return;
+                if (c?.ActiveGeometry == null) return;
                 var sz = size();
-                int h = c.geometry.ComputeHash() ^ sz.GetHashCode();
+                int h = c.ActiveGeometry.ComputeHash() ^ sz.GetHashCode();
                 if (h == lastHash && tex != null) return;
                 lastHash = h;
                 try

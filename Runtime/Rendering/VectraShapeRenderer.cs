@@ -101,12 +101,15 @@ namespace FirstSymbol.Vectra.Rendering
         ModifierKind m_Mod;
         bool m_ModFlag;
         float m_S0;
+        // Extra quad extent a modifier needs (deformation moves the outline outwards).
+        float m_ModReach;
         float m_Margin;
         AnalyticShape m_A;
         Affine2 m_ShapeToLocal;
         float2 m_Origin;
 
         VectraDistanceShape m_Distance;
+        VectraEffectBuilder m_EffectBuilder;
 
         static readonly List<VectraEffect> s_Before = new List<VectraEffect>();
         static readonly List<VectraEffect> s_After = new List<VectraEffect>();
@@ -173,6 +176,7 @@ namespace FirstSymbol.Vectra.Rendering
             FillAmountEffect fillAmount = null;
             DissolveEffect dissolve = null;
             PixelateEffect pixelate = null;
+            DeformEffect deform = null;
             float layerBlur = 0f;
             float sdfReach = input.requireDistance ? math.max(input.distanceReach, 0f) : 0f;
             bool needSdf = input.requireDistance;
@@ -241,6 +245,25 @@ namespace FirstSymbol.Vectra.Rendering
                         case GradientOverlayEffect:
                             s_Overlays.Add(e);
                             break;
+                        case ExtrudeEffect ex:
+                            s_Before.Add(e);
+                            sdfReach = math.max(sdfReach, math.length((float2)ex.offset) + math.max(ex.dilate, 0f) + ex.softness * 1.5f);
+                            needSdf = true;
+                            break;
+                        case DeformEffect df:
+                            deform = df;
+                            sdfReach = math.max(sdfReach, df.amplitude * 2f);
+                            needSdf = true;
+                            break;
+                        case VectraCustomEffect ce:
+                            (ce.Order == VectraEffectOrder.BehindFill ? s_Before : ce.Order == VectraEffectOrder.AboveFill ? s_After : s_Top).Add(e);
+                            if (ce.NeedsDistanceField)
+                            {
+                                needSdf = true;
+                                sdfReach = math.max(sdfReach, ce.Reach);
+                            }
+
+                            break;
                     }
                 }
             }
@@ -256,22 +279,30 @@ namespace FirstSymbol.Vectra.Rendering
             if (analytic)
             {
                 m_ShapeToLocal = m_A.localToShape.Inverse();
-                SetupAnalyticModifier(fillAmount, pixelate, dissolve);
+                SetupAnalyticModifier(fillAmount, pixelate, deform, dissolve);
             }
             else
             {
                 m_ShapeToLocal = Affine2.Translate(m_Origin);
-                SetupPathModifier(fillAmount, pixelate, dissolve);
+                SetupPathModifier(fillAmount, pixelate, deform, dissolve);
             }
 
             // Pixelated path fills are drawn from the distance field.
-            bool distanceFills = layerBlur > 0f || m_Mod == ModifierKind.Pixelate;
+            bool distanceFills = layerBlur > 0f || m_Mod == ModifierKind.Pixelate || m_Mod == ModifierKind.Deform;
 
             // Which geometry is needed.
             bool anyFill = s_Overlays.Count > 0;
             if (input.fills != null)
                 foreach (var f in input.fills)
-                    if (f != null && f.enabled && f.paint != null && f.paint.IsVisible) anyFill = true;
+                    if (f != null && f.enabled && f.paint != null && f.paint.IsVisible)
+                    {
+                        anyFill = true;
+                        if (f.paint.UsesDistance && !analytic)
+                        {
+                            needSdf = true;
+                            sdfReach = math.max(sdfReach, f.paint.contourDepth);
+                        }
+                    }
 
             bool needPathStroke = false;
             if (input.strokes != null)
@@ -749,9 +780,10 @@ namespace FirstSymbol.Vectra.Rendering
         // Modifiers
         // ------------------------------------------------------------------------------------------------------
 
-        void SetupAnalyticModifier(FillAmountEffect fa, PixelateEffect pixelate, DissolveEffect dissolve)
+        void SetupAnalyticModifier(FillAmountEffect fa, PixelateEffect pixelate, DeformEffect deform, DissolveEffect dissolve)
         {
             m_Mod = ModifierKind.None;
+            m_ModReach = 0f;
             m_ModFlag = false;
             m_S0 = 0f;
             if (fa != null && fa.amount < 1f)
@@ -790,7 +822,23 @@ namespace FirstSymbol.Vectra.Rendering
                 return;
             }
 
+            if (deform != null && deform.amplitude > 0f)
+            {
+                SetupDeform(deform, math.length(m_A.localToShape.ApplyVector(new float2(1f, 0f))));
+                return;
+            }
+
             SetupDissolve(dissolve);
+        }
+
+        /// <summary>Deform: 6-bit codes of amplitude and wavelength (log2 in shape units), drift and phase.</summary>
+        void SetupDeform(DeformEffect df, float scale)
+        {
+            m_Mod = ModifierKind.Deform;
+            float amp = math.max(df.amplitude * scale, 1e-3f), wave = math.max(df.wavelength * scale, 1e-2f);
+            m_ModReach = amp * 1.5f;
+            m_S0 = VectraEncoding.Pack6((math.log2(amp) + 4f) / 14f, (math.log2(wave) + 2f) / 14f,
+                math.saturate(df.drift / 8f + 0.5f), math.frac(df.phase / 360f));
         }
 
         void SetupPixelate(PixelateEffect px, float scale)
@@ -799,9 +847,10 @@ namespace FirstSymbol.Vectra.Rendering
             m_S0 = math.max(px.cellSize, 0.5f) * math.max(scale, 1e-6f);
         }
 
-        void SetupPathModifier(FillAmountEffect fa, PixelateEffect pixelate, DissolveEffect dissolve)
+        void SetupPathModifier(FillAmountEffect fa, PixelateEffect pixelate, DeformEffect deform, DissolveEffect dissolve)
         {
             m_Mod = ModifierKind.None;
+            m_ModReach = 0f;
             m_ModFlag = false;
             m_S0 = 0f;
             // The fill amount is applied geometrically to path fills; distance-based layers use the shader cut, which
@@ -819,6 +868,12 @@ namespace FirstSymbol.Vectra.Rendering
             if (pixelate != null)
             {
                 SetupPixelate(pixelate, 1f);
+                return;
+            }
+
+            if (deform != null && deform.amplitude > 0f)
+            {
+                SetupDeform(deform, 1f);
                 return;
             }
 
@@ -919,6 +974,14 @@ namespace FirstSymbol.Vectra.Rendering
                     r.param = VectraEncoding.Pack12(fc.x * 0.5f + 0.5f, fc.y * 0.5f + 0.5f);
                 }
 
+                return r;
+            }
+
+            if (paint.type == PaintType.ContourGradient)
+            {
+                // Depth in the space of the distance function (analytic shape space may be scaled).
+                r.kind = PaintKind.Contour;
+                r.param = math.max(paint.contourDepth / math.max(m_ShapeToLocal.UniformScale, 1e-6f), 1e-4f);
                 return r;
             }
 
@@ -1072,7 +1135,7 @@ namespace FirstSymbol.Vectra.Rendering
         {
             var rp = rpIn;
             if (glow) rp.spread = 1;
-            float2 he = m_A.halfExtents + extent + m_Margin;
+            float2 he = m_A.halfExtents + extent + m_Margin + m_ModReach;
             float2 pOffset = m_A.localToShape.ApplyVector(offsetLocal);
             var c = Constants(m_A.kind, layer, rp, m_A.style, m_A.s1, new float4(m_A.s2, lp), additive);
             buffer.AddQuad(-he, he, m_ShapeToLocal, pOffset, c, rp.toPaint);
@@ -1112,7 +1175,7 @@ namespace FirstSymbol.Vectra.Rendering
         void EmitFill(VectraPaint paint, bool analytic, float layerBlur, bool distanceFills)
         {
             if (analytic) EmitAnalytic(LayerKind.Fill, paint, new float2(layerBlur, 0f), layerBlur * 3f, float2.zero);
-            else if ((distanceFills || m_SmoothSdf) && m_Sdf.IsValid) EmitSdf(LayerKind.Fill, paint, new float2(layerBlur, 0f), float2.zero);
+            else if ((distanceFills || m_SmoothSdf || paint.UsesDistance) && m_Sdf.IsValid) EmitSdf(LayerKind.Fill, paint, new float2(layerBlur, 0f), float2.zero);
             else EmitTrapezoids(m_Fill, paint);
         }
 
@@ -1229,6 +1292,27 @@ namespace FirstSymbol.Vectra.Rendering
                     else EmitSdf(LayerKind.Grain, rp, lp, float2.zero, false, false);
                     break;
                 }
+                case ExtrudeEffect ex:
+                {
+                    // Silhouette slices from the farthest to the nearest, each a soft copy of the outline.
+                    int steps = math.clamp(ex.steps, 1, 64);
+                    for (int k = steps; k >= 1; k--)
+                    {
+                        float f = k / (float)steps;
+                        var rp = SolidPaint(Color.Lerp(ex.nearColor, ex.farColor, f), ex.blend);
+                        var lp = new float2(ex.softness * 0.5f, ex.dilate);
+                        var off = (float2)ex.offset * f;
+                        if (analytic) EmitAnalytic(LayerKind.Shadow, rp, lp, math.max(ex.dilate, 0f) + ex.softness * 1.5f, off, false, false);
+                        else EmitSdf(LayerKind.Shadow, rp, lp, off, false, false);
+                    }
+
+                    break;
+                }
+                case VectraCustomEffect ce:
+                    m_EffectBuilder ??= new VectraEffectBuilder(this);
+                    m_EffectBuilder.analytic = analytic;
+                    ce.Populate(m_EffectBuilder);
+                    break;
                 case OutlineEffect ol:
                 {
                     if (ol.width <= 0f) break;
@@ -1241,6 +1325,41 @@ namespace FirstSymbol.Vectra.Rendering
                 }
             }
         }
+
+        internal void BuilderFill(VectraPaint paint, float blur, Vector2 offset, bool analytic)
+        {
+            if (analytic) EmitAnalytic(LayerKind.Fill, paint, new float2(blur * 0.5f, 0f), blur * 1.5f, offset);
+            else EmitSdf(LayerKind.Fill, paint, new float2(blur * 0.5f, 0f), offset);
+        }
+
+        internal void BuilderBand(VectraPaint paint, float width, float offset, bool analytic)
+        {
+            float hw = math.max(width, 0f) * 0.5f;
+            if (analytic) EmitAnalytic(LayerKind.Stroke, paint, new float2(hw, offset), math.max(offset + hw, 0f), float2.zero);
+            else EmitSdf(LayerKind.Stroke, paint, new float2(hw, offset), float2.zero);
+        }
+
+        internal void BuilderShadow(Color color, float blur, float spread, Vector2 offset, bool glow, LayerBlend blend, bool analytic)
+        {
+            var rp = SolidPaint(color, blend);
+            var lp = new float2(blur * 0.5f, spread);
+            if (analytic) EmitAnalytic(LayerKind.Shadow, rp, lp, math.max(spread, 0f) + blur * 1.5f, offset, glow, false);
+            else EmitSdf(LayerKind.Shadow, rp, lp, offset, glow, false);
+        }
+
+        internal void BuilderInnerShadow(Color color, Vector2 offset, float blur, float choke, LayerBlend blend, bool analytic)
+        {
+            float2 off = analytic ? m_A.localToShape.ApplyVector(offset) : (float2)offset;
+            var lp = new float2(
+                VectraEncoding.Pack12Raw(VectraEncoding.SignedLog12(off.x), VectraEncoding.SignedLog12(off.y)),
+                VectraEncoding.Pack12Raw(VectraEncoding.Log12(blur * 0.5f), VectraEncoding.Log12(choke)));
+            var rp = SolidPaint(color, blend);
+            if (analytic) EmitAnalytic(LayerKind.InnerShadow, rp, lp, 0f, float2.zero, false, false);
+            else EmitSdf(LayerKind.InnerShadow, rp, lp, float2.zero, false, false);
+        }
+
+        internal ShapeFrame BuilderFrame => m_Frame;
+        internal bool BuilderHasDistance(bool analytic) => analytic || m_Sdf.IsValid;
 
         ResolvedPaint SolidPaint(Color c, LayerBlend blend)
         {

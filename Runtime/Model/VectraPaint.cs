@@ -18,7 +18,9 @@ namespace FirstSymbol.Vectra
         Dots,
         Grid,
         Noise,
-        Freeform
+        Freeform,
+        /// <summary>Gradient along the distance from the outline (follows the shape: edge fades, rings, contour bands).</summary>
+        ContourGradient
     }
 
     public enum SpreadMode
@@ -90,6 +92,9 @@ namespace FirstSymbol.Vectra
         public bool useCustomMapping;
         public Geometry.Affine2 customMapping = Geometry.Affine2.Identity;
 
+        /// <summary>Contour gradients: distance from the outline (local units) that spans the whole gradient.</summary>
+        [Min(0.01f)] public float contourDepth = 24f;
+
         // Texture
         public Texture texture;
         public Rect textureUvRect = new Rect(0f, 0f, 1f, 1f);
@@ -117,6 +122,12 @@ namespace FirstSymbol.Vectra
             return p;
         }
 
+        /// <summary>Gradient from the edge (t = 0) to <paramref name="depth"/> units inside (t = 1).</summary>
+        public static VectraPaint Contour(Color edge, Color inner, float depth) => new VectraPaint
+        {
+            type = PaintType.ContourGradient, gradient = VectraGradient.Create(edge, inner), contourDepth = depth
+        };
+
         public static VectraPaint Radial(Color inner, Color outer) => new VectraPaint
         {
             type = PaintType.RadialGradient,
@@ -140,7 +151,10 @@ namespace FirstSymbol.Vectra
         public Color ResolvedSecondaryColor =>
             string.IsNullOrEmpty(secondaryColorToken) ? secondaryColor : VectraPalette.Resolve(secondaryColorToken, secondaryColor);
 
-        public bool IsGradient => type >= PaintType.LinearGradient && type <= PaintType.DiamondGradient;
+        public bool IsGradient => (type >= PaintType.LinearGradient && type <= PaintType.DiamondGradient) || type == PaintType.ContourGradient;
+
+        /// <summary>The paint needs the distance to the outline (path shapes then draw through a distance field).</summary>
+        public bool UsesDistance => type == PaintType.ContourGradient;
         public bool UsesGradientRow => IsGradient || (type >= PaintType.Stripes && type <= PaintType.Noise);
         public bool IsVisible => opacity > 0f && (type != PaintType.Solid || ResolvedColor.a > 0f);
 

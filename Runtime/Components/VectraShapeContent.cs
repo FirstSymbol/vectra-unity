@@ -14,6 +14,8 @@ namespace FirstSymbol.Vectra
     public class VectraShapeContent
     {
         [SerializeReference] public VectraShapeGeometry geometry = new RectangleShape();
+        /// <summary>Shared geometry; overrides <see cref="geometry"/> when set.</summary>
+        public VectraShapeAsset shapeAsset;
         public VectraStyle style;
         public List<FillLayer> fills = new List<FillLayer> { new FillLayer() };
         public List<StrokeLayer> strokes = new List<StrokeLayer>();
@@ -23,13 +25,14 @@ namespace FirstSymbol.Vectra
         /// <summary>Tessellate even when an analytic distance function exists (for debugging or exact outlines).</summary>
         public bool forcePath;
 
+        public VectraShapeGeometry ActiveGeometry => shapeAsset != null && shapeAsset.geometry != null ? shapeAsset.geometry : geometry;
         public List<FillLayer> ActiveFills => style != null ? style.fills : fills;
         public List<StrokeLayer> ActiveStrokes => style != null ? style.strokes : strokes;
         public List<VectraEffect> ActiveEffects => style != null ? style.effects : effects;
 
         public VectraBuildInput ToInput(in ShapeFrame frame, Color tint, bool world) => new VectraBuildInput
         {
-            geometry = geometry,
+            geometry = ActiveGeometry,
             fills = ActiveFills,
             strokes = ActiveStrokes,
             effects = ActiveEffects,
@@ -39,6 +42,14 @@ namespace FirstSymbol.Vectra
             quality = quality,
             forcePath = forcePath
         };
+
+        /// <summary>Copies the shared geometry into this content so it can be edited per instance.</summary>
+        public void DetachShape()
+        {
+            if (shapeAsset == null) return;
+            geometry = shapeAsset.geometry?.Clone();
+            shapeAsset = null;
+        }
 
         /// <summary>Copies the local appearance stack from the style so it can be edited per instance.</summary>
         public void DetachStyle()

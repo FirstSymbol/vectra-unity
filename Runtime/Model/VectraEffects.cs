@@ -241,4 +241,40 @@ namespace FirstSymbol.Vectra
             return c;
         }
     }
+    /// <summary>
+    /// Extrusion: layered silhouette slices behind the shape, from the near colour (next to the shape) to the far
+    /// colour (at <see cref="offset"/>). Gives 3D buttons, long shadows and stacked-paper looks.
+    /// </summary>
+    [Serializable]
+    public sealed class ExtrudeEffect : VectraEffect
+    {
+        public Vector2 offset = new Vector2(0f, -10f);
+        [ColorUsage(true, true)] public Color nearColor = new Color(0.2f, 0.25f, 0.45f, 1f);
+        [ColorUsage(true, true)] public Color farColor = new Color(0.08f, 0.1f, 0.2f, 1f);
+        [Range(1, 64)] public int steps = 10;
+        [Tooltip("Grows (positive) or shrinks the slices, in local units.")]
+        public float dilate;
+        [Min(0f)] public float softness;
+        public LayerBlend blend = LayerBlend.Normal;
+
+        public override string DisplayName => "Extrude";
+    }
+
+    /// <summary>
+    /// Wavy deformation of the outline, animated on the GPU (no rebuilds): <see cref="drift"/> moves the waves over
+    /// time. Applies to fills and distance-based layers.
+    /// </summary>
+    [Serializable]
+    public sealed class DeformEffect : VectraEffect
+    {
+        [Tooltip("Displacement in local units.")]
+        [Min(0f)] public float amplitude = 4f;
+        [Tooltip("Distance between wave crests in local units.")]
+        [Min(0.5f)] public float wavelength = 40f;
+        [Tooltip("Wave speed in cycles per second (negative = backwards).")]
+        [Range(-4f, 4f)] public float drift = 0.5f;
+        [Range(0f, 360f)] public float phase;
+
+        public override string DisplayName => "Deform";
+    }
 }

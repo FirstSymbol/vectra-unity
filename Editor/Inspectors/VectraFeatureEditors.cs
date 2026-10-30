@@ -241,4 +241,53 @@ namespace FirstSymbol.Vectra.Editor
             return root;
         }
     }
-}
+
+    [CustomEditor(typeof(VectraShapeAsset))]
+    class VectraShapeAssetEditor : UnityEditor.Editor
+    {
+        public override VisualElement CreateInspectorGUI() => VectraContentInspector.BuildShapeAssetEditor(serializedObject, (VectraShapeAsset)target);
+    }
+
+    [CustomEditor(typeof(VectraInteractionStates)), CanEditMultipleObjects]
+    class VectraInteractionStatesEditor : UnityEditor.Editor
+    {
+        public override VisualElement CreateInspectorGUI()
+        {
+            var so = serializedObject;
+            var t = typeof(VectraInteractionStates);
+            var root = VxUI.Root();
+            root.Add(VxUI.IconHeader(VxIcon.Kind.Select, "Interaction States", "Hover, press, focus and disabled looks with transitions", out var chips));
+            var stateChip = VxUI.Chip(Application.isPlaying ? ((VectraInteractionStates)target).State.ToString() : "Play mode only", "accent");
+            chips.Add(stateChip);
+            root.schedule.Execute(() =>
+            {
+                if (target != null && Application.isPlaying) stateChip.text = ((VectraInteractionStates)target).State.ToString();
+            }).Every(200);
+
+            var tr = new VisualElement();
+            tr.Add(VxFields.For(so.FindProperty("duration"), t, "Duration"));
+            tr.Add(VxFields.For(so.FindProperty("ease"), t, "Ease"));
+            tr.Add(VxFields.For(so.FindProperty("unscaledTime"), t, "Unscaled time"));
+            tr.Add(VxUI.Text("A Selectable on the same object (Button, Toggle…) drives Disabled through its Interactable flag.", "vx-hint"));
+            root.Add(VxUI.TitledCard("vectra.states.transition", VxIcon.Kind.Settings, "Transition", tr));
+
+            foreach (var (name, icon) in new[] { ("normal", VxIcon.Kind.Shape), ("hover", VxIcon.Kind.Select), ("pressed", VxIcon.Kind.Down), ("selected", VxIcon.Kind.Link), ("disabled", VxIcon.Kind.EyeOff) })
+            {
+                var prop = so.FindProperty(name);
+                var body = new VisualElement();
+                body.Add(VxFields.For(prop.FindPropertyRelative("tint"), typeof(VectraStateLook), "Tint"));
+                body.Add(VxFields.For(prop.FindPropertyRelative("scale"), typeof(VectraStateLook), "Scale"));
+                var of = prop.FindPropertyRelative("overrideFill");
+                body.Add(VxFields.For(of, typeof(VectraStateLook), "Override fill"));
+                body.Add(VxFields.For(prop.FindPropertyRelative("fill"), typeof(VectraStateLook), "Fill").VisibleWhen(of, p => p.boolValue));
+                var os = prop.FindPropertyRelative("overrideStroke");
+                body.Add(VxFields.For(os, typeof(VectraStateLook), "Override stroke"));
+                body.Add(VxFields.For(prop.FindPropertyRelative("stroke"), typeof(VectraStateLook), "Stroke").VisibleWhen(os, p => p.boolValue));
+                body.Add(VxFields.For(prop.FindPropertyRelative("effectStrength"), typeof(VectraStateLook), "Effect strength"));
+                root.Add(VxUI.TitledCard("vectra.states." + name, icon, ObjectNames.NicifyVariableName(name), body, null, name != "normal" && name != "disabled"));
+            }
+
+            root.Bind(so);
+            return root;
+        }
+    }}

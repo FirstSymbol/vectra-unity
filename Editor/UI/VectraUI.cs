@@ -1195,6 +1195,7 @@ namespace FirstSymbol.Vectra.Editor
                 case PaintType.Grid: return VxIcon.Kind.PaintGrid;
                 case PaintType.Noise: return VxIcon.Kind.PaintNoise;
                 case PaintType.Freeform: return VxIcon.Kind.PaintFreeform;
+                case PaintType.ContourGradient: return VxIcon.Kind.FxInnerGlow;
                 default: return VxIcon.Kind.PaintSolid;
             }
         }
@@ -1208,6 +1209,7 @@ namespace FirstSymbol.Vectra.Editor
                 case PaintType.AngularGradient: return "Angular gradient";
                 case PaintType.DiamondGradient: return "Diamond gradient";
                 case PaintType.Freeform: return "Freeform gradient";
+                case PaintType.ContourGradient: return "Contour gradient";
                 default: return ObjectNames.NicifyVariableName(t.ToString());
             }
         }

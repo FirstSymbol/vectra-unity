@@ -54,7 +54,8 @@ namespace FirstSymbol.Vectra.Rendering
         Dots = 9,
         Grid = 10,
         Noise = 11,
-        Freeform = 12
+        Freeform = 12,
+        Contour = 13
     }
 
     public enum ModifierKind : byte
@@ -64,7 +65,8 @@ namespace FirstSymbol.Vectra.Rendering
         CutY = 2,
         Radial = 3,
         Dissolve = 4,
-        Pixelate = 5
+        Pixelate = 5,
+        Deform = 6
     }
 
     /// <summary>
@@ -139,6 +141,14 @@ namespace FirstSymbol.Vectra.Rendering
         }
 
         /// <summary>Logarithmic 12-bit code of a non-negative value: 0 = zero, otherwise 2^[-12, 12].</summary>
+        /// <summary>Packs four values in [0, 1] with 6 bits each.</summary>
+        public static float Pack6(float a, float b, float c, float d)
+        {
+            int ia = (int)math.round(math.saturate(a) * 63f), ib = (int)math.round(math.saturate(b) * 63f);
+            int ic = (int)math.round(math.saturate(c) * 63f), id = (int)math.round(math.saturate(d) * 63f);
+            return ((ia * 64 + ib) * 64 + ic) * 64 + id;
+        }
+
         public static int Log12(float v)
         {
             if (v <= 1e-9f) return 0;

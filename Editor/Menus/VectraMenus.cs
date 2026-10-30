@@ -82,6 +82,21 @@ namespace FirstSymbol.Vectra.Editor
             img.SetNativeSize();
         }
 
+        [MenuItem("Assets/Create/Vectra/Shape in Scene", false, 31)]
+        static void ShapeFromAsset()
+        {
+            foreach (var asset in Selection.GetFiltered<VectraShapeAsset>(SelectionMode.Assets))
+            {
+                var go = CreateUIObject(asset.name, new MenuCommand(null), typeof(VectraShape));
+                var shape = go.GetComponent<VectraShape>();
+                shape.Content.shapeAsset = asset;
+                shape.Content.style = asset.defaultStyle;
+                shape.SetShapeDirty();
+            }
+        }
+
+        [MenuItem("Assets/Create/Vectra/Shape in Scene", true)]
+        static bool ShapeFromAssetValidate() => Selection.GetFiltered<VectraShapeAsset>(SelectionMode.Assets).Length > 0;
         [MenuItem("Assets/Create/Vectra/SVG Image in Scene", true)]
         static bool SvgFromAssetValidate() => Selection.activeObject is VectraSvgDocument;
 

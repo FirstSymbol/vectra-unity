@@ -33,11 +33,13 @@ namespace FirstSymbol.Vectra
 
         public VectraShapeContent Content => m_Content;
 
+        /// <summary>The drawn geometry (the shared <see cref="VectraShapeContent.shapeAsset"/> when set). Setting it detaches the asset.</summary>
         public VectraShapeGeometry Geometry
         {
-            get => m_Content.geometry;
+            get => m_Content.ActiveGeometry;
             set
             {
+                m_Content.shapeAsset = null;
                 m_Content.geometry = value;
                 SetVerticesDirty();
             }
@@ -82,6 +84,7 @@ namespace FirstSymbol.Vectra
         /// <summary>Returns the geometry as <typeparamref name="T"/>, replacing it when it is of another type.</summary>
         public T SetGeometry<T>() where T : VectraShapeGeometry, new()
         {
+            m_Content.shapeAsset = null;
             if (!(m_Content.geometry is T g))
             {
                 g = new T();
@@ -205,6 +208,11 @@ namespace FirstSymbol.Vectra
             {
                 foreach (var s in s_StyleUsers)
                     if (s != null) s.SetVerticesDirty();
+            };
+            VectraShapeAsset.Changed += asset =>
+            {
+                foreach (var s in s_StyleUsers)
+                    if (s != null && s.m_Content.shapeAsset == asset) s.SetVerticesDirty();
             };
         }
 
@@ -333,7 +341,7 @@ namespace FirstSymbol.Vectra
             }
 
             m_HitTester ??= new VectraHitTester();
-            return m_HitTester.Contains(m_Content.geometry, frame, local, strokeReach);
+            return m_HitTester.Contains(m_Content.ActiveGeometry, frame, local, strokeReach);
         }
 
         // ILayoutElement: shapes have no intrinsic size.

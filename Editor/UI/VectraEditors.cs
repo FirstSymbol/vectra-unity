@@ -254,7 +254,7 @@ namespace FirstSymbol.Vectra.Editor
         static readonly PaintType[] s_Types =
         {
             PaintType.Solid, PaintType.LinearGradient, PaintType.RadialGradient, PaintType.AngularGradient,
-            PaintType.DiamondGradient, PaintType.Freeform, PaintType.Texture, PaintType.Stripes, PaintType.Checker,
+            PaintType.DiamondGradient, PaintType.ContourGradient, PaintType.Freeform, PaintType.Texture, PaintType.Stripes, PaintType.Checker,
             PaintType.Dots, PaintType.Grid, PaintType.Noise
         };
 
@@ -344,6 +344,16 @@ namespace FirstSymbol.Vectra.Editor
                     }
 
                     break;
+                case PaintType.ContourGradient:
+                {
+                    m_Body.Add(new VxGradientEditor(P("gradient")));
+                    var depth = new Slider(1f, 256f) { showInputField = true };
+                    depth.BindProperty(P("contourDepth"));
+                    m_Body.Add(VxUI.Row("Depth", depth, "Distance from the outline covered by the gradient (edge = start)"));
+                    m_Body.Add(VxUI.Row("Spread", VxSegmented.ForEnum(P("spread"), new[] { "Pad", "Repeat", "Reflect" }), "Repeat or Reflect draw bands that follow the shape"));
+                    m_Body.Add(VxUI.Text("Follows the outline: edge fades, rings, contour bands. Path shapes draw it through a distance field.", "vx-hint"));
+                    break;
+                }
                 case PaintType.Texture:
                     m_Body.Add(F("texture", "Texture"));
                     m_Body.Add(F("color", "Tint"));

@@ -27,6 +27,8 @@ namespace FirstSymbol.Vectra.Editor
         internal static int selectedContour = -1, selectedPoint = -1;
         internal static Object selectedTarget;
         internal static System.Action selectionChanged;
+        // What handle edits record for undo: the shared shape asset when the shape uses one, else the component.
+        static Object s_UndoTarget;
 
         internal static Vector2 Snap(Vector2 p) => snap && snapStep > 0f ? new Vector2(Mathf.Round(p.x / snapStep) * snapStep, Mathf.Round(p.y / snapStep) * snapStep) : p;
 
@@ -46,7 +48,7 @@ namespace FirstSymbol.Vectra.Editor
             contour = null;
             index = selectedPoint;
             var content = (selectedTarget as IVectraShape)?.Content;
-            if (!(content?.geometry is PathShape p) || selectedContour < 0 || selectedContour >= p.contours.Count) return false;
+            if (!(content?.ActiveGeometry is PathShape p) || selectedContour < 0 || selectedContour >= p.contours.Count) return false;
             var c = p.contours[selectedContour];
             if (c?.points == null || index < 0 || index >= c.points.Count) return false;
             path = p;
@@ -66,7 +68,8 @@ namespace FirstSymbol.Vectra.Editor
                 using (new Handles.DrawingScope(t.localToWorldMatrix))
                 {
                     bool changed = false;
-                    switch (content.geometry)
+                    s_UndoTarget = content.shapeAsset != null ? (Object)content.shapeAsset : target;
+                    switch (content.ActiveGeometry)
                     {
                         case PathShape p: changed |= PathHandles(target, p, frame); break;
                         case PolylineShape pl: changed |= PolylineHandles(target, pl, frame); break;
@@ -76,7 +79,15 @@ namespace FirstSymbol.Vectra.Editor
 
                     if (showGradient) changed |= GradientHandles(target, content, frame);
                     if (showEffects) changed |= EffectHandles(target, content, frame);
-                    if (changed) MarkDirty(target);
+                    if (changed)
+                    {
+                        MarkDirty(target);
+                        if (content.shapeAsset != null)
+                        {
+                            EditorUtility.SetDirty(content.shapeAsset);
+                            content.shapeAsset.NotifyChanged();
+                        }
+                    }
                 }
             }
         }
@@ -114,7 +125,7 @@ namespace FirstSymbol.Vectra.Editor
                     var np = Handles.FreeMoveHandle(pos, Size(pos) * (isSelected ? 1.8f : 1.4f), Vector3.zero, Handles.RectangleHandleCap);
                     if (EditorGUI.EndChangeCheck())
                     {
-                        Undo.RecordObject(target, "Move Path Point");
+                        Undo.RecordObject(s_UndoTarget, "Move Path Point");
                         bp.position = p.FromLocal(frame, Snap((Vector2)np), false);
                         Select(target, ci, i);
                         changed = true;
@@ -124,7 +135,7 @@ namespace FirstSymbol.Vectra.Editor
                     if (e.type == EventType.MouseDown && e.button == 0 && EditorGUI.actionKey &&
                         HandleUtility.DistanceToCircle(pos, Size(pos) * 1.4f) < 1f && n > 2)
                     {
-                        Undo.RecordObject(target, "Delete Path Point");
+                        Undo.RecordObject(s_UndoTarget, "Delete Path Point");
                         c.points.RemoveAt(i);
                         Select(null, -1, -1);
                         e.Use();
@@ -138,7 +149,7 @@ namespace FirstSymbol.Vectra.Editor
                         var ni = Handles.FreeMoveHandle(inH, Size(inH), Vector3.zero, Handles.CircleHandleCap);
                         if (EditorGUI.EndChangeCheck())
                         {
-                            Undo.RecordObject(target, "Move Tangent");
+                            Undo.RecordObject(s_UndoTarget, "Move Tangent");
                             bp.inTangent = p.FromLocal(frame, (Vector2)(ni - pos), true);
                             bp.outTangent = Mirror(bp.mode, bp.inTangent, bp.outTangent);
                             changed = true;
@@ -151,7 +162,7 @@ namespace FirstSymbol.Vectra.Editor
                         var no = Handles.FreeMoveHandle(outH, Size(outH), Vector3.zero, Handles.CircleHandleCap);
                         if (EditorGUI.EndChangeCheck())
                         {
-                            Undo.RecordObject(target, "Move Tangent");
+                            Undo.RecordObject(s_UndoTarget, "Move Tangent");
                             bp.outTangent = p.FromLocal(frame, (Vector2)(no - pos), true);
                             bp.inTangent = Mirror(bp.mode, bp.outTangent, bp.inTangent);
                             changed = true;
@@ -173,7 +184,7 @@ namespace FirstSymbol.Vectra.Editor
                     Handles.color = new Color(0.4f, 1f, 0.5f, 0.8f);
                     if (Handles.Button(mid, Quaternion.identity, Size(mid) * 0.8f, Size(mid), Handles.DotHandleCap))
                     {
-                        Undo.RecordObject(target, "Insert Path Point");
+                        Undo.RecordObject(s_UndoTarget, "Insert Path Point");
                         c.points.Insert(i + 1, new BezierPoint(p.FromLocal(frame, mid, false)));
                         return true;
                     }
@@ -202,7 +213,7 @@ namespace FirstSymbol.Vectra.Editor
                 EditorGUI.BeginChangeCheck();
                 var np = Handles.FreeMoveHandle(pos, Size(pos) * 1.4f, Vector3.zero, Handles.RectangleHandleCap);
                 if (!EditorGUI.EndChangeCheck()) continue;
-                Undo.RecordObject(target, "Move Point");
+                Undo.RecordObject(s_UndoTarget, "Move Point");
                 var size = frame.Size;
                 np = Snap((Vector2)np);
                 pl.points[i] = pl.coordinates == PathCoordinates.Local
@@ -231,7 +242,7 @@ namespace FirstSymbol.Vectra.Editor
                 EditorGUI.BeginChangeCheck();
                 var np = Handles.Slider2D(pos, Vector3.forward, Vector3.right, Vector3.up, Size(pos), Handles.DotHandleCap, 0f);
                 if (!EditorGUI.EndChangeCheck()) continue;
-                Undo.RecordObject(target, "Corner Radius");
+                Undo.RecordObject(s_UndoTarget, "Corner Radius");
                 Vector2 d = (Vector2)np - corners[i];
                 float nr = Mathf.Clamp(Vector2.Dot(d, inward[i]) * 0.5f, 0f, max);
                 var radii = r.cornerRadii;
@@ -258,7 +269,7 @@ namespace FirstSymbol.Vectra.Editor
             var ns = Handles.Slider2D(sp, Vector3.forward, Vector3.right, Vector3.up, Size(sp), Handles.DotHandleCap, 0f);
             if (EditorGUI.EndChangeCheck())
             {
-                Undo.RecordObject(target, "Arc Start");
+                Undo.RecordObject(s_UndoTarget, "Arc Start");
                 Vector2 d = (Vector2)ns - c;
                 a.startAngle = Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg - a.rotation;
                 changed = true;
@@ -268,7 +279,7 @@ namespace FirstSymbol.Vectra.Editor
             var ne = Handles.Slider2D(ep, Vector3.forward, Vector3.right, Vector3.up, Size(ep), Handles.DotHandleCap, 0f);
             if (EditorGUI.EndChangeCheck())
             {
-                Undo.RecordObject(target, "Arc Sweep");
+                Undo.RecordObject(s_UndoTarget, "Arc Sweep");
                 Vector2 d = (Vector2)ne - c;
                 float end = Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg - a.rotation;
                 a.sweepAngle = Mathf.Repeat(end - a.startAngle, 360f);
@@ -455,7 +466,13 @@ namespace FirstSymbol.Vectra.Editor
         {
             if (!VectraShapeToolBase.TryGetSelectedPoint(out _, out var contour, out int index)) return;
             var target = VectraShapeToolBase.selectedTarget;
-            Undo.RecordObject(target, "Point Mode");
+            var shared = (target as IVectraShape)?.Content.shapeAsset;
+            Undo.RecordObject(shared != null ? (Object)shared : target, "Point Mode");
+            if (shared != null)
+            {
+                EditorUtility.SetDirty(shared);
+                shared.NotifyChanged();
+            }
             var bp = contour.points[index];
             bp.mode = mode;
             // Make the tangents consistent with the new mode right away.

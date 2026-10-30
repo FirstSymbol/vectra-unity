@@ -22,7 +22,7 @@ namespace FirstSymbol.Vectra.Svg
             // Local (y up) to SVG (y down).
             var toSvg = new Affine2(1, 0, 0, -1, -rect.xMin, rect.yMax);
             var path = new NativePath(Allocator.TempJob, 64);
-            content.geometry?.BuildPath(new ShapeFrame { rect = rect, pixelSize = 1f }, new PathBuilder(path, toSvg));
+            content.ActiveGeometry?.BuildPath(new ShapeFrame { rect = rect, pixelSize = 1f }, new PathBuilder(path, toSvg));
             string d = PathData(path);
             path.Dispose();
 
@@ -41,7 +41,7 @@ namespace FirstSymbol.Vectra.Svg
                 }
             }
 
-            string rule = content.geometry != null && content.geometry.FillRule == FillRule.EvenOdd ? " fill-rule=\"evenodd\"" : "";
+            string rule = content.ActiveGeometry != null && content.ActiveGeometry.FillRule == FillRule.EvenOdd ? " fill-rule=\"evenodd\"" : "";
             int gid = 0;
             var body = new StringBuilder();
             foreach (var f in content.ActiveFills)

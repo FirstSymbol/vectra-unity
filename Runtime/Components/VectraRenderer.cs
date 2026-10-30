@@ -42,11 +42,13 @@ namespace FirstSymbol.Vectra
         public VectraShapeContent Content => m_Content;
         public VectraBuildStats Stats => m_Renderer?.stats ?? default;
 
+        /// <summary>The drawn geometry (the shared <see cref="VectraShapeContent.shapeAsset"/> when set). Setting it detaches the asset.</summary>
         public VectraShapeGeometry Geometry
         {
-            get => m_Content.geometry;
+            get => m_Content.ActiveGeometry;
             set
             {
+                m_Content.shapeAsset = null;
                 m_Content.geometry = value;
                 SetDirty();
             }
@@ -101,6 +103,7 @@ namespace FirstSymbol.Vectra
 
         public T SetGeometry<T>() where T : VectraShapeGeometry, new()
         {
+            m_Content.shapeAsset = null;
             if (!(m_Content.geometry is T g))
             {
                 g = new T();
@@ -136,6 +139,11 @@ namespace FirstSymbol.Vectra
                 {
                     foreach (var r in s_StyleUsers)
                         if (r != null) r.SetDirty();
+                };
+                VectraShapeAsset.Changed += asset =>
+                {
+                    foreach (var r in s_StyleUsers)
+                        if (r != null && r.m_Content.shapeAsset == asset) r.SetDirty();
                 };
             }
 
@@ -255,7 +263,7 @@ namespace FirstSymbol.Vectra
             float reach = 0f;
             foreach (var s in m_Content.ActiveStrokes)
                 if (s != null && s.enabled) reach = math.max(reach, s.alignment == StrokeAlignment.Inside ? 0f : s.width * 0.5f);
-            return m_HitTester.Contains(m_Content.geometry, Frame, local, reach);
+            return m_HitTester.Contains(m_Content.ActiveGeometry, Frame, local, reach);
         }
 
         public bool ContainsWorldPoint(Vector3 world) => ContainsLocalPoint(transform.InverseTransformPoint(world));
@@ -263,7 +271,7 @@ namespace FirstSymbol.Vectra
         void UpdateCollider()
         {
             if (!TryGetComponent(out PolygonCollider2D col)) col = gameObject.AddComponent<PolygonCollider2D>();
-            var paths = VectraOutline.GetOutline(m_Content.geometry, Frame);
+            var paths = VectraOutline.GetOutline(m_Content.ActiveGeometry, Frame);
             col.pathCount = paths.Count;
             for (int i = 0; i < paths.Count; i++) col.SetPath(i, paths[i]);
         }
