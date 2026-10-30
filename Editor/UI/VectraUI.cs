@@ -139,6 +139,63 @@ namespace FirstSymbol.Vectra.Editor
             return el;
         }
 
+        /// <summary>Header card: preview box (checkerboard + image), title, subtitle and a chip row.</summary>
+        public static VisualElement Header(string title, string subtitle, out Image image, out Label titleLabel, out VisualElement chips)
+        {
+            var header = El("vx-header");
+            var preview = El("vx-preview");
+            preview.generateVisualContent += mgc =>
+            {
+                var r = preview.contentRect;
+                var p = mgc.painter2D;
+                const float cell = 8f;
+                for (int y = 0; y * cell < r.height; y++)
+                for (int x = 0; x * cell < r.width; x++)
+                {
+                    p.fillColor = (x + y) % 2 == 0 ? new Color(1, 1, 1, 0.025f) : new Color(0, 0, 0, 0.025f);
+                    p.BeginPath();
+                    p.MoveTo(new Vector2(x * cell, y * cell));
+                    p.LineTo(new Vector2(x * cell + cell, y * cell));
+                    p.LineTo(new Vector2(x * cell + cell, y * cell + cell));
+                    p.LineTo(new Vector2(x * cell, y * cell + cell));
+                    p.ClosePath();
+                    p.Fill();
+                }
+            };
+            image = new Image { scaleMode = ScaleMode.ScaleToFit, pickingMode = PickingMode.Ignore };
+            image.style.flexGrow = 1;
+            preview.Add(image);
+            header.Add(preview);
+            var info = El("vx-header__info");
+            titleLabel = Text(title, "vx-title");
+            info.Add(titleLabel);
+            info.Add(Text(subtitle, "vx-subtitle"));
+            chips = El("vx-chips");
+            info.Add(chips);
+            header.Add(info);
+            return header;
+        }
+
+        /// <summary>Header with a large icon instead of a rendered preview.</summary>
+        public static VisualElement IconHeader(VxIcon.Kind icon, string title, string subtitle, out VisualElement chips)
+        {
+            var header = Header(title, subtitle, out var image, out _, out chips);
+            image.style.display = DisplayStyle.None;
+            var big = new VxIcon(icon, 44) { style = { alignSelf = Align.Center, marginTop = 20, color = new Color(0.3f, 0.55f, 1f) } };
+            header.Q(className: "vx-preview").Add(big);
+            return header;
+        }
+
+        /// <summary>Card with an icon and a title in the header.</summary>
+        public static VisualElement TitledCard(string key, VxIcon.Kind icon, string title, VisualElement body, VisualElement extra = null, bool open = true)
+        {
+            var h = new VisualElement { style = { flexDirection = FlexDirection.Row, flexGrow = 1, alignItems = Align.Center } };
+            h.Add(new VxIcon(icon, 13));
+            h.Add(Text(title, "vx-card__title"));
+            if (extra != null) h.Add(extra);
+            return Card(key, h, body, open);
+        }
+
         public static string Nice(string name) => ObjectNames.NicifyVariableName(name.StartsWith("m_") ? name.Substring(2) : name);
 
         public static FieldInfo FieldOf(Type owner, string name)
@@ -249,7 +306,8 @@ namespace FirstSymbol.Vectra.Editor
             PaintSolid, PaintLinear, PaintRadial, PaintAngular, PaintDiamond, PaintTexture, PaintStripes, PaintChecker,
             PaintDots, PaintGrid, PaintNoise, PaintFreeform,
             FxShadow, FxInnerShadow, FxGlow, FxInnerGlow, FxBevel, FxBlur, FxGrain, FxAdjust, FxFillAmount, FxDissolve,
-            BlendNormal, BlendAdd, BlendMultiply, BlendScreen
+            BlendNormal, BlendAdd, BlendMultiply, BlendScreen,
+            BoolUnion, BoolSubtract, BoolIntersect, BoolExclude, Document, Warning, Select, Glass, Text, Image, Resize
         }
 
         Kind m_Kind;
@@ -640,7 +698,65 @@ namespace FirstSymbol.Vectra.Editor
                     }
 
                     break;
-                case Kind.BlendMultiply:
+                case Kind.BoolUnion:
+                case Kind.BoolSubtract:
+                case Kind.BoolIntersect:
+                case Kind.BoolExclude:
+                {
+                    // Two overlapping squares; the filled parts show the result of the operation.
+                    float a0 = 0.1f, a1 = 0.62f, b0 = 0.38f, b1 = 0.9f;
+                    p.lineWidth = Mathf.Max(1f, s * 0.07f);
+                    Alpha(1f);
+                    if (m_Kind == Kind.BoolUnion) Poly(true, a0, a0, a1, a0, a1, b0, b1, b0, b1, b1, b0, b1, b0, a1, a0, a1);
+                    else if (m_Kind == Kind.BoolSubtract) Poly(true, a0, a0, a1, a0, a1, b0, b0, b0, b0, a1, a0, a1);
+                    else if (m_Kind == Kind.BoolIntersect) Rect(b0, b0, a1, a1, true);
+                    else
+                    {
+                        Poly(true, a0, a0, a1, a0, a1, b0, b0, b0, b0, a1, a0, a1);
+                        Poly(true, a1, b0, b1, b0, b1, b1, b0, b1, b0, a1, a1, a1);
+                    }
+
+                    Alpha(0.55f);
+                    Rect(a0, a0, a1, a1, false);
+                    Rect(b0, b0, b1, b1, false);
+                    break;
+                }
+                case Kind.Document:
+                    Poly(false, 0.22f, 0.1f, 0.62f, 0.1f, 0.8f, 0.28f, 0.8f, 0.9f, 0.22f, 0.9f);
+                    Line(0.62f, 0.1f, 0.62f, 0.28f);
+                    Line(0.62f, 0.28f, 0.8f, 0.28f);
+                    Line(0.34f, 0.5f, 0.66f, 0.5f);
+                    Line(0.34f, 0.66f, 0.66f, 0.66f);
+                    break;
+                case Kind.Warning:
+                    Poly(false, 0.5f, 0.12f, 0.9f, 0.86f, 0.1f, 0.86f);
+                    Line(0.5f, 0.38f, 0.5f, 0.6f);
+                    Circle(0.5f, 0.73f, 0.04f, true);
+                    break;
+                case Kind.Select:
+                    Poly(true, 0.2f, 0.12f, 0.8f, 0.52f, 0.52f, 0.58f, 0.66f, 0.86f, 0.56f, 0.9f, 0.42f, 0.62f, 0.22f, 0.8f);
+                    break;
+                case Kind.Glass:
+                    Alpha(0.35f);
+                    Rect(0.12f, 0.12f, 0.88f, 0.88f, true);
+                    Alpha(1f);
+                    Rect(0.12f, 0.12f, 0.88f, 0.88f, false);
+                    Line(0.28f, 0.62f, 0.62f, 0.28f);
+                    Line(0.42f, 0.72f, 0.72f, 0.42f);
+                    break;
+                case Kind.Text:
+                    Line(0.18f, 0.2f, 0.82f, 0.2f);
+                    Line(0.5f, 0.2f, 0.5f, 0.85f);
+                    break;
+                case Kind.Image:
+                    Rect(0.12f, 0.18f, 0.88f, 0.82f, false);
+                    Poly(true, 0.18f, 0.76f, 0.42f, 0.45f, 0.58f, 0.62f, 0.7f, 0.5f, 0.82f, 0.76f);
+                    break;
+                case Kind.Resize:
+                    Line(0.2f, 0.8f, 0.8f, 0.2f);
+                    Poly(false, 0.52f, 0.2f, 0.8f, 0.2f, 0.8f, 0.48f);
+                    Poly(false, 0.2f, 0.52f, 0.2f, 0.8f, 0.48f, 0.8f);
+                    break;                case Kind.BlendMultiply:
                     Circle(0.38f, 0.5f, 0.26f, false);
                     Circle(0.62f, 0.5f, 0.26f, false);
                     Circle(0.5f, 0.5f, 0.11f, true);

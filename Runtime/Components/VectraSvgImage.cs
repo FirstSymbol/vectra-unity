@@ -264,6 +264,8 @@ namespace FirstSymbol.Vectra
             }
         }
 
+        public List<SvgOverride> Overrides => m_Overrides;
+
         public void SetDirty() => m_Dirty = true;
 
         Rect LocalRect

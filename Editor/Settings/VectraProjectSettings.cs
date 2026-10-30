@@ -34,37 +34,57 @@ namespace FirstSymbol.Vectra.Editor
             activateHandler = (search, root) =>
             {
                 var s = VectraProjectSettings.instance;
+                s.hideFlags &= ~HideFlags.NotEditable;
                 var so = new SerializedObject(s);
-                root.style.paddingLeft = 10;
-                root.style.paddingTop = 6;
-                root.Add(new Label("Vectra Vector Graphics") { style = { unityFontStyleAndWeight = FontStyle.Bold, fontSize = 18, marginBottom = 8 } });
-                foreach (var name in new[] { "useVectraSvgImporter", "defaultQuality", "sdfAtlasMaxSize" })
+                var page = VxUI.Root();
+                page.style.paddingLeft = 10;
+                page.style.paddingRight = 10;
+                page.style.paddingTop = 6;
+                page.style.maxWidth = 640;
+                root.Add(page);
+                var header = VxUI.IconHeader(VxIcon.Kind.Shape, "Vectra Vector Graphics", "Project settings", out var chips);
+                chips.Add(VxUI.Chip("v0.1.0", "accent"));
+                page.Add(header);
+                page.Add(new VisualElement { style = { height = 8 } });
+
+                void Save()
                 {
-                    var field = new UnityEditor.UIElements.PropertyField(so.FindProperty(name));
-                    field.Bind(so);
-                    field.RegisterValueChangeCallback(_ =>
-                    {
-                        so.ApplyModifiedPropertiesWithoutUndo();
-                        s.Save();
-                        s.Apply();
-                    });
-                    root.Add(field);
+                    so.ApplyModifiedPropertiesWithoutUndo();
+                    s.Save();
+                    s.Apply();
                 }
 
-                root.Add(new Button(() =>
+                var t = typeof(VectraProjectSettings);
+                var svg = new VisualElement();
+                svg.Add(VxFields.For(so.FindProperty("useVectraSvgImporter"), t, "Use Vectra importer"));
+                svg.Add(VxUI.Text("When on, new .svg files use the Vectra importer instead of Unity's built-in one. Existing files can be switched with the button below.", "vx-hint"));
+                svg.Add(VxUI.AddButton("Switch every existing SVG to Vectra", () =>
                 {
+                    int n = 0;
                     foreach (var guid in AssetDatabase.FindAssets("glob:\"*.svg\""))
                     {
                         var path = AssetDatabase.GUIDToAssetPath(guid);
-                        if (path.EndsWith(".svg", System.StringComparison.OrdinalIgnoreCase))
-                            AssetDatabase.SetImporterOverride<VectraSvgImporter>(path);
+                        if (!path.EndsWith(".svg", System.StringComparison.OrdinalIgnoreCase)) continue;
+                        AssetDatabase.SetImporterOverride<VectraSvgImporter>(path);
+                        n++;
                     }
-                }) { text = "Use Vectra importer for all existing SVG files", style = { marginTop = 10, maxWidth = 320 } });
 
-                root.Add(new Button(() =>
-                {
-                    VectraSdfAtlas.Reset();
-                }) { text = "Reset shared atlases", style = { maxWidth = 320 } });
+                    Debug.Log($"Vectra: {n} SVG file(s) now use the Vectra importer.");
+                }));
+                page.Add(VxUI.TitledCard("vectra.settings.svg", VxIcon.Kind.Document, "SVG import", svg));
+
+                var render = new VisualElement();
+                render.Add(VxUI.Row("Default quality", VxSegmented.ForEnum(so.FindProperty("defaultQuality"), new[] { "Low", "Medium", "High", "Ultra" }, changed: Save),
+                    "Quality of shapes created from the GameObject menu"));
+                var atlas = new SliderInt(512, 8192) { showInputField = true };
+                atlas.BindProperty(so.FindProperty("sdfAtlasMaxSize"));
+                render.Add(VxUI.Row("Distance atlas max", atlas, "Largest size of the shared signed-distance atlas (power of two)"));
+                render.Add(VxUI.Text("The distance atlas only holds tessellated shapes that use effects. Analytic shapes need no textures.", "vx-hint"));
+                render.Add(VxUI.AddButton("Reset shared atlases", () => VectraSdfAtlas.Reset()));
+                page.Add(VxUI.TitledCard("vectra.settings.render", VxIcon.Kind.Settings, "Rendering", render));
+
+                page.TrackSerializedObjectValue(so, _ => Save());
+                page.Bind(so);
             }
         };
     }

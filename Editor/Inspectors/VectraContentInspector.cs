@@ -483,7 +483,7 @@ namespace FirstSymbol.Vectra.Editor
             }).Every(300);
         }
 
-        static VisualElement LayerList(SerializedObject so, SerializedProperty list, bool strokes)
+        internal static VisualElement LayerList(SerializedObject so, SerializedProperty list, bool strokes)
         {
             var root = new VisualElement();
             var items = new VisualElement();
@@ -663,7 +663,7 @@ namespace FirstSymbol.Vectra.Editor
             return VxIcon.Kind.Effects;
         }
 
-        static VisualElement EffectList(SerializedObject so, SerializedProperty list)
+        internal static VisualElement EffectList(SerializedObject so, SerializedProperty list)
         {
             var root = new VisualElement();
             var items = new VisualElement();
@@ -868,25 +868,6 @@ namespace FirstSymbol.Vectra.Editor
                 getContent = () => r != null ? r.Content : null,
                 getSize = () => r != null ? r.Size : Vector2.zero
             });
-        }
-    }
-
-    [CustomEditor(typeof(VectraStyle))]
-    class VectraStyleEditor : UnityEditor.Editor
-    {
-        public override VisualElement CreateInspectorGUI()
-        {
-            var root = VxUI.Root();
-            root.Add(VxUI.Text("Shared appearance: every shape that references this style updates when it changes.", "vx-hint"));
-            foreach (var name in new[] { "fills", "strokes", "effects" })
-            {
-                root.Add(VxUI.SectionTitle(name));
-                var pf = new PropertyField(serializedObject.FindProperty(name), "");
-                root.Add(pf);
-            }
-
-            root.TrackSerializedObjectValue(serializedObject, _ => ((VectraStyle)target).NotifyChanged());
-            return root;
         }
     }
 }

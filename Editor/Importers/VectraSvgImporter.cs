@@ -77,43 +77,6 @@ namespace FirstSymbol.Vectra.Editor
         }
     }
 
-    [CustomEditor(typeof(VectraSvgImporter))]
-    class VectraSvgImporterEditor : ScriptedImporterEditor
-    {
-        public override void OnInspectorGUI()
-        {
-            serializedObject.Update();
-            var mode = serializedObject.FindProperty("mode");
-            EditorGUILayout.PropertyField(mode);
-            if (mode.enumValueIndex != (int)VectraSvgImporter.OutputMode.Document)
-            {
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("textureSize"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("quality"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("filterMode"));
-                if (mode.enumValueIndex == (int)VectraSvgImporter.OutputMode.Sprite)
-                {
-                    EditorGUILayout.PropertyField(serializedObject.FindProperty("pixelsPerUnit"));
-                    EditorGUILayout.PropertyField(serializedObject.FindProperty("spritePivot"));
-                }
-            }
-            else
-            {
-                EditorGUILayout.HelpBox("Imported as a resolution-independent Vectra document. Drag it onto a Canvas to create a Vectra SVG Image.", MessageType.None);
-            }
-
-            var doc = AssetDatabase.LoadAssetAtPath<VectraSvgDocument>(((AssetImporter)target).assetPath);
-            if (doc != null && doc.warnings.Count > 0)
-            {
-                EditorGUILayout.Space();
-                EditorGUILayout.LabelField("Import report", EditorStyles.boldLabel);
-                foreach (var w in doc.warnings) EditorGUILayout.HelpBox(w, MessageType.Warning);
-            }
-
-            serializedObject.ApplyModifiedProperties();
-            ApplyRevertGUI();
-        }
-    }
-
     /// <summary>Makes Vectra the importer of new .svg files when enabled in the project settings.</summary>
     class VectraSvgImporterPostprocessor : AssetPostprocessor
     {
