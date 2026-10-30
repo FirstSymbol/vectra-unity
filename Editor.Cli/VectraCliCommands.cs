@@ -17,7 +17,7 @@ namespace FirstSymbol.Vectra.Editor.Cli
     /// Vectra commands for the Unity CLI (<c>unity command vectra &lt;name&gt;</c>). Compiled only when the
     /// com.unity.pipeline package is installed.
     /// </summary>
-    static class VectraCliCommands
+    static partial class VectraCliCommands
     {
         [CliCommand("vectra", "stats", "Counts Vectra components in the open scenes and reports atlas usage")]
         static string Stats()
@@ -127,14 +127,7 @@ namespace FirstSymbol.Vectra.Editor.Cli
             return $"{root.name} ({root.childCount} elements)";
         }
 
-        static GameObject Find(string target)
-        {
-            var go = GameObject.Find(target);
-            if (go != null) return go;
-            foreach (var t in Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-                if (t.name == target) return t.gameObject;
-            return null;
-        }
+        static GameObject Find(string target) => CliScene.Find(target);
 
         static StringBuilder Field(StringBuilder sb, string name, int value) =>
             sb.Append('"').Append(name).Append("\":").Append(value.ToString(CultureInfo.InvariantCulture));

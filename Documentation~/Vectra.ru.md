@@ -72,10 +72,12 @@ Package Manager → **+** → **Add package from git URL…** → `https://githu
 | `VectraMask` | Маскирует детей по контуру фигуры: stencil или soft (с пером, с инверсией) |
 | `VectraTheme` | Делает `VectraPalette` активной и выбирает тему |
 | `VectraAnimatedProperties` | Поля для Animator и Timeline (trim, цвета, fill amount и др.) |
+| `VectraInteractionStates` | Состояния hover, pressed, selected (фокус) и disabled с плавными переходами |
 | `VectraBackdrop` (URP) | Frosted glass и сложные blend-режимы |
 
 Ассеты:
 - `VectraStyle` — общий набор заливок, обводок и эффектов, как CSS-класс;
+- `VectraShapeAsset` — общая геометрия, основа библиотеки фигур;
 - `VectraPalette` — именованные цвета по темам;
 - `VectraSvgDocument` — импортированный SVG;
 - `VectraFontMap` — соответствие font-family шрифтам TextMeshPro.
@@ -104,7 +106,13 @@ shape.SetShapeDirty();
 - **Пути:** путь Безье (редактируется в Scene view), полилиния со скруглением, спираль, шестерня, волна, данные SVG-пути, облачко, галочка.
 - **Составные:** булева фигура (точная или плавная), морфинг между двумя фигурами.
 
+- **Из спрайтов:** `TracedSprite` превращает альфа-силуэт спрайта в контуры. Настраиваются порог альфы, разрешение сетки, упрощение и сглаживание. Дыры учитываются, текстура не обязана быть readable.
+
 У каждой фигуры есть `rotation`. Аналитическую фигуру можно отрисовать как путь флагом **Force Path**. Для dash-обводки это происходит автоматически.
+
+**Convert to editable path** (вкладка Shape или `VectraPathConverter.ToPathShape`) превращает любую фигуру, SVG-путь или трассированный спрайт в точки Безье, которые редактируются в Scene view.
+
+**Общие фигуры.** Геометрию можно сохранить как `VectraShapeAsset`: вкладка Shape → Save или Assets → Create → Vectra → Shape. Все объекты, ссылающиеся на ассет, рисуют одну геометрию и обновляются при его изменении. **Detach** копирует её обратно для локальной правки. Вместе со стилями и палитрами это библиотека фигур; поставить фигуру в сцену можно через Assets → Create → Vectra → Shape in Scene.
 
 ## Заливки, обводки и палитры
 
@@ -113,9 +121,10 @@ shape.SetShapeDirty();
 - градиенты linear, radial (с фокусом), angular, diamond. Spread: pad, repeat, reflect. Число стопов не ограничено, есть midpoint. Интерполяция sRGB, Linear, OKLab или Step;
 - texture (stretch, fit, fill, tile);
 - паттерны stripes, checker, dots, grid, noise;
-- freeform-градиент.
+- freeform-градиент;
+- **contour gradient** — градиент по расстоянию от контура. Даёт затухание к краю, а со spread Repeat/Reflect — кольца и полосы, повторяющие форму.
 
-Градиенты дизерятся против бэндинга.
+Цвет и альфа задаются в одном списке стопов. Градиенты дизерятся против бэндинга.
 
 **Обводки:**
 - любое количество на фигуру;
@@ -153,13 +162,30 @@ palette.SetTheme("Light");
 - dissolve;
 - **pixelate**;
 - **outline** — полоса поля расстояний, скруглённая на всех углах;
-- **color overlay**, **gradient overlay**.
+- **color overlay**, **gradient overlay**;
+- **extrude** — слои силуэта от ближнего цвета к дальнему;
+- **deform** — волнистый контур, анимируется на GPU без пересборки.
 
 У каждого слоя и эффекта blend Normal или Additive. Для всей фигуры доступны Normal, Additive, Multiply и Screen.
 
 Одновременно действует только один модификатор из fill amount, pixelate и dissolve; приоритет в этом же порядке.
 
 У path-фигур pixelate и эффекты на основе расстояния используют запечённое поле. Геометрические обводки path-фигур не пикселизуются.
+
+**Пользовательские эффекты.** Унаследуйте `VectraCustomEffect` и выводите слои в `Populate`. Они проходят тот же трекинг изменений, батчинг и шейдер, что и встроенные эффекты, и появляются в меню Add effect:
+
+```csharp
+[Serializable] public class NeonRings : VectraCustomEffect
+{
+    public Color color = Color.cyan; public int rings = 3; public float gap = 6f;
+    public override string DisplayName => "Neon Rings";
+    public override float Reach => rings * gap + 4f;
+    public override void Populate(VectraEffectBuilder b)
+    {
+        for (int i = 1; i <= rings; i++) b.Band(color, 2f, i * gap);   // также Fill, Shadow, InnerShadow
+    }
+}
+```
 
 ## Маски
 
@@ -250,6 +276,14 @@ shape.KillTweens();
 2. Включите нужные параметры: цвет и прозрачность заливки, цвет и ширина обводки, trim, dash offset, rotation, fill amount, dissolve, morph.
 3. Ключуйте его поля в окне Animation или на анимационной дорожке Timeline.
 
+## Состояния взаимодействия
+
+**Vectra Interaction States** задаёт фигуре вид для состояний Normal, Hover, Pressed, Selected (фокус клавиатуры или геймпада) и Disabled: оттенок, масштаб, цвета заливки и обводки, силу теней и свечения. Переходы между состояниями плавные, с выбранной кривой.
+- Компонент реагирует на события указателя и выделения.
+- Selectable на том же объекте (Button, Toggle…) включает Disabled.
+- `SetState` задаёт состояние из кода, `StateChanged` сообщает о смене.
+- Работает только в Play Mode.
+
 ## URP backdrop
 
 Настройка:
@@ -300,7 +334,21 @@ Backdrop-фигуры используют собственный материа
 
 ## Командная строка
 
-Если установлен пакет `com.unity.pipeline`, опциональная сборка `FirstSymbol.Vectra.Editor.Cli` регистрирует команды:
+Если установлен пакет `com.unity.pipeline`, опциональная сборка `FirstSymbol.Vectra.Editor.Cli` регистрирует команды `unity command vectra …` для скриптов, CI и AI-агентов. Каждая команда отвечает JSON, правки отменяются через Undo.
+
+- **Обзор:** `help`, `types` (все фигуры, эффекты и paint со значениями по умолчанию), `list`, `get --target` (`--full true` — все поля).
+- **Правка:** `create`, `set --data <JSON-патч>`, `add`, `remove`, `mask`, `states`, `convert_to_path`, `save_style`, `save_shape`, `palette`, `theme`, `svg_parse`, `svg_create`, `select`.
+- **Вывод:** `export_png` (визуальная проверка результата), `export_svg`.
+
+```bash
+unity command vectra create --shape Rectangle --name Card --size 320,180 --data "{effects:[{$type:DropShadow,blur:24}]}"
+unity command vectra set --target Card --data "{fills:[{paint:{type:LinearGradient,gradient:'#6366F1,#EC4899'}}]}"
+unity command vectra export_png --target Card --output card.png
+```
+
+**Claude Code.** Пункт **Tools → Vectra → Install Claude Code Skill** копирует `Documentation~/AgentGuide.md` в `.claude/skills/vectra/SKILL.md`. После этого агент знает команды, формат JSON и готовые рецепты.
+
+Ещё примеры:
 
 ```
 unity command vectra stats

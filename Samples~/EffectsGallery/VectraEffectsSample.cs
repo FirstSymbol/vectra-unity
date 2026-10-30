@@ -87,7 +87,7 @@ namespace FirstSymbol.Vectra.Samples
             hm.Softness = 20f;
             var under = Shape<RectangleShape>(hole.transform, "Panel", Vector2.zero, new Vector2(260, 160));
             under.SetFill(VectraPaint.Linear(new Color(0.3f, 0.9f, 0.6f), new Color(0.2f, 0.5f, 1f), 30f));
-            Label("Inverted soft mask", new Vector2(0, -330));
+            Label("Inverted soft mask", new Vector2(0, -330)).rectTransform.sizeDelta = new Vector2(320f, 30f);
 
             var stencil = Shape<StarShape>(transform, "Stencil Mask", new Vector2(440, -230), new Vector2(170, 170));
             stencil.gameObject.AddComponent<VectraMask>().showMaskGraphic = false;
@@ -95,7 +95,7 @@ namespace FirstSymbol.Vectra.Samples
             img.transform.SetParent(stencil.transform, false);
             ((RectTransform)img.transform).sizeDelta = new Vector2(220, 220);
             img.GetComponent<RawImage>().texture = MakeChecker();
-            Label("Stencil mask (any graphic)", new Vector2(440, -330));
+            Label("Stencil mask (any graphic)", new Vector2(440, -330)).rectTransform.sizeDelta = new Vector2(320f, 30f);
 
             // Theme switch.
             var button = Shape<RectangleShape>(transform, "Theme Button", new Vector2(0, 420), new Vector2(240, 56));

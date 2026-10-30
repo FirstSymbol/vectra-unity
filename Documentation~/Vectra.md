@@ -74,9 +74,10 @@ paints, backdrop shapes and soft-masked children are the exceptions (their own t
 | `VectraMask` | Masks children by the outline of the shape: stencil or soft (feathered, invertible) |
 | `VectraTheme` | Activates a `VectraPalette` and selects its theme |
 | `VectraAnimatedProperties` | Keyable fields for Animator / Timeline (trim, colours, fill amount, …) |
+| `VectraInteractionStates` | Hover, pressed, selected (focus) and disabled looks with eased transitions |
 | `VectraBackdrop` (URP) | Frosted glass and advanced blend modes |
 
-Assets: `VectraStyle` (shared fills/strokes/effects, like a CSS class), `VectraPalette` (named colours per theme),
+Assets: `VectraStyle` (shared fills/strokes/effects, like a CSS class), `VectraShapeAsset` (shared geometry: a shape library), `VectraPalette` (named colours per theme),
 `VectraSvgDocument` (imported SVG), `VectraFontMap` (SVG font-family → TextMeshPro font).
 
 Create objects from **GameObject → UI → Vectra** (Canvas) or **GameObject → 2D Object → Vectra** (world).
@@ -103,13 +104,18 @@ shape.SetShapeDirty();
   speech bubble, checkmark.
 - **Composite:** boolean shape (exact or smooth), morph between any two shapes.
 
+- **From sprites:** `TracedSprite` turns a sprite's alpha silhouette into contours (alpha threshold, sampling resolution, simplification, smoothing; holes included; works with non-readable textures).
+
 Every shape has `rotation`. Any analytic shape can be rendered as a path (**Force Path**), which dashes need anyway.
+**Convert to editable path** (Shape tab, or `VectraPathConverter.ToPathShape`) turns any shape, SVG path data or traced sprite into Bezier points you can edit in the Scene view.
+
+**Shared shapes.** Save the geometry as a `VectraShapeAsset` (Shape tab → Save, or Assets → Create → Vectra → Shape). Every object that references it draws the same geometry and updates when the asset changes; **Detach** copies it back for local edits. Together with styles and palettes this forms a shape library: place an asset with Assets → Create → Vectra → Shape in Scene.
 
 ## Paint, strokes and palettes
 
 **Paint types:** solid (HDR), linear / radial (with focal point) / angular / diamond gradients (pad, repeat, reflect;
 any number of stops, midpoints, sRGB / linear / OKLab / step interpolation), texture (stretch, fit, fill, tile),
-stripes, checker, dots, grid, noise, freeform gradient. Gradients are dithered against banding.
+stripes, checker, dots, grid, noise, freeform gradient, and **contour gradient**: a gradient along the distance from the outline (edge fades; with Repeat/Reflect, rings and bands that follow the shape). Colour and alpha share one stop list. Gradients are dithered against banding.
 
 **Strokes:** any number per shape; centre / inside / outside; caps and joins with miter limit; dashes (absolute or
 relative lengths, offset); trim path; width profile (`AnimationCurve`); drawn behind or above the fill.
@@ -130,7 +136,22 @@ Tokens apply to paint colours (solid, texture tint, pattern colours). Effect col
 
 Drop shadow, inner shadow, outer glow, inner glow, bevel & emboss, layer blur, noise / grain, colour adjust (hue,
 saturation, brightness, contrast), fill amount (horizontal, vertical, radial), dissolve, **pixelate**, **outline**
-(a band of the distance field, rounded at every corner), **colour overlay** and **gradient overlay**.
+(a band of the distance field, rounded at every corner), **colour overlay**, **gradient overlay**, **extrude** (layered silhouette slices from a near to a far colour) and **deform** (wavy outline animated on the GPU, no rebuilds).
+
+**Custom effects.** Derive from `VectraCustomEffect` and emit layers in `Populate`; they use the same change tracking, batching and shader as the built-in effects and appear in the Add effect menu:
+
+```csharp
+[Serializable] public class NeonRings : VectraCustomEffect
+{
+    public Color color = Color.cyan; public int rings = 3; public float gap = 6f;
+    public override string DisplayName => "Neon Rings";
+    public override float Reach => rings * gap + 4f;
+    public override void Populate(VectraEffectBuilder b)
+    {
+        for (int i = 1; i <= rings; i++) b.Band(color, 2f, i * gap);   // also Fill, Shadow, InnerShadow
+    }
+}
+```
 
 Each layer and effect blends Normal or Additive; the whole shape blends Normal, Additive, Multiply or Screen. Only
 one of fill amount, pixelate and dissolve is applied at a time (in that priority). Pixelate and the distance-based
@@ -212,6 +233,10 @@ OutBack, OutElastic, OutBounce. Options: `SetDelay`, `SetLoops(count, yoyo)`, `S
 Properties**, turn on the parameters to drive (fill colour/opacity, stroke colour/width, trim, dash offset, rotation,
 fill amount, dissolve, morph) and key its fields in the Animation window or a Timeline animation track.
 
+## Interaction states
+
+**Vectra Interaction States** gives a shape Normal, Hover, Pressed, Selected (keyboard/controller focus) and Disabled looks: tint, scale, fill and stroke colour, and shadow/glow strength, blended with an eased transition. It reacts to pointer and selection events; a Selectable on the same object (Button, Toggle…) drives Disabled. `SetState` forces a state from code; `StateChanged` reports changes. It runs in play mode only.
+
 ## URP backdrop
 
 1. Add **Vectra Backdrop Feature** to the Universal Renderer asset (Add Renderer Feature).
@@ -240,7 +265,21 @@ background. The *URP Backdrop* sample is set up this way. Backdrop shapes use th
 
 ## Command line
 
-With the `com.unity.pipeline` package installed, the optional assembly `FirstSymbol.Vectra.Editor.Cli` registers:
+With the `com.unity.pipeline` package installed, the optional assembly `FirstSymbol.Vectra.Editor.Cli` registers `unity command vectra …` commands for scripts, CI and AI agents. Every command answers JSON and edits are undoable:
+
+- discovery: `help`, `types` (all shapes, effects and paints with defaults), `list`, `get --target` (`--full true` for every field);
+- authoring: `create`, `set --data <json patch>`, `add`, `remove`, `mask`, `states`, `convert_to_path`, `save_style`, `save_shape`, `palette`, `theme`, `svg_parse`, `svg_create`, `select`;
+- output: `export_png` (check results visually), `export_svg`.
+
+```bash
+unity command vectra create --shape Rectangle --name Card --size 320,180 --data "{effects:[{$type:DropShadow,blur:24}]}"
+unity command vectra set --target Card --data "{fills:[{paint:{type:LinearGradient,gradient:'#6366F1,#EC4899'}}]}"
+unity command vectra export_png --target Card --output card.png
+```
+
+**Claude Code:** **Tools → Vectra → Install Claude Code Skill** copies `Documentation~/AgentGuide.md` to `.claude/skills/vectra/SKILL.md` so the agent knows these commands, the JSON conventions and recipes.
+
+More examples:
 
 ```
 unity command vectra stats

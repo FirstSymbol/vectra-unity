@@ -23,8 +23,9 @@ namespace FirstSymbol.Vectra.Editor.Tests
 
         static IEnumerable<Type> ShapeTypes()
         {
+            // A traced sprite has no outline until a sprite is assigned (covered by FeatureTests).
             foreach (var t in TypeCache.GetTypesDerivedFrom<VectraShapeGeometry>())
-                if (!t.IsAbstract && t.IsPublic && t.GetConstructor(Type.EmptyTypes) != null) yield return t;
+                if (!t.IsAbstract && t.IsPublic && t.GetConstructor(Type.EmptyTypes) != null && t != typeof(TracedSpriteShape)) yield return t;
         }
 
         [Test]

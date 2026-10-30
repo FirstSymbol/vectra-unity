@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,6 +9,7 @@ using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 namespace FirstSymbol.Vectra.Tests
 {
@@ -410,5 +412,71 @@ namespace FirstSymbol.Vectra.Tests
                 renderer.Dispose();
             }
         }
-    }
+
+        [UnityTest]
+        public IEnumerator ContourGradient_FollowsTheOutline()
+        {
+            var s = AddShape<RectangleShape>(m_Canvas.transform, new Vector2(160, 160), Color.white);
+            ((RectangleShape)s.Geometry).cornerRadii = Vector4.zero;
+            s.SetFill(VectraPaint.Contour(Color.red, Color.blue, 60f));
+            yield return null;
+            var px = Render();
+            var edge = At(px, 76, 0);
+            var centre = At(px, 0, 0);
+            Assert.Greater(edge.r, edge.b, "red near the edge");
+            Assert.Greater(centre.b, 0.9f, "blue deeper than the depth");
+            var midLeft = At(px, -76, 0);
+            Assert.Greater(midLeft.r, midLeft.b, "the same colour along every side");
+        }
+
+        [UnityTest]
+        public IEnumerator Extrude_DrawsSlicesBehind()
+        {
+            var s = AddShape<RectangleShape>(m_Canvas.transform, new Vector2(80, 80), Color.white);
+            var ex = s.AddEffect<ExtrudeEffect>();
+            ex.offset = new Vector2(30f, -30f);
+            ex.nearColor = ex.farColor = Color.green;
+            yield return null;
+            var px = Render();
+            Assert.Greater(At(px, 60, -60).g, 0.8f, "extruded slice below-right of the shape");
+            Assert.Greater(At(px, 0, 0).r, 0.9f, "the shape stays on top");
+        }
+
+        [Serializable]
+        class RingEffect : VectraCustomEffect
+        {
+            public override string DisplayName => "Test ring";
+            public override float Reach => 40f;
+            public override void Populate(VectraEffectBuilder b) => b.Band(Color.magenta, 6f, 20f);
+        }
+
+        [UnityTest]
+        public IEnumerator CustomEffect_EmitsThroughTheBuilder()
+        {
+            var s = AddShape<EllipseShape>(m_Canvas.transform, new Vector2(100, 100), Color.white);
+            s.Effects.Add(new RingEffect());
+            s.SetShapeDirty();
+            yield return null;
+            var px = Render();
+            var ring = At(px, 70, 0);
+            Assert.Greater(ring.r, 0.8f, "band 20 units outside the outline");
+            Assert.Greater(ring.b, 0.8f);
+            Assert.Less(At(px, 60, 0).a, 0.1f, "gap between the outline and the band");
+        }
+
+        [UnityTest]
+        public IEnumerator InteractionStates_TransitionToHover()
+        {
+            var s = AddShape<RectangleShape>(m_Canvas.transform, new Vector2(100, 60), Color.white);
+            var states = s.gameObject.AddComponent<VectraInteractionStates>();
+            states.duration = 0.05f;
+            states.hover.scale = 1.5f;
+            yield return null;
+            states.SetState(VectraInteractionState.Hover);
+            float t0 = Time.realtimeSinceStartup;
+            while (Time.realtimeSinceStartup - t0 < 0.5f) yield return null;
+            Assert.AreEqual(1.5f, s.transform.localScale.x, 1e-3f);
+            states.SetState(VectraInteractionState.Normal, true);
+            Assert.AreEqual(1f, s.transform.localScale.x, 1e-3f);
+        }    }
 }

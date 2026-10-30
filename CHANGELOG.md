@@ -19,7 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Editor: Scene view overlay (point modes, snapping, handle toggles), drop shadow handle, drag-to-reorder cards,
   palette picker, Copy/Paste Vectra Style, Export as Sprite Asset, Expand to Hierarchy, Atlas Debugger and SVG Import
   Report windows, inspectors for the new components, default font map setting.
-- Optional `FirstSymbol.Vectra.Editor.Cli` assembly with `unity command vectra …` commands (needs com.unity.pipeline).
+- `VectraShapeAsset`: shared geometry (shape library) with Save/Detach in the Shape tab and its own inspector.
+- `TracedSpriteShape` / `VectraSpriteTracer`: sprite silhouettes as contours (alpha threshold, resolution, simplification, smoothing).
+- `VectraPathConverter` and Convert to editable path for any shape.
+- `ContourGradient` paint (gradients and bands that follow the outline), `ExtrudeEffect`, `DeformEffect` (GPU-animated).
+- `VectraInteractionStates`: hover, pressed, selected and disabled looks with eased transitions.
+- `VectraCustomEffect` / `VectraEffectBuilder`: user-defined effects through the standard pipeline.
+- Optional `FirstSymbol.Vectra.Editor.Cli` assembly (needs com.unity.pipeline): `unity command vectra help, types, list, get, create, set, add, remove, mask, states, convert_to_path, save_style, save_shape, palette, theme, svg_parse, svg_create, select, export_png, export_svg, expand_svg, use_importer, stats, reset_atlases` with JSON input and output.
+- Agent guide (`Documentation~/AgentGuide.md`) and Tools → Vectra → Install Claude Code Skill.
 - Play mode tests: rendered pixels, masks, palettes, batching, garbage-free rebuilds, tweens, SVG expansion.
 - Samples: Effects & Masks, Boolean Operations, Animation, World Space, URP Backdrop.
 - Documentation in English and Russian (`Documentation~`).

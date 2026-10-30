@@ -135,5 +135,47 @@ namespace FirstSymbol.Vectra.Editor
             image.gameObject.SetActive(false);
             Selection.activeGameObject = root.gameObject;
         }
-    }
+
+        // -----------------------------------------------------------------------------------------------------
+        // Claude Code
+        // -----------------------------------------------------------------------------------------------------
+
+        /// <summary>Copies the agent guide into the project's Claude Code skills so agents know the vectra CLI commands.</summary>
+        [MenuItem("Tools/Vectra/Install Claude Code Skill", false, 100)]
+        static void InstallClaudeSkill()
+        {
+            var root = PackageRoot();
+            var source = root != null ? System.IO.Path.Combine(root, "Documentation~", "AgentGuide.md") : null;
+            if (source == null || !System.IO.File.Exists(source))
+            {
+                Debug.LogError("Vectra: Documentation~/AgentGuide.md not found in the package.");
+                return;
+            }
+
+            var projectRoot = System.IO.Path.GetDirectoryName(Application.dataPath);
+            var target = System.IO.Path.Combine(projectRoot, ".claude", "skills", "vectra", "SKILL.md");
+            bool exists = System.IO.File.Exists(target);
+            if (!EditorUtility.DisplayDialog("Install Claude Code skill",
+                    (exists ? "Replace " : "Create ") + target + "?\n\nClaude Code then knows how to build and edit Vectra shapes with 'unity command vectra …' (needs the com.unity.pipeline package).",
+                    exists ? "Replace" : "Install", "Cancel")) return;
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target));
+            System.IO.File.Copy(source, target, true);
+            Debug.Log("Vectra: Claude Code skill installed at " + target);
+        }
+
+        /// <summary>Folder of the Vectra package (installed through the Package Manager or embedded under Assets).</summary>
+        internal static string PackageRoot()
+        {
+            var info = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(VectraContextMenus).Assembly);
+            if (info != null && !string.IsNullOrEmpty(info.resolvedPath)) return info.resolvedPath;
+            foreach (var guid in AssetDatabase.FindAssets("FirstSymbol.Vectra.Editor t:asmdef"))
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                if (!path.EndsWith("/FirstSymbol.Vectra.Editor.asmdef")) continue;
+                var editorDir = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path));
+                return System.IO.Path.GetDirectoryName(editorDir);
+            }
+
+            return null;
+        }    }
 }

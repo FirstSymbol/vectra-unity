@@ -5,7 +5,8 @@
 - булевы операции, в том числе плавные;
 - градиенты, паттерны, обводки с dash и trim;
 - тени, свечение, bevel и другие эффекты;
-- маски, палитры с темами и анимацию;
+- маски, палитры с темами, анимацию и состояния взаимодействия;
+- фигуры из спрайтов и общую библиотеку фигур;
 - импорт и экспорт SVG.
 
 Всё рисуется одним общим материалом: фигуры батчатся. Геометрия считается на Burst без GC-аллокаций при пересборке.
@@ -52,6 +53,8 @@ https://github.com/FirstSymbol/vectra-unity.git
 | `VectraMask` | Маска по контуру фигуры. Stencil — для любого UI. Soft — с пером и инверсией, для дочерних фигур Vectra. |
 | `VectraTheme` (+ ассет `VectraPalette`) | Именованные цвета по темам. Смена темы перекрашивает все фигуры с токенами палитры. |
 | `VectraAnimatedProperties` | Поля для ключей Animator и Timeline: trim, цвета, ширина, rotation, fill amount, dissolve, morph. |
+| `VectraInteractionStates` | Hover, pressed, selected (фокус) и disabled: оттенок, масштаб, цвета, сила эффектов, плавные переходы. |
+| `VectraShapeAsset` (ассет) | Общая геометрия для многих объектов: библиотека фигур. |
 | `VectraBackdrop` (URP) | Frosted glass и 15 сложных blend-режимов. Нужен `VectraBackdropFeature` в URP Renderer. |
 | `VectraStyle` (ассет) | Общий набор заливок, обводок и эффектов, аналог CSS-класса. |
 
@@ -65,6 +68,9 @@ https://github.com/FirstSymbol/vectra-unity.git
 **Path-фигуры:**
 - **Контуры:** Bezier-путь (редактируется в Scene view; точки Corner, Smooth, Symmetric), полилиния со скруглением углов, спираль, шестерня, волна, SVG-путь (`d`), облачко с хвостиком, галочка.
 - **Составные:** булева группа (exact или smooth), морфинг между любыми двумя фигурами.
+- **Из спрайтов:** силуэт спрайта как редактируемый контур (порог альфы, разрешение, упрощение, сглаживание).
+
+Любую фигуру, SVG-путь или трассированный спрайт можно превратить в редактируемый Bezier-путь (**Convert to editable path**).
 
 У каждой фигуры есть `rotation`. Аналитическую фигуру всегда можно отрисовать и как путь: флаг `Force Path` или автоматически, когда это нужно для dash-обводки.
 
@@ -76,7 +82,8 @@ https://github.com/FirstSymbol/vectra-unity.git
   - текстура (stretch, fit, fill, tile);
   - паттерны stripes, checker, dots, grid;
   - шум;
-  - freeform-градиент по цветовым точкам.
+  - freeform-градиент по цветовым точкам;
+  - contour gradient: градиент и полосы, повторяющие форму (затухание к краю, кольца).
 
   Цвет можно брать из палитры по имени.
 - **Обводки:** любое количество; align center/inside/outside; caps; joins с miter limit; dash (абсолютные или относительные длины, offset); trim path; профиль ширины `AnimationCurve`; режим «за заливкой».
@@ -87,7 +94,11 @@ https://github.com/FirstSymbol/vectra-unity.git
   - color adjust (HSBC);
   - fill amount (horizontal/vertical/radial), dissolve, pixelate;
   - outline (по полю расстояний);
-  - color overlay, gradient overlay.
+  - color overlay, gradient overlay;
+  - extrude (слои силуэта);
+  - deform (анимированная деформация на GPU).
+
+  Свои эффекты пишутся наследованием от `VectraCustomEffect`.
 
   У каждого слоя есть blend Normal или Additive. Для всей фигуры доступны Normal, Additive, Multiply и Screen.
 
@@ -141,7 +152,9 @@ VectraSvg.Expand(svgImage);   // отдельный VectraShape на кажды�
   Оверлей инструмента переключает режим точки, включает привязку к сетке и ручки.
 - **Контекстное меню:** Copy/Paste Vectra Style, Export as PNG / SVG / Sprite Asset, Expand to Hierarchy (SVG Image).
 - **Окна:** Window → Vectra → Atlas Debugger и SVG Import Report.
-- **CLI:** при установленном `com.unity.pipeline` доступны команды `unity command vectra stats | reset_atlases | use_importer | export_png | export_svg | expand_svg`.
+- **CLI для скриптов и AI-агентов** (при установленном `com.unity.pipeline`): `unity command vectra help | types | list | get | create | set | add | remove | mask | states | palette | theme | svg_parse | export_png …`.
+  - Вход и выход — JSON, правки отменяются через Undo.
+  - **Tools → Vectra → Install Claude Code Skill** ставит в проект skill с инструкцией для Claude Code.
 
 ## URP backdrop
 
