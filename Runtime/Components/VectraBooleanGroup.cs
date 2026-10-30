@@ -58,7 +58,7 @@ namespace FirstSymbol.Vectra
         void OnDisable()
         {
             // Show the operands again when the group stops combining them.
-            foreach (Transform child in transform) SetHidden(child, false);
+            for (int i = 0; i < transform.childCount; i++) SetHidden(transform.GetChild(i), false);
         }
 
         void LateUpdate()
@@ -75,8 +75,10 @@ namespace FirstSymbol.Vectra
             var h = new HashBuilder(17);
             h.Add(m_Smoothness);
             h.Add(m_HideOperands);
-            foreach (Transform child in transform)
+            // Indexed loop: enumerating a Transform allocates.
+            for (int ci = 0; ci < transform.childCount; ci++)
             {
+                var child = transform.GetChild(ci);
                 if (!child.gameObject.activeSelf) continue;
                 var m = transform.worldToLocalMatrix * child.localToWorldMatrix;
                 h.Add(m.m00); h.Add(m.m01); h.Add(m.m03);
@@ -104,8 +106,10 @@ namespace FirstSymbol.Vectra
         public void Sync()
         {
             m_Operands.Clear();
-            foreach (Transform child in transform)
+            // Indexed loop: enumerating a Transform allocates.
+            for (int ci = 0; ci < transform.childCount; ci++)
             {
+                var child = transform.GetChild(ci);
                 if (!child.gameObject.activeSelf) continue;
                 VectraShapeGeometry geometry = null;
                 Rect rect = default;

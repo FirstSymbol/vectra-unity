@@ -1,6 +1,6 @@
 {
   "name": "com.firstsymbol.vectra",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "Vectra Vector Graphics",
   "description": "Vector shapes for uGUI Canvas and world space: analytic SDF primitives, arbitrary paths, boolean operations, gradients, strokes with dashes, shadows, glows, bevels and other effects, SVG import and export. Burst-accelerated geometry and one batchable material for everything.",
   "unity": "6000.0",
@@ -30,6 +30,31 @@
       "displayName": "SVG Showcase",
       "description": "SVG documents rendered in Canvas and world space.",
       "path": "Samples~/SvgShowcase"
+    },
+    {
+      "displayName": "Effects & Masks",
+      "description": "Every effect on one card each, soft, inverted and stencil masks, and a palette with a theme switch.",
+      "path": "Samples~/EffectsGallery"
+    },
+    {
+      "displayName": "Boolean Operations",
+      "description": "Boolean groups with moving operands, smooth-union metaballs and a BooleanShape built in code.",
+      "path": "Samples~/BooleanOps"
+    },
+    {
+      "displayName": "Animation",
+      "description": "Fluent tweens, an AnimationClip driving Vectra Animated Properties, morphing and marching dashes.",
+      "path": "Samples~/Animation"
+    },
+    {
+      "displayName": "World Space",
+      "description": "VectraRenderer shapes in a 3D scene with generated colliders and click handling.",
+      "path": "Samples~/WorldSpace"
+    },
+    {
+      "displayName": "URP Backdrop",
+      "description": "Frosted glass and advanced blend modes over moving UI (needs the Vectra Backdrop Feature on the URP renderer).",
+      "path": "Samples~/UrpBackdrop"
     }
   ]
 }

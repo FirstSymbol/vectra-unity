@@ -10,15 +10,19 @@ namespace FirstSymbol.Vectra.URP
     /// <summary>
     /// URP renderer feature that publishes the camera image for Vectra backdrop effects: a sharp copy
     /// (<c>_VectraBackdropSharp</c>, used by advanced blend modes) and a blurred pyramid result
-    /// (<c>_VectraBackdropBlur</c>, used by frosted glass). Computed once per camera and shared by every shape.
-    /// Add it to the Universal Renderer asset.
+    /// (<c>_VectraBackdropBlur</c>, used by frosted glass). Computed once per camera, before transparent
+    /// objects (and therefore Screen Space - Camera canvases) are drawn, and shared by every shape.
+    /// To blur other UI, draw that UI with a base camera and the glass with an overlay camera of its stack:
+    /// the overlay camera's capture then contains the finished background. Add it to the Universal Renderer asset.
     /// </summary>
     public class VectraBackdropFeature : ScriptableRendererFeature
     {
         [Serializable]
         public class Settings
         {
-            public RenderPassEvent renderPassEvent = RenderPassEvent.AfterRenderingTransparents;
+            [Tooltip("When the camera image is captured. Shapes drawn before this point are part of the backdrop; " +
+                     "shapes using the backdrop must be drawn after it.")]
+            public RenderPassEvent renderPassEvent = RenderPassEvent.BeforeRenderingTransparents;
             [Range(1, 4)] public int downsample = 2;
             [Range(1, 6)] public int blurIterations = 4;
             [Tooltip("Skip the sharp copy when no shape uses advanced blend modes.")]
@@ -35,6 +39,7 @@ namespace FirstSymbol.Vectra.URP
 
         public override void Create()
         {
+            m_Pass?.Dispose();
             m_Pass = new BackdropPass();
         }
 
@@ -54,12 +59,18 @@ namespace FirstSymbol.Vectra.URP
             renderer.EnqueuePass(m_Pass);
         }
 
-        protected override void Dispose(bool disposing) => CoreUtils.Destroy(m_Material);
+        protected override void Dispose(bool disposing)
+        {
+            m_Pass?.Dispose();
+            CoreUtils.Destroy(m_Material);
+        }
 
         class BackdropPass : ScriptableRenderPass
         {
             Material m_Material;
             Settings m_Settings;
+            // Persistent targets: the globals stay valid for every pass that runs after the capture.
+            RTHandle m_Sharp, m_BlurA, m_BlurB;
 
             class PassData { }
 
@@ -70,28 +81,35 @@ namespace FirstSymbol.Vectra.URP
                 requiresIntermediateTexture = true;
             }
 
+            public void Dispose()
+            {
+                m_Sharp?.Release();
+                m_BlurA?.Release();
+                m_BlurB?.Release();
+                m_Sharp = m_BlurA = m_BlurB = null;
+            }
+
             public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
             {
                 var resources = frameData.Get<UniversalResourceData>();
                 if (resources.isActiveTargetBackBuffer) return;
-                var source = resources.activeColorTexture;
-                var desc = renderGraph.GetTextureDesc(source);
-                desc.msaaSamples = MSAASamples.None;
-                desc.depthBufferBits = DepthBits.None;
-                desc.clearBuffer = false;
-
-                desc.name = "_VectraBackdropSharp";
-                var sharp = renderGraph.CreateTexture(desc);
-                renderGraph.AddBlitPass(source, sharp, Vector2.one, Vector2.zero, passName: "Vectra Backdrop Copy");
-
+                var cameraData = frameData.Get<UniversalCameraData>();
+                var desc = cameraData.cameraTargetDescriptor;
+                desc.msaaSamples = 1;
+                desc.depthBufferBits = 0;
+                desc.depthStencilFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.None;
+                RenderingUtils.ReAllocateHandleIfNeeded(ref m_Sharp, desc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "_VectraBackdropSharp");
                 var small = desc;
                 small.width = Mathf.Max(1, desc.width >> m_Settings.downsample);
                 small.height = Mathf.Max(1, desc.height >> m_Settings.downsample);
-                small.name = "_VectraBackdropBlurA";
-                var a = renderGraph.CreateTexture(small);
-                small.name = "_VectraBackdropBlurB";
-                var b = renderGraph.CreateTexture(small);
+                RenderingUtils.ReAllocateHandleIfNeeded(ref m_BlurA, small, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "_VectraBackdropBlurA");
+                RenderingUtils.ReAllocateHandleIfNeeded(ref m_BlurB, small, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "_VectraBackdropBlurB");
 
+                var source = resources.activeColorTexture;
+                var sharp = renderGraph.ImportTexture(m_Sharp);
+                var a = renderGraph.ImportTexture(m_BlurA);
+                var b = renderGraph.ImportTexture(m_BlurB);
+                renderGraph.AddBlitPass(source, sharp, Vector2.one, Vector2.zero, passName: "Vectra Backdrop Copy");
                 renderGraph.AddBlitPass(new RenderGraphUtils.BlitMaterialParameters(sharp, a, m_Material, 0), "Vectra Backdrop Downsample");
                 // Kawase blur: each pass samples further away, ping-ponging between two textures.
                 for (int i = 0; i < m_Settings.blurIterations; i++)
