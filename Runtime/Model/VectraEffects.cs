@@ -132,4 +132,113 @@ namespace FirstSymbol.Vectra
 
         public override string DisplayName => "Dissolve";
     }
+
+    /// <summary>Quantizes the outline to square cells (retro look). Applies to fills and distance-based layers.</summary>
+    [Serializable]
+    public sealed class PixelateEffect : VectraEffect
+    {
+        [Min(0.5f)] public float cellSize = 4f;
+
+        public override string DisplayName => "Pixelate";
+    }
+
+    /// <summary>A band that follows the distance field of the shape (rounded at every corner, unlike a stroke).</summary>
+    [Serializable]
+    public sealed class OutlineEffect : VectraEffect
+    {
+        [ColorUsage(true, true)] public Color color = Color.white;
+        [Min(0f)] public float width = 2f;
+        /// <summary>Distance of the band centre from the edge; positive values move it outside.</summary>
+        public float offset = 3f;
+        public LayerBlend blend = LayerBlend.Normal;
+
+        public override string DisplayName => "Outline";
+    }
+
+    /// <summary>Paints a colour over the fills (inside the shape).</summary>
+    [Serializable]
+    public sealed class ColorOverlayEffect : VectraEffect
+    {
+        [ColorUsage(true, true)] public Color color = new Color(1f, 0.2f, 0.3f, 0.5f);
+        public LayerBlend blend = LayerBlend.Normal;
+
+        [NonSerialized] VectraPaint m_Paint;
+
+        public override string DisplayName => "Color Overlay";
+
+        internal VectraPaint ToPaint()
+        {
+            m_Paint ??= new VectraPaint();
+            m_Paint.type = PaintType.Solid;
+            m_Paint.color = color;
+            m_Paint.blend = blend;
+            return m_Paint;
+        }
+
+        public override VectraEffect Clone()
+        {
+            var c = (ColorOverlayEffect)MemberwiseClone();
+            c.m_Paint = null;
+            return c;
+        }
+    }
+
+    public enum OverlayGradientType
+    {
+        Linear,
+        Radial,
+        Angular,
+        Diamond
+    }
+
+    /// <summary>Paints a gradient over the fills (inside the shape).</summary>
+    [Serializable]
+    public sealed class GradientOverlayEffect : VectraEffect
+    {
+        public VectraGradient gradient = VectraGradient.Create(new Color(1f, 1f, 1f, 0.6f), new Color(1f, 1f, 1f, 0f));
+        public OverlayGradientType type = OverlayGradientType.Linear;
+        /// <summary>Linear: direction in degrees (90 = bottom to top). Other types: rotation.</summary>
+        public float angle = 90f;
+        [Min(0.01f)] public float scale = 1f;
+        [Range(0f, 1f)] public float opacity = 1f;
+        public LayerBlend blend = LayerBlend.Normal;
+
+        [NonSerialized] VectraPaint m_Paint;
+
+        public override string DisplayName => "Gradient Overlay";
+
+        internal VectraPaint ToPaint()
+        {
+            m_Paint ??= new VectraPaint();
+            m_Paint.gradient = gradient;
+            m_Paint.opacity = opacity;
+            m_Paint.blend = blend;
+            float r = angle * Mathf.Deg2Rad;
+            var dir = new Vector2(Mathf.Cos(r), Mathf.Sin(r));
+            switch (type)
+            {
+                case OverlayGradientType.Linear:
+                    m_Paint.type = PaintType.LinearGradient;
+                    m_Paint.gradientStart = new Vector2(0.5f, 0.5f) - dir * (0.5f * scale);
+                    m_Paint.gradientEnd = new Vector2(0.5f, 0.5f) + dir * (0.5f * scale);
+                    break;
+                default:
+                    m_Paint.type = type == OverlayGradientType.Radial ? PaintType.RadialGradient :
+                        type == OverlayGradientType.Angular ? PaintType.AngularGradient : PaintType.DiamondGradient;
+                    m_Paint.gradientStart = new Vector2(0.5f, 0.5f);
+                    m_Paint.gradientEnd = new Vector2(0.5f, 0.5f) + dir * (0.5f * scale);
+                    break;
+            }
+
+            return m_Paint;
+        }
+
+        public override VectraEffect Clone()
+        {
+            var c = (GradientOverlayEffect)MemberwiseClone();
+            c.gradient = gradient?.Clone();
+            c.m_Paint = null;
+            return c;
+        }
+    }
 }

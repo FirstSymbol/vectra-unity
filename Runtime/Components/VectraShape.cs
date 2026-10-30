@@ -14,7 +14,7 @@ namespace FirstSymbol.Vectra
     [ExecuteAlways]
     [RequireComponent(typeof(CanvasRenderer))]
     [AddComponentMenu("Vectra/Vectra Shape (UI)")]
-    public class VectraShape : MaskableGraphic, ILayoutElement, IVectraAtlasClient
+    public class VectraShape : MaskableGraphic, ILayoutElement, IVectraAtlasClient, IVectraShape
     {
         [SerializeField] VectraShapeContent m_Content = new VectraShapeContent();
         [Tooltip("Use the exact outline for raycasts instead of the rect.")]
@@ -75,6 +75,9 @@ namespace FirstSymbol.Vectra
         }
 
         public VectraBuildStats Stats => m_Renderer?.stats ?? default;
+
+        /// <summary>Distance function of the last build (used by <see cref="VectraMask"/>).</summary>
+        public VectraDistanceShape DistanceShape => m_Renderer?.Distance ?? default;
 
         /// <summary>Returns the geometry as <typeparamref name="T"/>, replacing it when it is of another type.</summary>
         public T SetGeometry<T>() where T : VectraShapeGeometry, new()
@@ -141,6 +144,13 @@ namespace FirstSymbol.Vectra
 
         public override Material defaultMaterial => VectraMaterials.GetUI(m_Content.blendMode) ?? base.defaultMaterial;
 
+        public override Material GetModifiedMaterial(Material baseMaterial)
+        {
+            var m = base.GetModifiedMaterial(baseMaterial);
+            var soft = VectraMask.FindSoftMask(this);
+            return soft != null ? soft.GetSoftMaterial(m) : m;
+        }
+
         public override Texture mainTexture
         {
             get
@@ -190,6 +200,11 @@ namespace FirstSymbol.Vectra
             {
                 foreach (var s in s_StyleUsers)
                     if (s != null && s.m_Content.style == style) s.SetVerticesDirty();
+            };
+            VectraPalette.Changed += () =>
+            {
+                foreach (var s in s_StyleUsers)
+                    if (s != null) s.SetVerticesDirty();
             };
         }
 
@@ -278,6 +293,12 @@ namespace FirstSymbol.Vectra
             }
 
             var input = m_Content.ToInput(Frame, color, false);
+            if (TryGetComponent(out VectraMask mask) && mask.IsSoft)
+            {
+                input.requireDistance = true;
+                input.distanceReach = mask.Softness * 2f + Mathf.Abs(mask.Inset);
+            }
+
             m_Renderer.Build(input);
             m_Renderer.buffer.Upload(m_Mesh);
             canvasRenderer.SetMesh(m_Mesh);

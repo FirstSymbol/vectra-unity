@@ -58,6 +58,7 @@
 #define MOD_CUT_Y 2
 #define MOD_RADIAL 3
 #define MOD_DISSOLVE 4
+#define MOD_PIXELATE 5
 
 sampler2D _MainTex;
 float4 _MainTex_TexelSize;
@@ -716,6 +717,14 @@ float4 VectraShade(VectraFragmentInput i)
     }
     else
     {
+        if (h.modifier == MOD_PIXELATE)
+        {
+            // hdr.y = cell size in shape units: sample the outline at cell centres, without anti-aliasing.
+            float cell = max(i.hdr.y, 1e-4);
+            p = (floor(p / cell) + 0.5) * cell;
+            px = min(px, cell * 1e-3);
+        }
+
         float d = ShapeDistance(h.shape, h.style, p, i.s1, i.s2);
         d = ApplyModifier(h, d, p, i.hdr.y);
         float2 lp = i.s2.zw;
@@ -785,6 +794,10 @@ float4 VectraShade(VectraFragmentInput i)
             alpha *= smoothstep(dv.x - dv.y * 0.5, dv.x + dv.y * 0.5 + 1e-4, n);
         }
     }
+
+    // Gradients are dithered by +-0.5 of an 8-bit step to hide banding.
+    if ((h.paint >= PAINT_LINEAR && h.paint <= PAINT_FOCAL) || h.paint == PAINT_FREEFORM)
+        color.rgb += (Hash21(floor(i.p / px)) - 0.5) * (1.0 / 255.0);
 
     color.a *= alpha;
     color.rgb *= color.a;

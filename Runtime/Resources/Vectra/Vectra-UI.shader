@@ -59,6 +59,7 @@ Shader "Vectra/UI"
 
             #pragma multi_compile_local _ UNITY_UI_CLIP_RECT
             #pragma multi_compile_local _ UNITY_UI_ALPHACLIP
+            #pragma multi_compile_local _ VECTRA_SOFT_MASK
 
             struct v2f
             {
@@ -78,6 +79,28 @@ Shader "Vectra/UI"
             float _UIMaskSoftnessX;
             float _UIMaskSoftnessY;
             int _UIVertexColorAlwaysGammaSpace;
+
+            #ifdef VECTRA_SOFT_MASK
+            // Soft mask (VectraMask): canvas space -> mask shape space, the mask's distance function and
+            // params = (softness, inset, invert, kind | style << 5).
+            float4x4 _VectraMaskMatrix;
+            float4 _VectraMaskS1;
+            float4 _VectraMaskS2;
+            float4 _VectraMaskParams;
+
+            float VectraSoftMask(float2 canvasPos)
+            {
+                float2 q = mul(_VectraMaskMatrix, float4(canvasPos, 0.0, 1.0)).xy;
+                float2 dqdx = ddx(q), dqdy = ddy(q);
+                float px = max(sqrt(abs(dqdx.x * dqdy.y - dqdx.y * dqdy.x)), 1e-7);
+                uint code = (uint)round(_VectraMaskParams.w);
+                float d = ShapeDistance(code & 31u, code >> 5, q, _VectraMaskS1, _VectraMaskS2) + _VectraMaskParams.y;
+                // The feather runs from the edge inwards; below a pixel it is plain anti-aliasing.
+                float soft = _VectraMaskParams.x;
+                float m = soft > px ? smoothstep(0.0, soft, -d) : Coverage(d, 0.0, px);
+                return _VectraMaskParams.z > 0.5 ? 1.0 - m : m;
+            }
+            #endif
 
             v2f vert(VectraAttributes v)
             {
@@ -119,6 +142,10 @@ Shader "Vectra/UI"
                 #ifdef UNITY_UI_CLIP_RECT
                 half2 m = saturate((_ClipRect.zw - _ClipRect.xy - abs(i.mask.xy)) * i.mask.zw);
                 color *= m.x * m.y;
+                #endif
+
+                #ifdef VECTRA_SOFT_MASK
+                color *= VectraSoftMask(i.worldPosition.xy);
                 #endif
 
                 #ifdef UNITY_UI_ALPHACLIP

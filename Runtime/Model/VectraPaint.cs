@@ -72,6 +72,10 @@ namespace FirstSymbol.Vectra
         [ColorUsage(true, true)] public Color color = Color.white;
         [Range(0f, 1f)] public float opacity = 1f;
         public LayerBlend blend = LayerBlend.Normal;
+        /// <summary>Name of a colour in the active <see cref="VectraPalette"/>; overrides <see cref="color"/> when found.</summary>
+        public string colorToken;
+        /// <summary>Palette colour for the secondary pattern colour.</summary>
+        public string secondaryColorToken;
 
         // Gradients
         public VectraGradient gradient = VectraGradient.Default();
@@ -130,9 +134,15 @@ namespace FirstSymbol.Vectra
             gradientEnd = new Vector2(0.5f, 0.5f) + d;
         }
 
+        /// <summary><see cref="color"/>, or the palette colour named by <see cref="colorToken"/>.</summary>
+        public Color ResolvedColor => string.IsNullOrEmpty(colorToken) ? color : VectraPalette.Resolve(colorToken, color);
+
+        public Color ResolvedSecondaryColor =>
+            string.IsNullOrEmpty(secondaryColorToken) ? secondaryColor : VectraPalette.Resolve(secondaryColorToken, secondaryColor);
+
         public bool IsGradient => type >= PaintType.LinearGradient && type <= PaintType.DiamondGradient;
         public bool UsesGradientRow => IsGradient || (type >= PaintType.Stripes && type <= PaintType.Noise);
-        public bool IsVisible => opacity > 0f && (type != PaintType.Solid || color.a > 0f);
+        public bool IsVisible => opacity > 0f && (type != PaintType.Solid || ResolvedColor.a > 0f);
 
         public VectraPaint Clone()
         {
@@ -151,8 +161,8 @@ namespace FirstSymbol.Vectra
                 if (IsGradient) h = h * 31 + (gradient?.ComputeHash() ?? 0);
                 else if (type >= PaintType.Stripes && type <= PaintType.Noise)
                 {
-                    h = h * 31 + color.GetHashCode();
-                    h = h * 31 + secondaryColor.GetHashCode();
+                    h = h * 31 + ResolvedColor.GetHashCode();
+                    h = h * 31 + ResolvedSecondaryColor.GetHashCode();
                 }
                 else if (type == PaintType.Freeform && freeformPoints != null)
                 {

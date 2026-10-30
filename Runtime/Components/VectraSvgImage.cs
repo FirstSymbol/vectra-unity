@@ -23,6 +23,9 @@ namespace FirstSymbol.Vectra
         [SerializeField] VectraQuality m_Quality = VectraQuality.High;
         [SerializeField] ShapeBlendMode m_BlendMode;
         [SerializeField] bool m_GenerateText = true;
+        [Tooltip("Maps SVG font-family names to TextMeshPro fonts.")]
+        [SerializeField] VectraFontMap m_FontMap;
+        [Tooltip("Font used when the font map has no match (empty = TextMeshPro default).")]
         [SerializeField] TMP_FontAsset m_Font;
         [SerializeField] List<SvgOverride> m_Overrides = new List<SvgOverride>();
 
@@ -46,6 +49,27 @@ namespace FirstSymbol.Vectra
         public List<SvgOverride> Overrides => m_Overrides;
         public VectraBuildStats Stats => m_Renderer?.stats ?? default;
 
+        public bool PreserveAspect
+        {
+            get => m_PreserveAspect;
+            set
+            {
+                m_PreserveAspect = value;
+                m_ChildrenDirty = true;
+                SetVerticesDirty();
+            }
+        }
+
+        public VectraFontMap FontMap
+        {
+            get => m_FontMap;
+            set
+            {
+                m_FontMap = value;
+                m_ChildrenDirty = true;
+            }
+        }
+
         /// <summary>Loads SVG text at runtime (creates a document owned by this component).</summary>
         public void LoadSvg(string svgText)
         {
@@ -53,6 +77,13 @@ namespace FirstSymbol.Vectra
         }
 
         public override Material defaultMaterial => VectraMaterials.GetUI(m_BlendMode) ?? base.defaultMaterial;
+
+        public override Material GetModifiedMaterial(Material baseMaterial)
+        {
+            var m = base.GetModifiedMaterial(baseMaterial);
+            var soft = VectraMask.FindSoftMask(this);
+            return soft != null ? soft.GetSoftMaterial(m) : m;
+        }
 
         protected override void OnEnable()
         {
@@ -163,21 +194,29 @@ namespace FirstSymbol.Vectra
         {
             var go = CreateChild("SVG Text");
             var t = go.AddComponent<TextMeshProUGUI>();
-            if (m_Font != null) t.font = m_Font;
+            ConfigureText(t, e, toLocal, scale, rectTransform.rect);
+        }
+
+        /// <summary>Sets up a TextMeshPro object for an SVG text element placed in a rect of this image's size.</summary>
+        internal void ConfigureText(TextMeshProUGUI t, SvgElementData e, Affine2 toLocal, float scale, Rect rect)
+        {
+            bool exactBold = false;
+            var font = m_FontMap != null ? m_FontMap.Resolve(e.fontFamily, e.bold, out exactBold) : null;
+            if (font == null) font = m_Font;
+            if (font != null) t.font = font;
             t.text = e.text;
             t.fontSize = e.fontSize * scale;
             t.color = e.textColor * color;
-            t.fontStyle = (e.bold ? FontStyles.Bold : 0) | (e.italic ? FontStyles.Italic : 0);
+            t.fontStyle = (e.bold && !exactBold ? FontStyles.Bold : 0) | (e.italic ? FontStyles.Italic : 0);
             t.textWrappingMode = TextWrappingModes.NoWrap;
             t.raycastTarget = false;
-            var rt = (RectTransform)go.transform;
+            var rt = (RectTransform)t.transform;
             float2 p = toLocal.Apply(e.textPosition);
             float pivotX = e.anchor == SvgTextAnchor.Middle ? 0.5f : e.anchor == SvgTextAnchor.End ? 1f : 0f;
             t.alignment = e.anchor == SvgTextAnchor.Middle ? TextAlignmentOptions.Baseline :
                 e.anchor == SvgTextAnchor.End ? TextAlignmentOptions.BaselineRight : TextAlignmentOptions.BaselineLeft;
             rt.pivot = new Vector2(pivotX, 0f);
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            var rect = rectTransform.rect;
             rt.sizeDelta = new Vector2(t.preferredWidth + 4f, t.fontSize * 1.5f);
             // SVG y is the baseline; TMP baseline alignment puts the baseline at the bottom of the box + descender.
             rt.anchoredPosition = new Vector2(p.x - rect.center.x, p.y - rect.center.y - t.fontSize * 0.25f);

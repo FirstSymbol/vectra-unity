@@ -13,7 +13,7 @@ namespace FirstSymbol.Vectra
     [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     [AddComponentMenu("Vectra/Vectra Renderer (World)")]
-    public class VectraRenderer : MonoBehaviour, IVectraAtlasClient
+    public class VectraRenderer : MonoBehaviour, IVectraAtlasClient, IVectraShape
     {
         [SerializeField] VectraShapeContent m_Content = new VectraShapeContent();
         [SerializeField] Vector2 m_Size = new Vector2(1f, 1f);
@@ -113,6 +113,12 @@ namespace FirstSymbol.Vectra
 
         public void SetDirty() => m_Dirty = true;
 
+        /// <summary>Call after changing geometry, fills, strokes or effects from code.</summary>
+        public void SetShapeDirty() => m_Dirty = true;
+
+        // Animator / Timeline wrote serialized fields directly.
+        void OnDidApplyAnimationProperties() => m_Dirty = true;
+
         void OnEnable()
         {
             m_MeshFilter = GetComponent<MeshFilter>();
@@ -125,6 +131,11 @@ namespace FirstSymbol.Vectra
                 {
                     foreach (var r in s_StyleUsers)
                         if (r != null && r.m_Content.style == style) r.SetDirty();
+                };
+                VectraPalette.Changed += () =>
+                {
+                    foreach (var r in s_StyleUsers)
+                        if (r != null) r.SetDirty();
                 };
             }
 

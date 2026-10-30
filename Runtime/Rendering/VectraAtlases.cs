@@ -270,7 +270,7 @@ namespace FirstSymbol.Vectra.Rendering
                         }
                     }
 
-                    var c = wsum > 0f ? sum / wsum : paint.color;
+                    var c = wsum > 0f ? sum / wsum : paint.ResolvedColor;
                     s_RowBuffer[y * Width + x] = c;
                 }
             }
@@ -281,7 +281,7 @@ namespace FirstSymbol.Vectra.Rendering
                     float t = x / (Width - 1f);
                     Color c;
                     if (paint.IsGradient) c = paint.gradient != null ? paint.gradient.Evaluate(t) : Color.white;
-                    else c = Color.Lerp(paint.color, paint.secondaryColor, t);
+                    else c = Color.Lerp(paint.ResolvedColor, paint.ResolvedSecondaryColor, t);
                     s_RowBuffer[x] = c;
                 }
             }

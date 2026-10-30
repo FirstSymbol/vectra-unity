@@ -63,7 +63,8 @@ namespace FirstSymbol.Vectra.Rendering
         CutX = 1,
         CutY = 2,
         Radial = 3,
-        Dissolve = 4
+        Dissolve = 4,
+        Pixelate = 5
     }
 
     /// <summary>

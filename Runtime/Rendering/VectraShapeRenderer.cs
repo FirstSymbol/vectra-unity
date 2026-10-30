@@ -44,6 +44,22 @@ namespace FirstSymbol.Vectra.Rendering
         /// <summary>Optional extra boolean operands (used by boolean groups and SVG clip paths).</summary>
         public Polylines? clip;
         public FillRule clipRule;
+        /// <summary>Bake a distance field even without effects (path shapes used as soft masks).</summary>
+        public bool requireDistance;
+        /// <summary>How far outside the outline the required distance field must reach (local units).</summary>
+        public float distanceReach;
+    }
+
+    /// <summary>Distance function of a built shape: what the shader needs to evaluate its outline elsewhere.</summary>
+    public struct VectraDistanceShape
+    {
+        public bool valid;
+        public ShapeKind kind;
+        public int style;
+        public float4 s1;
+        public float4 s2;
+        /// <summary>Maps the component's local space into the space of the distance function.</summary>
+        public Affine2 localToShape;
     }
 
     /// <summary>
@@ -88,8 +104,12 @@ namespace FirstSymbol.Vectra.Rendering
         Affine2 m_ShapeToLocal;
         float2 m_Origin;
 
+        VectraDistanceShape m_Distance;
+
         static readonly List<VectraEffect> s_Before = new List<VectraEffect>();
         static readonly List<VectraEffect> s_After = new List<VectraEffect>();
+        static readonly List<VectraEffect> s_Overlays = new List<VectraEffect>();
+        static readonly List<VectraEffect> s_Top = new List<VectraEffect>();
 
         public VectraShapeRenderer()
         {
@@ -102,6 +122,9 @@ namespace FirstSymbol.Vectra.Rendering
         /// <summary>Flattened outline of the last build (valid when the shape used path geometry).</summary>
         public Polylines Outline => m_Poly;
         public NativeList<Trapezoid> FillTrapezoids => m_Fill;
+
+        /// <summary>Distance function of the last build (invalid for path shapes without a baked distance field).</summary>
+        public VectraDistanceShape Distance => m_Distance;
 
         /// <summary>Forgets cached geometry (call after the atlas was reset or the shape changed type).</summary>
         public void Invalidate()
@@ -127,6 +150,7 @@ namespace FirstSymbol.Vectra.Rendering
                 m_SdfKey = 0;
             }
 
+            m_Distance = default;
             m_Frame = input.frame;
             m_Frame.pixelSize = math.max(m_Frame.pixelSize, 1e-5f);
             m_World = input.worldSpace;
@@ -146,11 +170,14 @@ namespace FirstSymbol.Vectra.Rendering
             m_Adjust = ColorAdjust.Identity;
             FillAmountEffect fillAmount = null;
             DissolveEffect dissolve = null;
+            PixelateEffect pixelate = null;
             float layerBlur = 0f;
-            float sdfReach = 0f;
-            bool needSdf = false;
+            float sdfReach = input.requireDistance ? math.max(input.distanceReach, 0f) : 0f;
+            bool needSdf = input.requireDistance;
             s_Before.Clear();
             s_After.Clear();
+            s_Overlays.Clear();
+            s_Top.Clear();
             if (input.effects != null)
             {
                 foreach (var e in input.effects)
@@ -199,6 +226,19 @@ namespace FirstSymbol.Vectra.Rendering
                             s_After.Add(e);
                             needSdf = true;
                             break;
+                        case PixelateEffect px:
+                            pixelate = px;
+                            needSdf = true;
+                            break;
+                        case OutlineEffect ol:
+                            s_Top.Add(e);
+                            sdfReach = math.max(sdfReach, math.max(ol.offset, 0f) + ol.width);
+                            needSdf = true;
+                            break;
+                        case ColorOverlayEffect:
+                        case GradientOverlayEffect:
+                            s_Overlays.Add(e);
+                            break;
                     }
                 }
             }
@@ -214,16 +254,19 @@ namespace FirstSymbol.Vectra.Rendering
             if (analytic)
             {
                 m_ShapeToLocal = m_A.localToShape.Inverse();
-                SetupAnalyticModifier(fillAmount, dissolve);
+                SetupAnalyticModifier(fillAmount, pixelate, dissolve);
             }
             else
             {
                 m_ShapeToLocal = Affine2.Translate(m_Origin);
-                SetupPathModifier(fillAmount, dissolve);
+                SetupPathModifier(fillAmount, pixelate, dissolve);
             }
 
+            // Pixelated path fills are drawn from the distance field.
+            bool distanceFills = layerBlur > 0f || m_Mod == ModifierKind.Pixelate;
+
             // Which geometry is needed.
-            bool anyFill = false;
+            bool anyFill = s_Overlays.Count > 0;
             if (input.fills != null)
                 foreach (var f in input.fills)
                     if (f != null && f.enabled && f.paint != null && f.paint.IsVisible) anyFill = true;
@@ -252,16 +295,20 @@ namespace FirstSymbol.Vectra.Rendering
                 for (int i = 0; i < input.strokes.Count; i++)
                     if (input.strokes[i] != null && input.strokes[i].behindFill) EmitStroke(i, input.strokes[i], analytic, geometry, tol);
 
-            // Fills.
+            // Fills, then colour and gradient overlays.
             if (input.fills != null)
             {
                 foreach (var f in input.fills)
                 {
                     if (f == null || !f.enabled || f.paint == null || !f.paint.IsVisible) continue;
-                    if (analytic) EmitAnalytic(LayerKind.Fill, f.paint, new float2(layerBlur, 0f), layerBlur * 3f, float2.zero);
-                    else if ((layerBlur > 0f || m_SmoothSdf) && m_Sdf.IsValid) EmitSdf(LayerKind.Fill, f.paint, new float2(layerBlur, 0f), float2.zero);
-                    else EmitTrapezoids(m_Fill, f.paint);
+                    EmitFill(f.paint, analytic, layerBlur, distanceFills);
                 }
+            }
+
+            foreach (var e in s_Overlays)
+            {
+                var paint = e is ColorOverlayEffect co ? co.ToPaint() : ((GradientOverlayEffect)e).ToPaint();
+                if (paint.IsVisible) EmitFill(paint, analytic, layerBlur, distanceFills);
             }
 
             // Inner effects on top of the fills.
@@ -271,6 +318,23 @@ namespace FirstSymbol.Vectra.Rendering
             if (input.strokes != null)
                 for (int i = 0; i < input.strokes.Count; i++)
                     if (input.strokes[i] != null && !input.strokes[i].behindFill) EmitStroke(i, input.strokes[i], analytic, geometry, tol);
+
+            // Effects drawn over everything.
+            foreach (var e in s_Top) EmitEffect(e, analytic);
+
+            // Distance description of the outline (used by soft masks).
+            if (analytic)
+                m_Distance = new VectraDistanceShape
+                {
+                    valid = true, kind = m_A.kind, style = m_A.style, s1 = m_A.s1, s2 = new float4(m_A.s2, 0f, 0f),
+                    localToShape = m_A.localToShape
+                };
+            else if (m_Sdf.IsValid && !m_Batch)
+                m_Distance = new VectraDistanceShape
+                {
+                    valid = true, kind = ShapeKind.SdfTexture, s1 = SdfParams1(), s2 = SdfParams2(float2.zero),
+                    localToShape = Affine2.Translate(-m_Origin)
+                };
 
             if (m_Batch)
             {
@@ -678,7 +742,7 @@ namespace FirstSymbol.Vectra.Rendering
         // Modifiers
         // ------------------------------------------------------------------------------------------------------
 
-        void SetupAnalyticModifier(FillAmountEffect fa, DissolveEffect dissolve)
+        void SetupAnalyticModifier(FillAmountEffect fa, PixelateEffect pixelate, DissolveEffect dissolve)
         {
             m_Mod = ModifierKind.None;
             m_ModFlag = false;
@@ -711,10 +775,24 @@ namespace FirstSymbol.Vectra.Rendering
                 return;
             }
 
+            if (pixelate != null)
+            {
+                // Shape space may be scaled relative to local space.
+                float scale = math.length(m_A.localToShape.ApplyVector(new float2(1f, 0f)));
+                SetupPixelate(pixelate, scale);
+                return;
+            }
+
             SetupDissolve(dissolve);
         }
 
-        void SetupPathModifier(FillAmountEffect fa, DissolveEffect dissolve)
+        void SetupPixelate(PixelateEffect px, float scale)
+        {
+            m_Mod = ModifierKind.Pixelate;
+            m_S0 = math.max(px.cellSize, 0.5f) * math.max(scale, 1e-6f);
+        }
+
+        void SetupPathModifier(FillAmountEffect fa, PixelateEffect pixelate, DissolveEffect dissolve)
         {
             m_Mod = ModifierKind.None;
             m_ModFlag = false;
@@ -728,6 +806,12 @@ namespace FirstSymbol.Vectra.Rendering
                 float start = fa.startAngle / 360f;
                 start -= math.floor(start);
                 m_S0 = VectraEncoding.Pack12(start, math.saturate(fa.amount));
+                return;
+            }
+
+            if (pixelate != null)
+            {
+                SetupPixelate(pixelate, 1f);
                 return;
             }
 
@@ -771,7 +855,7 @@ namespace FirstSymbol.Vectra.Rendering
                 case PaintType.Solid:
                 {
                     r.kind = PaintKind.Solid;
-                    var c = m_Adjust.Apply(paint.color);
+                    var c = m_Adjust.Apply(paint.ResolvedColor);
                     float intensity = math.max(math.max(c.r, c.g), math.max(c.b, 1f));
                     if (intensity > 1f)
                     {
@@ -788,7 +872,7 @@ namespace FirstSymbol.Vectra.Rendering
                 {
                     r.kind = PaintKind.Texture;
                     mainTexture = paint.texture;
-                    r.color = ToVertex(m_Adjust.Apply(paint.color) * tint);
+                    r.color = ToVertex(m_Adjust.Apply(paint.ResolvedColor) * tint);
                     r.toPaint = TextureMapping(paint, mn, size);
                     r.spread = paint.textureFit == TextureFit.Tile ? 1 : 0;
                     return r;
@@ -998,15 +1082,31 @@ namespace FirstSymbol.Vectra.Rendering
             if (!m_Sdf.IsValid) return;
             var rp = rpIn;
             if (glow) rp.spread = 1;
-            float inv = 1f / m_SdfTexel;
-            var rect = m_Sdf.rect;
-            float4 s1 = new float4(inv, rect.x + (m_Origin.x - m_SdfBounds.min.x) * inv,
-                rect.y + (m_Origin.y - m_SdfBounds.min.y) * inv, m_SdfRange);
-            float4 s2 = new float4(VectraEncoding.Pack12Raw(rect.x, rect.y),
-                VectraEncoding.Pack12Raw(rect.xMax - 1, rect.yMax - 1), lp.x, lp.y);
-            var c = Constants(ShapeKind.SdfTexture, layer, rp, 0, s1, s2, additive);
+            var c = Constants(ShapeKind.SdfTexture, layer, rp, 0, SdfParams1(), SdfParams2(lp), additive);
             float2 pMin = m_SdfBounds.min - m_Origin, pMax = m_SdfBounds.max - m_Origin;
             buffer.AddQuad(pMin, pMax, m_ShapeToLocal, offsetLocal, c, rp.toPaint);
+        }
+
+        float4 SdfParams1()
+        {
+            float inv = 1f / m_SdfTexel;
+            var rect = m_Sdf.rect;
+            return new float4(inv, rect.x + (m_Origin.x - m_SdfBounds.min.x) * inv,
+                rect.y + (m_Origin.y - m_SdfBounds.min.y) * inv, m_SdfRange);
+        }
+
+        float4 SdfParams2(float2 lp)
+        {
+            var rect = m_Sdf.rect;
+            return new float4(VectraEncoding.Pack12Raw(rect.x, rect.y), VectraEncoding.Pack12Raw(rect.xMax - 1, rect.yMax - 1),
+                lp.x, lp.y);
+        }
+
+        void EmitFill(VectraPaint paint, bool analytic, float layerBlur, bool distanceFills)
+        {
+            if (analytic) EmitAnalytic(LayerKind.Fill, paint, new float2(layerBlur, 0f), layerBlur * 3f, float2.zero);
+            else if ((distanceFills || m_SmoothSdf) && m_Sdf.IsValid) EmitSdf(LayerKind.Fill, paint, new float2(layerBlur, 0f), float2.zero);
+            else EmitTrapezoids(m_Fill, paint);
         }
 
         void EmitTrapezoids(NativeList<Trapezoid> traps, VectraPaint paint)
@@ -1120,6 +1220,16 @@ namespace FirstSymbol.Vectra.Rendering
                     var lp = new float2(gr.amount, gr.size);
                     if (analytic) EmitAnalytic(LayerKind.Grain, rp, lp, 0f, float2.zero, false, false);
                     else EmitSdf(LayerKind.Grain, rp, lp, float2.zero, false, false);
+                    break;
+                }
+                case OutlineEffect ol:
+                {
+                    if (ol.width <= 0f) break;
+                    var rp = SolidPaint(ol.color, ol.blend);
+                    float hw = ol.width * 0.5f;
+                    var lp = new float2(hw, ol.offset);
+                    if (analytic) EmitAnalytic(LayerKind.Stroke, rp, lp, math.max(ol.offset + hw, 0f), float2.zero, false, false);
+                    else EmitSdf(LayerKind.Stroke, rp, lp, float2.zero, false, false);
                     break;
                 }
             }
