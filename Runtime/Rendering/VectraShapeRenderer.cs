@@ -112,7 +112,7 @@ namespace FirstSymbol.Vectra.Rendering
 
         public void Build(in VectraBuildInput input)
         {
-            var sw = Stopwatch.StartNew();
+            long startTicks = Stopwatch.GetTimestamp();
             if (!m_Batch)
             {
                 buffer.Clear();
@@ -281,7 +281,7 @@ namespace FirstSymbol.Vectra.Rendering
             stats.vertices = buffer.VertexCount;
             stats.triangles = buffer.TriangleCount;
             if (!m_Batch) stats.trapezoids = m_Fill.IsCreated ? m_Fill.Length : 0;
-            stats.milliseconds += sw.Elapsed.TotalMilliseconds;
+            stats.milliseconds += (Stopwatch.GetTimestamp() - startTicks) * 1000.0 / Stopwatch.Frequency;
         }
 
         /// <summary>Starts accumulating several builds (e.g. SVG elements) into one buffer.</summary>
