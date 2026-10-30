@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using FirstSymbol.Vectra.Rendering;
 using UnityEditor;
+using UnityEditor.EditorTools;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -10,464 +11,823 @@ using UnityEngine.UIElements;
 namespace FirstSymbol.Vectra.Editor
 {
     /// <summary>
-    /// Builds the Vectra inspector (UI Toolkit) for a serialized <see cref="VectraShapeContent"/>: shape type grid,
-    /// geometry settings, style, fill/stroke/effect stacks as cards, rendering options and live statistics.
+    /// The Vectra inspector: live preview header, tabs (Shape, Fill, Stroke, Effects, Settings), shape picker with
+    /// real thumbnails, Figma-like layer cards and visual controls for every setting.
     /// </summary>
     public static class VectraContentInspector
     {
-        static readonly Color s_CardBg = new Color(0f, 0f, 0f, 0.12f);
-        static readonly Color s_Accent = new Color(0.3f, 0.6f, 1f);
-        static List<(Type type, string name, bool analytic)> s_ShapeTypes;
-        static List<(Type type, string name, string category)> s_EffectTypes;
-
-        public static VisualElement Build(SerializedObject so, SerializedProperty content, string[] rendering,
-            Func<VectraBuildStats> stats, Action<VisualElement> extraHeader = null)
+        public sealed class Context
         {
-            var root = new VisualElement();
-            extraHeader?.Invoke(root);
-            root.Add(Section("Shape", BuildShape(so, content), "vectra.shape"));
-            root.Add(Section("Appearance", BuildAppearance(so, content), "vectra.appearance"));
-
-            var render = new VisualElement();
-            foreach (var name in new[] { "blendMode", "quality", "forcePath" })
-                render.Add(new PropertyField(content.FindPropertyRelative(name)));
-            if (rendering != null)
-                foreach (var name in rendering)
-                {
-                    var p = so.FindProperty(name);
-                    if (p != null) render.Add(new PropertyField(p));
-                }
-
-            root.Add(Section("Rendering", render, "vectra.render"));
-
-            if (stats != null)
-            {
-                var label = new Label { style = { opacity = 0.7f, fontSize = 10, marginTop = 6, whiteSpace = WhiteSpace.Normal } };
-                root.Add(label);
-                label.schedule.Execute(() =>
-                {
-                    var s = stats();
-                    label.text = $"{(s.analytic ? "Analytic SDF" : "Tessellated path")}{(s.usesSdf ? " + distance field" : "")} · " +
-                                 $"{s.vertices} vertices · {s.triangles} triangles · {s.milliseconds:F2} ms";
-                }).Every(500);
-            }
-
-            return root;
+            public SerializedObject so;
+            public SerializedProperty content;
+            public Type componentType;
+            public string[] componentFields;
+            public string kind;
+            public Func<VectraBuildStats> stats;
+            public Func<VectraShapeContent> getContent;
+            public Func<Vector2> getSize;
         }
 
-        // ---------------------------------------------------------------------------------------------------
-        // Shape
-        // ---------------------------------------------------------------------------------------------------
-
-        static List<(Type type, string name, bool analytic)> ShapeTypes()
+        static readonly (string category, string[] names)[] s_Categories =
         {
-            if (s_ShapeTypes != null) return s_ShapeTypes;
-            var frame = new ShapeFrame { rect = new Rect(-50, -50, 100, 100), pixelSize = 1f };
-            s_ShapeTypes = new List<(Type, string, bool)>();
+            ("Basic", new[] { "Rectangle", "Ellipse", "Arc / Ring / Pie", "Line", "Squircle" }),
+            ("Polygons", new[] { "Polygon", "Star", "Triangle", "Rhombus", "Trapezoid", "Parallelogram" }),
+            ("Symbols", new[] { "Cross", "Heart", "Arrow", "Chevron", "Crescent", "Egg", "Vesica", "Flower", "Gear", "Speech Bubble", "Checkmark" }),
+            ("Paths", new[] { "Path", "Polyline / Polygon", "Spiral", "Wave", "SVG Path" }),
+            ("Advanced", new[] { "Boolean Group", "Morph" })
+        };
+
+        static List<(Type type, string name, string category, VectraShapeGeometry sample)> s_Shapes;
+
+        static List<(Type type, string name, string category, VectraShapeGeometry sample)> Shapes()
+        {
+            if (s_Shapes != null) return s_Shapes;
+            s_Shapes = new List<(Type, string, string, VectraShapeGeometry)>();
             foreach (var t in TypeCache.GetTypesDerivedFrom<VectraShapeGeometry>())
             {
                 if (t.IsAbstract || !t.IsPublic || t.GetConstructor(Type.EmptyTypes) == null) continue;
                 var g = (VectraShapeGeometry)Activator.CreateInstance(t);
-                s_ShapeTypes.Add((t, g.DisplayName, g.TryGetAnalytic(frame, out _)));
+                string cat = s_Categories.FirstOrDefault(c => c.names.Contains(g.DisplayName)).category ?? "Advanced";
+                s_Shapes.Add((t, g.DisplayName, cat, g));
             }
 
-            s_ShapeTypes.Sort((a, b) => a.analytic != b.analytic ? (a.analytic ? -1 : 1) : string.CompareOrdinal(a.name, b.name));
-            return s_ShapeTypes;
+            s_Shapes.Sort((a, b) =>
+            {
+                int ca = Array.FindIndex(s_Categories, c => c.category == a.category), cb = Array.FindIndex(s_Categories, c => c.category == b.category);
+                if (ca != cb) return ca.CompareTo(cb);
+                var names = s_Categories[Math.Max(ca, 0)].names;
+                return Array.IndexOf(names, a.name).CompareTo(Array.IndexOf(names, b.name));
+            });
+            return s_Shapes;
         }
 
-        static VisualElement BuildShape(SerializedObject so, SerializedProperty content)
+        public static VisualElement Build(Context ctx)
         {
-            var root = new VisualElement();
-            var geometry = content.FindPropertyRelative("geometry");
-            var grid = new VisualElement { style = { flexDirection = FlexDirection.Row, flexWrap = Wrap.Wrap, marginBottom = 6 } };
-            var body = new VisualElement();
-            root.Add(grid);
-            root.Add(body);
+            var root = VxUI.Root();
+            var header = BuildHeader(ctx, out var refreshHeader);
+            root.Add(header);
+
+            var tabs = VxUI.El("vx-tabs");
+            var page = VxUI.El("vx-page");
+            root.Add(tabs);
+            root.Add(page);
+
+            var defs = new (string name, VxIcon.Kind icon, Func<int> count, Func<VisualElement> build)[]
+            {
+                ("Shape", VxIcon.Kind.Shape, null, () => ShapePage(ctx, refreshHeader)),
+                ("Fill", VxIcon.Kind.Fill, () => Count(ctx, "fills"), () => AppearancePage(ctx, "fills")),
+                ("Stroke", VxIcon.Kind.Stroke, () => Count(ctx, "strokes"), () => AppearancePage(ctx, "strokes")),
+                ("Effects", VxIcon.Kind.Effects, () => Count(ctx, "effects"), () => AppearancePage(ctx, "effects")),
+                ("Settings", VxIcon.Kind.Settings, null, () => SettingsPage(ctx))
+            };
+
+            var tabEls = new List<VisualElement>();
+            var badges = new List<Label>();
+            int active = Mathf.Clamp(SessionState.GetInt("vectra.tab", 0), 0, defs.Length - 1);
+
+            void Show(int i)
+            {
+                active = i;
+                SessionState.SetInt("vectra.tab", i);
+                for (int k = 0; k < tabEls.Count; k++) tabEls[k].EnableInClassList("vx-tab--active", k == i);
+                page.Clear();
+                page.Add(defs[i].build());
+            }
+
+            for (int i = 0; i < defs.Length; i++)
+            {
+                int index = i;
+                var tab = VxUI.El("vx-tab");
+                tab.Add(new VxIcon(defs[i].icon, 13));
+                tab.Add(VxUI.Text(defs[i].name, "vx-tab__label"));
+                var badge = VxUI.Text("", "vx-tab__badge");
+                badge.style.display = defs[i].count != null ? DisplayStyle.Flex : DisplayStyle.None;
+                tab.Add(badge);
+                badges.Add(badge);
+                tab.RegisterCallback<ClickEvent>(_ => Show(index));
+                tabEls.Add(tab);
+                tabs.Add(tab);
+            }
+
+            void RefreshBadges()
+            {
+                if (ctx.so.targetObject == null) return;
+                for (int i = 0; i < defs.Length; i++)
+                    if (defs[i].count != null)
+                    {
+                        int c = defs[i].count();
+                        badges[i].text = c.ToString();
+                        badges[i].style.display = c > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                    }
+            }
+
+            root.schedule.Execute(() =>
+            {
+                RefreshBadges();
+                refreshHeader(false);
+            }).Every(500);
+            RefreshBadges();
+            Show(active);
+            return root;
+        }
+
+        static int Count(Context ctx, string list)
+        {
+            var c = ctx.getContent?.Invoke();
+            if (c == null) return 0;
+            return list == "fills" ? c.ActiveFills.Count : list == "strokes" ? c.ActiveStrokes.Count : c.ActiveEffects.Count;
+        }
+
+        // ---------------------------------------------------------------------------------------------------
+        // Header with live preview
+        // ---------------------------------------------------------------------------------------------------
+
+        static VisualElement BuildHeader(Context ctx, out Action<bool> refresh)
+        {
+            var header = VxUI.El("vx-header");
+            var preview = VxUI.El("vx-preview");
+            preview.generateVisualContent += mgc =>
+            {
+                var r = preview.contentRect;
+                var p = mgc.painter2D;
+                const float cell = 8f;
+                for (int y = 0; y * cell < r.height; y++)
+                for (int x = 0; x * cell < r.width; x++)
+                {
+                    p.fillColor = (x + y) % 2 == 0 ? new Color(1, 1, 1, 0.025f) : new Color(0, 0, 0, 0.025f);
+                    p.BeginPath();
+                    p.MoveTo(new Vector2(x * cell, y * cell));
+                    p.LineTo(new Vector2(x * cell + cell, y * cell));
+                    p.LineTo(new Vector2(x * cell + cell, y * cell + cell));
+                    p.LineTo(new Vector2(x * cell, y * cell + cell));
+                    p.ClosePath();
+                    p.Fill();
+                }
+            };
+            var image = new Image { scaleMode = ScaleMode.ScaleToFit, pickingMode = PickingMode.Ignore };
+            image.style.flexGrow = 1;
+            preview.Add(image);
+            header.Add(preview);
+
+            var info = VxUI.El("vx-header__info");
+            var title = VxUI.Text("", "vx-title");
+            var subtitle = VxUI.Text(ctx.kind, "vx-subtitle");
+            var chips = VxUI.El("vx-chips");
+            info.Add(title);
+            info.Add(subtitle);
+            info.Add(chips);
+            header.Add(info);
+
+            Texture2D tex = null;
+            bool pending = true;
+            header.RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                if (tex != null) UnityEngine.Object.DestroyImmediate(tex);
+            });
+            header.TrackSerializedObjectValue(ctx.so, _ => pending = true);
+
+            void Refresh(bool force)
+            {
+                if (ctx.so.targetObject == null) return;
+                var content = ctx.getContent();
+                title.text = content?.geometry?.DisplayName ?? "No shape";
+                var s = ctx.stats();
+                chips.Clear();
+                bool built = s.vertices > 0;
+                bool analytic = built ? s.analytic : IsAnalytic(content, ctx.getSize());
+                chips.Add(VxUI.Chip(analytic ? "Analytic SDF" : "Tessellated", analytic ? "green" : "orange"));
+                if (s.usesSdf) chips.Add(VxUI.Chip("Distance field", "accent"));
+                if (built)
+                {
+                    chips.Add(VxUI.Chip($"{s.vertices} verts"));
+                    chips.Add(VxUI.Chip($"{s.milliseconds:0.00} ms"));
+                }
+                if (content?.style != null) chips.Add(VxUI.Chip("Style: " + content.style.name, "accent"));
+                if (!(pending || force) || content == null) return;
+                pending = false;
+                try
+                {
+                    var size = ctx.getSize();
+                    if (size.x <= 0f || size.y <= 0f) return;
+                    var t = VectraRasterizer.Render(content, size, 168, 168);
+                    if (tex != null) UnityEngine.Object.DestroyImmediate(tex);
+                    tex = t;
+                    tex.hideFlags = HideFlags.HideAndDontSave;
+                    image.image = tex;
+                }
+                catch (Exception)
+                {
+                    image.image = null;
+                }
+            }
+
+            refresh = Refresh;
+            header.schedule.Execute(() => Refresh(true)).StartingIn(50);
+            return header;
+        }
+
+        static bool IsAnalytic(VectraShapeContent content, Vector2 size)
+        {
+            if (content?.geometry == null || content.forcePath) return false;
+            var frame = new ShapeFrame { rect = new Rect(-size * 0.5f, size), pixelSize = 1f };
+            return content.geometry.TryGetAnalytic(frame, out _);
+        }
+
+        // ---------------------------------------------------------------------------------------------------
+        // Shape page
+        // ---------------------------------------------------------------------------------------------------
+
+        static VisualElement ShapePage(Context ctx, Action<bool> refreshHeader)
+        {
+            var page = new VisualElement();
+            var geometry = ctx.content.FindPropertyRelative("geometry");
+
+            // Current shape + picker.
+            var head = new VisualElement();
+            var current = VxUI.El("vx-current-shape");
+            var thumb = new VxShapeThumb(geometry.managedReferenceValue as VectraShapeGeometry);
+            current.Add(thumb);
+            var name = VxUI.Text((geometry.managedReferenceValue as VectraShapeGeometry)?.DisplayName ?? "None", "vx-card__title");
+            current.Add(name);
+            head.Add(current);
+            head.style.flexDirection = FlexDirection.Row;
+            head.style.flexGrow = 1;
+            head.style.alignItems = Align.Center;
+            var change = VxUI.Text("Change shape", "vx-card__meta");
+            head.Add(new VisualElement { style = { flexGrow = 1 } });
+            head.Add(change);
+
+            var picker = new VisualElement();
+            var parameters = new VisualElement();
+            BuildPicker(ctx, picker, geometry, () =>
+            {
+                var g = geometry.managedReferenceValue as VectraShapeGeometry;
+                thumb.SetGeometry(g);
+                name.text = g?.DisplayName ?? "None";
+                BuildParameters(ctx, parameters, geometry);
+                refreshHeader(true);
+            });
+            page.Add(VxUI.Card("vectra.picker", head, picker, false));
+
+            var paramHeader = new VisualElement { style = { flexDirection = FlexDirection.Row, flexGrow = 1, alignItems = Align.Center } };
+            paramHeader.Add(new VxIcon(VxIcon.Kind.Settings, 13));
+            paramHeader.Add(VxUI.Text("Parameters", "vx-card__title"));
+            page.Add(VxUI.Card("vectra.parameters", paramHeader, parameters));
+            BuildParameters(ctx, parameters, geometry);
+            return page;
+        }
+
+        static void BuildPicker(Context ctx, VisualElement picker, SerializedProperty geometry, Action changed)
+        {
+            string filter = SessionState.GetString("vectra.picker.filter", "All");
+            string search = "";
+            var searchField = new ToolbarSearchField();
+            searchField.AddToClassList("vx-search");
+            searchField.style.width = StyleKeyword.Auto;
+            picker.Add(searchField);
+            var filters = VxUI.El("vx-filter-row");
+            picker.Add(filters);
+            var grid = VxUI.El("vx-grid");
+            picker.Add(grid);
 
             void RebuildGrid()
             {
                 grid.Clear();
-                string current = geometry.managedReferenceFullTypename;
-                foreach (var (type, name, analytic) in ShapeTypes())
+                string currentType = geometry.managedReferenceFullTypename;
+                foreach (var s in Shapes())
                 {
-                    bool selected = !string.IsNullOrEmpty(current) && current.EndsWith(" " + type.FullName);
-                    var b = new Button(() =>
+                    if (filter != "All" && s.category != filter) continue;
+                    if (search.Length > 0 && s.name.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    var tile = VxUI.El("vx-tile");
+                    bool selected = !string.IsNullOrEmpty(currentType) && currentType.EndsWith(" " + s.type.FullName);
+                    tile.EnableInClassList("vx-tile--active", selected);
+                    tile.Add(new VxShapeThumb(s.sample));
+                    tile.Add(VxUI.Text(s.name, "vx-tile__label"));
+                    tile.tooltip = s.name;
+                    var type = s.type;
+                    tile.RegisterCallback<ClickEvent>(_ =>
                     {
-                        so.Update();
-                        float rot = 0f;
-                        var rp = geometry.FindPropertyRelative("rotation");
-                        if (rp != null) rot = rp.floatValue;
+                        ctx.so.Update();
+                        float rot = geometry.FindPropertyRelative("rotation")?.floatValue ?? 0f;
                         var g = (VectraShapeGeometry)Activator.CreateInstance(type);
                         g.rotation = rot;
                         geometry.managedReferenceValue = g;
-                        so.ApplyModifiedProperties();
+                        ctx.so.ApplyModifiedProperties();
                         RebuildGrid();
-                        RebuildBody();
-                    })
+                        changed();
+                    });
+                    grid.Add(tile);
+                }
+
+                if (grid.childCount == 0) grid.Add(VxUI.Text("No shapes match the search.", "vx-empty"));
+            }
+
+            void RebuildFilters()
+            {
+                filters.Clear();
+                foreach (var f in new[] { "All" }.Concat(s_Categories.Select(c => c.category)))
+                {
+                    var chip = VxUI.Text(f, "vx-filter");
+                    chip.EnableInClassList("vx-filter--active", f == filter);
+                    string value = f;
+                    chip.RegisterCallback<ClickEvent>(_ =>
                     {
-                        text = name,
-                        tooltip = analytic ? "Analytic: exact distance function, effects are free" : "Path: tessellated outline",
-                        style =
-                        {
-                            fontSize = 10, height = 20, marginLeft = 1, marginRight = 1, marginTop = 1, marginBottom = 1,
-                            paddingLeft = 4, paddingRight = 4,
-                            borderBottomWidth = analytic ? 2 : 1, borderBottomColor = analytic ? new Color(0.3f, 0.8f, 0.5f, 0.6f) : new Color(0.9f, 0.6f, 0.2f, 0.6f)
-                        }
-                    };
-                    if (selected) b.style.backgroundColor = s_Accent * 0.7f;
-                    grid.Add(b);
+                        filter = value;
+                        SessionState.SetString("vectra.picker.filter", value);
+                        RebuildFilters();
+                        RebuildGrid();
+                    });
+                    filters.Add(chip);
                 }
             }
 
-            void RebuildBody()
+            searchField.RegisterValueChangedCallback(e =>
             {
-                body.Clear();
-                so.Update();
-                if (geometry.managedReferenceValue == null) return;
-                AddChildren(body, geometry);
-                body.Bind(so);
+                search = e.newValue ?? "";
+                RebuildGrid();
+            });
+            RebuildFilters();
+            RebuildGrid();
+        }
+
+        static void BuildParameters(Context ctx, VisualElement body, SerializedProperty geometry)
+        {
+            body.Clear();
+            ctx.so.Update();
+            var g = geometry.managedReferenceValue as VectraShapeGeometry;
+            if (g == null)
+            {
+                body.Add(VxUI.Text("Pick a shape above.", "vx-empty"));
+                return;
             }
 
-            RebuildGrid();
-            RebuildBody();
-            return root;
+            var type = g.GetType();
+            if (g is RectangleShape)
+            {
+                body.Add(VxUI.SectionTitle("Corners"));
+                body.Add(new VxCornerRadius(geometry.FindPropertyRelative("cornerRadii")));
+                var styleProp = geometry.FindPropertyRelative("cornerStyle");
+                body.Add(VxUI.Row("Corner style", VxSegmented.ForEnum(styleProp, new[] { "Round", "Chamfer", "Invert", "Notch", "Smooth" },
+                    tooltips: new[] { "Circular arcs", "Straight cut", "Concave arcs", "Square notch", "Continuous curvature (squircle)" })));
+                body.Add(VxFields.For(geometry.FindPropertyRelative("smoothing"), type, "Smoothing").VisibleWhen(styleProp, sp => sp.enumValueIndex == (int)CornerStyle.Squircle));
+                body.Add(VxUI.SectionTitle("Transform"));
+                body.Add(VxFields.For(geometry.FindPropertyRelative("rotation"), type, "Rotation"));
+            }
+            else
+            {
+                if (g is PathShape || g is PolylineShape)
+                {
+                    body.Add(VxUI.Text("Edit points directly in the Scene view: drag points and handles, click the green dots to insert, Ctrl/Cmd+click to delete.", "vx-hint"));
+                    body.Add(VxUI.AddButton("Edit points in Scene view", () =>
+                    {
+                        if (ctx.componentType == typeof(VectraRenderer)) ToolManager.SetActiveTool<VectraRendererTool>();
+                        else ToolManager.SetActiveTool<VectraShapeTool>();
+                        SceneView.lastActiveSceneView?.Focus();
+                    }));
+                }
+
+                VxFields.AddChildren(body, geometry, type, "rotation");
+                body.Add(VxUI.SectionTitle("Transform"));
+                body.Add(VxFields.For(geometry.FindPropertyRelative("rotation"), type, "Rotation"));
+            }
+
+            body.Bind(ctx.so);
         }
 
         // ---------------------------------------------------------------------------------------------------
-        // Appearance (fills / strokes / effects, local or from a style)
+        // Appearance pages (fills, strokes, effects)
         // ---------------------------------------------------------------------------------------------------
 
-        static VisualElement BuildAppearance(SerializedObject so, SerializedProperty content)
+        static VisualElement AppearancePage(Context ctx, string listName)
         {
-            var root = new VisualElement();
-            var styleProp = content.FindPropertyRelative("style");
-            var styleRow = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center } };
-            var styleField = new PropertyField(styleProp, "Style") { style = { flexGrow = 1 } };
+            var page = new VisualElement();
+            var styleProp = ctx.content.FindPropertyRelative("style");
+            var stack = new VisualElement();
+
+            // Style row (shared by the three pages).
+            var styleRow = VxUI.El("vx-row");
+            styleRow.Add(new VxIcon(VxIcon.Kind.Style, 14) { style = { marginRight = 6 } });
+            var styleField = new ObjectField { objectType = typeof(VectraStyle), allowSceneObjects = false, style = { flexGrow = 1 } };
+            styleField.BindProperty(styleProp);
             styleRow.Add(styleField);
-            styleRow.Add(new Button(() => SaveAsStyle(so, content)) { text = "Save…", tooltip = "Save the appearance as a reusable Style asset" });
-            styleRow.Add(new Button(() =>
+            styleRow.Add(VxUI.Button("Save", () => SaveAsStyle(ctx), "Save fills, strokes and effects as a reusable Style asset"));
+            styleRow.Add(VxUI.Button("Detach", () => Detach(ctx), "Copy the style into this object to edit it locally"));
+            page.Add(styleRow);
+            page.Add(stack);
+
+            void Rebuild()
             {
-                foreach (var t in so.targetObjects)
-                {
-                    Undo.RecordObject(t, "Detach Vectra Style");
-                    var c = ContentOf(t);
-                    c?.DetachStyle();
-                    EditorUtility.SetDirty(t);
-                }
-
-                so.Update();
-            }) { text = "Detach", tooltip = "Copy the style into this object so it can be edited locally" });
-            root.Add(styleRow);
-
-            var stacks = new VisualElement();
-            root.Add(stacks);
-
-            void RebuildStacks()
-            {
-                stacks.Clear();
-                so.Update();
+                stack.Clear();
+                ctx.so.Update();
                 var style = styleProp.objectReferenceValue as VectraStyle;
-                SerializedObject target = so;
-                SerializedProperty fills, strokes, effects;
+                SerializedObject target = ctx.so;
+                SerializedProperty list;
                 if (style != null)
                 {
                     target = new SerializedObject(style);
-                    fills = target.FindProperty("fills");
-                    strokes = target.FindProperty("strokes");
-                    effects = target.FindProperty("effects");
-                    stacks.Add(new HelpBox($"Editing the shared style \"{style.name}\" — every shape using it changes.", HelpBoxMessageType.Info));
+                    list = target.FindProperty(listName);
+                    stack.Add(VxUI.Text($"Editing the shared style \"{style.name}\": every shape that uses it changes.", "vx-hint"));
+                    stack.TrackSerializedObjectValue(target, _ => style.NotifyChanged());
                 }
-                else
-                {
-                    fills = content.FindPropertyRelative("fills");
-                    strokes = content.FindPropertyRelative("strokes");
-                    effects = content.FindPropertyRelative("effects");
-                }
+                else list = ctx.content.FindPropertyRelative(listName);
 
-                stacks.Add(LayerList(target, fills, "Fills", "Fill", i => "Fill " + (i + 1), NewFill, FillBody));
-                stacks.Add(LayerList(target, strokes, "Strokes", "Stroke", i => "Stroke " + (i + 1), NewStroke, StrokeBody));
-                stacks.Add(EffectList(target, effects));
-                if (style != null)
-                    stacks.TrackSerializedObjectValue(target, _ => style.NotifyChanged());
+                if (listName == "effects") stack.Add(EffectList(target, list));
+                else stack.Add(LayerList(target, list, listName == "strokes"));
             }
 
-            styleField.RegisterValueChangeCallback(_ => RebuildStacks());
-            RebuildStacks();
-            return root;
+            styleField.RegisterValueChangedCallback(_ => Rebuild());
+            Rebuild();
+            return page;
         }
 
         static VectraShapeContent ContentOf(UnityEngine.Object o) =>
             o is VectraShape s ? s.Content : o is VectraRenderer r ? r.Content : null;
 
-        static void SaveAsStyle(SerializedObject so, SerializedProperty content)
+        static void SaveAsStyle(Context ctx)
         {
-            var c = ContentOf(so.targetObject);
+            var c = ContentOf(ctx.so.targetObject);
             if (c == null) return;
             string path = EditorUtility.SaveFilePanelInProject("Save Vectra Style", "NewVectraStyle", "asset", "Save the appearance as a style");
             if (string.IsNullOrEmpty(path)) return;
             var style = ScriptableObject.CreateInstance<VectraStyle>();
-            var clone = c.Clone();
-            style.fills = clone.ActiveFills.Select(f => f?.Clone()).ToList();
-            style.strokes = clone.ActiveStrokes.Select(s => s?.Clone()).ToList();
-            style.effects = clone.ActiveEffects.Select(e => e?.Clone()).ToList();
+            style.fills = c.ActiveFills.Select(f => f?.Clone()).ToList();
+            style.strokes = c.ActiveStrokes.Select(s => s?.Clone()).ToList();
+            style.effects = c.ActiveEffects.Select(e => e?.Clone()).ToList();
             AssetDatabase.CreateAsset(style, path);
             AssetDatabase.SaveAssets();
-            so.Update();
-            content.FindPropertyRelative("style").objectReferenceValue = style;
-            so.ApplyModifiedProperties();
+            ctx.so.Update();
+            ctx.content.FindPropertyRelative("style").objectReferenceValue = style;
+            ctx.so.ApplyModifiedProperties();
         }
 
-        static void NewFill(SerializedProperty e)
+        static void Detach(Context ctx)
         {
-            e.FindPropertyRelative("enabled").boolValue = true;
-            var paint = e.FindPropertyRelative("paint");
-            paint.FindPropertyRelative("type").enumValueIndex = (int)PaintType.Solid;
-            paint.FindPropertyRelative("color").colorValue = Color.white;
-            paint.FindPropertyRelative("opacity").floatValue = 1f;
+            foreach (var t in ctx.so.targetObjects)
+            {
+                Undo.RecordObject(t, "Detach Vectra Style");
+                ContentOf(t)?.DetachStyle();
+                EditorUtility.SetDirty(t);
+            }
+
+            ctx.so.Update();
         }
 
-        static void NewStroke(SerializedProperty e)
+        /// <summary>Re-creates a list whenever its size changes (add/remove from undo, other inspectors, code).</summary>
+        static void WatchSize(VisualElement owner, SerializedObject so, SerializedProperty list, Func<int> lastSize, Action rebuild)
         {
-            e.FindPropertyRelative("enabled").boolValue = true;
-            e.FindPropertyRelative("width").floatValue = 2f;
-            e.FindPropertyRelative("miterLimit").floatValue = 4f;
-            e.FindPropertyRelative("trimEnd").floatValue = 1f;
-            var paint = e.FindPropertyRelative("paint");
-            paint.FindPropertyRelative("type").enumValueIndex = (int)PaintType.Solid;
-            paint.FindPropertyRelative("color").colorValue = Color.black;
-            paint.FindPropertyRelative("opacity").floatValue = 1f;
+            owner.schedule.Execute(() =>
+            {
+                if (so.targetObject == null) return;
+                so.UpdateIfRequiredOrScript();
+                if (list.arraySize != lastSize()) rebuild();
+            }).Every(300);
         }
 
-        static void FillBody(VisualElement body, SerializedProperty e) =>
-            body.Add(new PropertyField(e.FindPropertyRelative("paint"), ""));
-
-        static void StrokeBody(VisualElement body, SerializedProperty e)
+        static VisualElement LayerList(SerializedObject so, SerializedProperty list, bool strokes)
         {
-            body.Add(new PropertyField(e.FindPropertyRelative("paint"), ""));
-            foreach (var n in new[] { "width", "alignment", "cap", "join", "miterLimit", "behindFill" })
-                body.Add(new PropertyField(e.FindPropertyRelative(n)));
-
-            var dash = new Foldout { text = "Dashes", value = e.FindPropertyRelative("dashed").boolValue };
-            foreach (var n in new[] { "dashed", "dashPattern", "dashOffset", "dashRelative" })
-                dash.Add(new PropertyField(e.FindPropertyRelative(n)));
-            body.Add(dash);
-
-            var trim = new Foldout { text = "Trim Path", value = e.FindPropertyRelative("trimStart").floatValue > 0f || e.FindPropertyRelative("trimEnd").floatValue < 1f };
-            foreach (var n in new[] { "trimStart", "trimEnd", "trimOffset" })
-                trim.Add(new PropertyField(e.FindPropertyRelative(n)));
-            body.Add(trim);
-
-            var profile = new Foldout { text = "Width Profile", value = e.FindPropertyRelative("useWidthProfile").boolValue };
-            profile.Add(new PropertyField(e.FindPropertyRelative("useWidthProfile"), "Enabled"));
-            profile.Add(new PropertyField(e.FindPropertyRelative("widthProfile"), "Profile"));
-            body.Add(profile);
-        }
-
-        /// <summary>A list of fill or stroke layers shown as reorderable cards.</summary>
-        static VisualElement LayerList(SerializedObject so, SerializedProperty list, string title, string addLabel,
-            Func<int, string> name, Action<SerializedProperty> init, Action<VisualElement, SerializedProperty> body)
-        {
-            var root = new VisualElement { style = { marginTop = 6 } };
-            var header = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center } };
-            header.Add(new Label(title) { style = { unityFontStyleAndWeight = FontStyle.Bold, flexGrow = 1 } });
+            var root = new VisualElement();
             var items = new VisualElement();
-            int lastSize = -1;
+            root.Add(items);
+            int size = -1;
 
             void Rebuild()
             {
                 items.Clear();
                 so.Update();
-                lastSize = list.arraySize;
-                for (int i = 0; i < list.arraySize; i++)
-                {
-                    int index = i;
-                    var e = list.GetArrayElementAtIndex(i);
-                    var content = new VisualElement();
-                    body(content, e);
-                    items.Add(Card(name(i), e.FindPropertyRelative("enabled"), content, so, list, index,
-                        list.propertyPath + "." + i, Rebuild));
-                }
-
-                items.Bind(so);
+                size = list.arraySize;
+                if (size == 0)
+                    items.Add(VxUI.Text(strokes ? "No strokes yet." : "No fills: the shape is transparent.", "vx-empty"));
+                for (int i = 0; i < size; i++) items.Add(LayerCard(so, list, i, strokes, Rebuild));
             }
 
-            header.Add(new Button(() =>
+            root.Add(VxUI.AddButton(strokes ? "Add stroke" : "Add fill", () =>
             {
                 so.Update();
                 int i = list.arraySize;
                 list.InsertArrayElementAtIndex(i);
-                init(list.GetArrayElementAtIndex(i));
+                var e = list.GetArrayElementAtIndex(i);
+                e.FindPropertyRelative("enabled").boolValue = true;
+                var paint = e.FindPropertyRelative("paint");
+                paint.FindPropertyRelative("type").enumValueIndex = (int)PaintType.Solid;
+                paint.FindPropertyRelative("color").colorValue = strokes ? Color.black : Color.white;
+                paint.FindPropertyRelative("opacity").floatValue = 1f;
+                if (strokes)
+                {
+                    e.FindPropertyRelative("width").floatValue = 2f;
+                    e.FindPropertyRelative("miterLimit").floatValue = 4f;
+                    e.FindPropertyRelative("trimEnd").floatValue = 1f;
+                }
+
                 so.ApplyModifiedProperties();
+                SessionState.SetBool(list.propertyPath + "." + i, true);
                 Rebuild();
-            }) { text = "+ " + addLabel });
-            root.Add(header);
-            root.Add(items);
+            }));
             Rebuild();
-            items.schedule.Execute(() =>
-            {
-                if (so.targetObject == null) return;
-                so.Update();
-                if (list.arraySize != lastSize) Rebuild();
-            }).Every(300);
+            WatchSize(root, so, list, () => size, Rebuild);
             return root;
         }
 
-        static List<(Type type, string name, string category)> EffectTypes()
+        static VisualElement LayerCard(SerializedObject so, SerializedProperty list, int index, bool stroke, Action rebuild)
         {
-            if (s_EffectTypes != null) return s_EffectTypes;
-            s_EffectTypes = new List<(Type, string, string)>();
-            foreach (var t in TypeCache.GetTypesDerivedFrom<VectraEffect>())
+            var e = list.GetArrayElementAtIndex(index);
+            var enabled = e.FindPropertyRelative("enabled");
+            var paint = e.FindPropertyRelative("paint");
+
+            var header = new VisualElement { style = { flexDirection = FlexDirection.Row, flexGrow = 1, alignItems = Align.Center } };
+            var eye = VxUI.IconButton(enabled.boolValue ? VxIcon.Kind.Eye : VxIcon.Kind.EyeOff, "Show / hide", () =>
             {
-                if (t.IsAbstract || !t.IsPublic || t.GetConstructor(Type.EmptyTypes) == null) continue;
-                var e = (VectraEffect)Activator.CreateInstance(t);
-                string cat = e is DropShadowEffect || e is InnerShadowEffect ? "Shadows" :
-                    e is OuterGlowEffect || e is InnerGlowEffect ? "Glows" :
-                    e is BevelEffect || e is GrainEffect || e is LayerBlurEffect ? "Surface" :
-                    e is ColorAdjustEffect ? "Color" : "Animation";
-                s_EffectTypes.Add((t, e.DisplayName, cat));
-            }
-
-            s_EffectTypes.Sort((a, b) => string.CompareOrdinal(a.category + a.name, b.category + b.name));
-            return s_EffectTypes;
-        }
-
-        static VisualElement EffectList(SerializedObject so, SerializedProperty list)
-        {
-            var root = new VisualElement { style = { marginTop = 6 } };
-            var header = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center } };
-            header.Add(new Label("Effects") { style = { unityFontStyleAndWeight = FontStyle.Bold, flexGrow = 1 } });
-            var items = new VisualElement();
-            int lastSize = -1;
-
-            void Rebuild()
-            {
-                items.Clear();
                 so.Update();
-                lastSize = list.arraySize;
-                for (int i = 0; i < list.arraySize; i++)
-                {
-                    var e = list.GetArrayElementAtIndex(i);
-                    if (e.managedReferenceValue == null) continue;
-                    var content = new VisualElement();
-                    AddChildren(content, e, "enabled");
-                    string title = (e.managedReferenceValue as VectraEffect)?.DisplayName ?? "Effect";
-                    items.Add(Card(title, e.FindPropertyRelative("enabled"), content, so, list, i, list.propertyPath + "." + i, Rebuild));
-                }
-
-                items.Bind(so);
-            }
-
-            var add = new Button { text = "+ Effect" };
-            add.clicked += () =>
-            {
-                var menu = new GenericMenu();
-                foreach (var (type, name, category) in EffectTypes())
-                {
-                    var t = type;
-                    menu.AddItem(new GUIContent(category + "/" + name), false, () =>
-                    {
-                        so.Update();
-                        int i = list.arraySize;
-                        list.InsertArrayElementAtIndex(i);
-                        list.GetArrayElementAtIndex(i).managedReferenceValue = Activator.CreateInstance(t);
-                        so.ApplyModifiedProperties();
-                        Rebuild();
-                    });
-                }
-
-                menu.ShowAsContext();
-            };
-            header.Add(add);
-            root.Add(header);
-            root.Add(items);
-            Rebuild();
-            items.schedule.Execute(() =>
-            {
-                if (so.targetObject == null) return;
-                so.Update();
-                if (list.arraySize != lastSize) Rebuild();
-            }).Every(300);
-            return root;
-        }
-
-        /// <summary>Card with an eye toggle, foldout title, move up/down and remove buttons.</summary>
-        static VisualElement Card(string title, SerializedProperty enabled, VisualElement content, SerializedObject so,
-            SerializedProperty list, int index, string key, Action rebuild)
-        {
-            var card = new VisualElement
-            {
-                style =
-                {
-                    backgroundColor = s_CardBg, marginTop = 2, marginBottom = 2, paddingLeft = 4, paddingRight = 4,
-                    paddingBottom = 4, borderTopLeftRadius = 4, borderTopRightRadius = 4, borderBottomLeftRadius = 4,
-                    borderBottomRightRadius = 4, borderLeftWidth = 3, borderLeftColor = s_Accent * 0.8f
-                }
-            };
-            var header = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center, height = 22 } };
-            var eye = new Toggle { tooltip = "Visible", style = { marginRight = 2 } };
-            if (enabled != null) eye.BindProperty(enabled);
-            header.Add(eye);
-            bool open = SessionState.GetBool(key, true);
-            var fold = new Label((open ? "▾ " : "▸ ") + title) { style = { flexGrow = 1, unityFontStyleAndWeight = FontStyle.Bold } };
-            fold.RegisterCallback<ClickEvent>(_ =>
-            {
-                open = !open;
-                SessionState.SetBool(key, open);
-                content.style.display = open ? DisplayStyle.Flex : DisplayStyle.None;
-                fold.text = (open ? "▾ " : "▸ ") + title;
+                enabled.boolValue = !enabled.boolValue;
+                so.ApplyModifiedProperties();
             });
-            header.Add(fold);
-
-            void Move(int delta)
+            header.Add(eye);
+            var swatch = new VxSwatch { style = { marginLeft = 4 } };
+            header.Add(swatch);
+            var title = VxUI.Text("", "vx-card__title");
+            header.Add(title);
+            var meta = VxUI.Text("", "vx-card__meta");
+            header.Add(meta);
+            header.Add(VxUI.IconButton(VxIcon.Kind.Up, "Move up", () => Move(so, list, index, -1, rebuild)));
+            header.Add(VxUI.IconButton(VxIcon.Kind.Down, "Move down", () => Move(so, list, index, 1, rebuild)));
+            header.Add(VxUI.IconButton(VxIcon.Kind.Duplicate, "Duplicate", () =>
             {
-                int to = index + delta;
-                if (to < 0 || to >= list.arraySize) return;
                 so.Update();
-                list.MoveArrayElement(index, to);
+                list.InsertArrayElementAtIndex(index);
                 so.ApplyModifiedProperties();
                 rebuild();
-            }
-
-            header.Add(new Button(() => Move(-1)) { text = "▲", tooltip = "Move up (drawn earlier)" });
-            header.Add(new Button(() => Move(1)) { text = "▼", tooltip = "Move down (drawn later)" });
-            header.Add(new Button(() =>
+            }));
+            header.Add(VxUI.IconButton(VxIcon.Kind.Trash, "Remove", () =>
             {
                 so.Update();
                 list.DeleteArrayElementAtIndex(index);
                 so.ApplyModifiedProperties();
                 rebuild();
-            }) { text = "✕", tooltip = "Remove" });
-            card.Add(header);
-            content.style.display = open ? DisplayStyle.Flex : DisplayStyle.None;
-            card.Add(content);
+            }, true));
+
+            var body = new VisualElement();
+            body.Add(new VxPaintEditor(paint));
+            if (stroke) StrokeSettings(body, e);
+            body.Bind(so);
+
+            var card = VxUI.Card(list.propertyPath + "." + index, header, body, index == 0);
+
+            void Update()
+            {
+                if (so.targetObject == null) return;
+                swatch.SetPaint(paint.boxedValue as VectraPaint);
+                var type = (PaintType)paint.FindPropertyRelative("type").enumValueIndex;
+                if (stroke)
+                {
+                    var align = (StrokeAlignment)e.FindPropertyRelative("alignment").enumValueIndex;
+                    title.text = $"{e.FindPropertyRelative("width").floatValue:0.##} px · {align}";
+                    if (e.FindPropertyRelative("dashed").boolValue) title.text += " · dashed";
+                }
+                else title.text = VxPaint.NameOf(type);
+
+                meta.text = Mathf.RoundToInt(paint.FindPropertyRelative("opacity").floatValue * 100f) + "%";
+                bool on = enabled.boolValue;
+                eye.Q<VxIcon>().SetKind(on ? VxIcon.Kind.Eye : VxIcon.Kind.EyeOff);
+                card.EnableInClassList("vx-card--disabled", !on);
+            }
+
+            card.TrackPropertyValue(e, _ => Update());
+            Update();
             return card;
         }
 
-        static VisualElement Section(string title, VisualElement content, string key)
+        static void Move(SerializedObject so, SerializedProperty list, int index, int delta, Action rebuild)
         {
-            var f = new Foldout { text = title, value = SessionState.GetBool(key, true) };
-            f.RegisterValueChangedCallback(e =>
-            {
-                if (e.target == f) SessionState.SetBool(key, e.newValue);
-            });
-            f.style.marginTop = 4;
-            f.Q<Toggle>().style.unityFontStyleAndWeight = FontStyle.Bold;
-            f.Add(content);
-            return f;
+            int to = index + delta;
+            if (to < 0 || to >= list.arraySize) return;
+            so.Update();
+            list.MoveArrayElement(index, to);
+            so.ApplyModifiedProperties();
+            rebuild();
         }
 
-        /// <summary>Adds a PropertyField for every visible child of <paramref name="prop"/>.</summary>
-        public static void AddChildren(VisualElement parent, SerializedProperty prop, params string[] skip)
+        static void StrokeSettings(VisualElement body, SerializedProperty e)
         {
-            var it = prop.Copy();
-            var end = it.GetEndProperty();
-            bool enter = true;
-            while (it.NextVisible(enter) && !SerializedProperty.EqualContents(it, end))
+            var t = typeof(StrokeLayer);
+            SerializedProperty P(string n) => e.FindPropertyRelative(n);
+
+            body.Add(VxUI.SectionTitle("Geometry"));
+            var width = new Slider(0f, 64f) { showInputField = true };
+            width.BindProperty(P("width"));
+            body.Add(VxUI.Row("Width", width));
+            body.Add(VxUI.Row("Position", VxSegmented.ForEnum(P("alignment"), new[] { "Center", "Inside", "Outside" },
+                new[] { VxIcon.Kind.AlignCenter, VxIcon.Kind.AlignInside, VxIcon.Kind.AlignOutside }), "Where the stroke sits relative to the outline"));
+            body.Add(VxUI.Row("Caps", VxSegmented.ForEnum(P("cap"), new[] { "Butt", "Round", "Square" },
+                new[] { VxIcon.Kind.CapButt, VxIcon.Kind.CapRound, VxIcon.Kind.CapSquare }), "Ends of open paths and dashes"));
+            body.Add(VxUI.Row("Joins", VxSegmented.ForEnum(P("join"), new[] { "Miter", "Round", "Bevel" },
+                new[] { VxIcon.Kind.JoinMiter, VxIcon.Kind.JoinRound, VxIcon.Kind.JoinBevel }), "Shape of corners"));
+            body.Add(VxFields.For(P("miterLimit"), t, "Miter limit").VisibleWhen(P("join"), j => j.enumValueIndex == 0));
+            body.Add(VxFields.For(P("behindFill"), t, "Behind fill"));
+
+            body.Add(VxUI.SectionTitle("Dashes"));
+            body.Add(VxFields.For(P("dashed"), t, "Dashed"));
+            body.Add(VxUI.Row("Pattern", new VxDashPattern(P("dashPattern")), "Dash and gap lengths, repeated").VisibleWhen(P("dashed"), d => d.boolValue));
+            body.Add(VxFields.For(P("dashOffset"), t, "Offset").VisibleWhen(P("dashed"), d => d.boolValue));
+            body.Add(VxFields.For(P("dashRelative"), t, "Relative lengths").VisibleWhen(P("dashed"), d => d.boolValue));
+
+            body.Add(VxUI.SectionTitle("Trim path"));
+            var trim = new MinMaxSlider(P("trimStart").floatValue, P("trimEnd").floatValue, 0f, 1f);
+            trim.RegisterValueChangedCallback(ev =>
             {
-                enter = false;
-                if (Array.IndexOf(skip, it.name) >= 0) continue;
-                parent.Add(new PropertyField(it.Copy()));
+                e.serializedObject.Update();
+                P("trimStart").floatValue = ev.newValue.x;
+                P("trimEnd").floatValue = ev.newValue.y;
+                e.serializedObject.ApplyModifiedProperties();
+            });
+            trim.TrackPropertyValue(P("trimEnd"), _ => trim.SetValueWithoutNotify(new Vector2(P("trimStart").floatValue, P("trimEnd").floatValue)));
+            trim.TrackPropertyValue(P("trimStart"), _ => trim.SetValueWithoutNotify(new Vector2(P("trimStart").floatValue, P("trimEnd").floatValue)));
+            body.Add(VxUI.Row("Range", trim, "Visible part of the path (animate it to draw the stroke)"));
+            body.Add(VxFields.For(P("trimOffset"), t, "Offset"));
+
+            body.Add(VxUI.SectionTitle("Width profile"));
+            body.Add(VxFields.For(P("useWidthProfile"), t, "Variable width"));
+            body.Add(VxFields.For(P("widthProfile"), t, "Profile").VisibleWhen(P("useWidthProfile"), d => d.boolValue));
+        }
+
+        static VxIcon.Kind EffectIcon(Type t)
+        {
+            if (t == typeof(DropShadowEffect)) return VxIcon.Kind.FxShadow;
+            if (t == typeof(InnerShadowEffect)) return VxIcon.Kind.FxInnerShadow;
+            if (t == typeof(OuterGlowEffect)) return VxIcon.Kind.FxGlow;
+            if (t == typeof(InnerGlowEffect)) return VxIcon.Kind.FxInnerGlow;
+            if (t == typeof(BevelEffect)) return VxIcon.Kind.FxBevel;
+            if (t == typeof(LayerBlurEffect)) return VxIcon.Kind.FxBlur;
+            if (t == typeof(GrainEffect)) return VxIcon.Kind.FxGrain;
+            if (t == typeof(ColorAdjustEffect)) return VxIcon.Kind.FxAdjust;
+            if (t == typeof(FillAmountEffect)) return VxIcon.Kind.FxFillAmount;
+            if (t == typeof(DissolveEffect)) return VxIcon.Kind.FxDissolve;
+            return VxIcon.Kind.Effects;
+        }
+
+        static VisualElement EffectList(SerializedObject so, SerializedProperty list)
+        {
+            var root = new VisualElement();
+            var items = new VisualElement();
+            int size = -1;
+
+            void Rebuild()
+            {
+                items.Clear();
+                so.Update();
+                size = list.arraySize;
+                if (size == 0) items.Add(VxUI.Text("No effects. Add shadows, glows, bevels and more below.", "vx-empty"));
+                for (int i = 0; i < size; i++)
+                {
+                    int index = i;
+                    var e = list.GetArrayElementAtIndex(i);
+                    var fx = e.managedReferenceValue as VectraEffect;
+                    if (fx == null) continue;
+                    var header = new VisualElement { style = { flexDirection = FlexDirection.Row, flexGrow = 1, alignItems = Align.Center } };
+                    header.Add(new VxIcon(EffectIcon(fx.GetType()), 15) { style = { marginLeft = 2 } });
+                    header.Add(VxUI.Text(fx.DisplayName, "vx-card__title"));
+                    var sw = new VxSwitch(e.FindPropertyRelative("enabled")) { tooltip = "Enabled", style = { marginRight = 4 } };
+                    header.Add(sw);
+                    header.Add(VxUI.IconButton(VxIcon.Kind.Up, "Move up", () => Move(so, list, index, -1, Rebuild)));
+                    header.Add(VxUI.IconButton(VxIcon.Kind.Down, "Move down", () => Move(so, list, index, 1, Rebuild)));
+                    header.Add(VxUI.IconButton(VxIcon.Kind.Trash, "Remove", () =>
+                    {
+                        so.Update();
+                        list.DeleteArrayElementAtIndex(index);
+                        so.ApplyModifiedProperties();
+                        Rebuild();
+                    }, true));
+                    var body = new VisualElement();
+                    VxFields.AddChildren(body, e, fx.GetType(), "enabled");
+                    body.Bind(so);
+                    var card = VxUI.Card(list.propertyPath + "." + i, header, body, true);
+                    card.EnableInClassList("vx-card--disabled", !fx.enabled);
+                    card.TrackPropertyValue(e.FindPropertyRelative("enabled"), p => card.EnableInClassList("vx-card--disabled", !p.boolValue));
+                    items.Add(card);
+                }
             }
+
+            root.Add(items);
+            var menu = VxUI.El("vx-effect-menu");
+            menu.style.display = DisplayStyle.None;
+            foreach (var t in TypeCache.GetTypesDerivedFrom<VectraEffect>().Where(t => !t.IsAbstract && t.IsPublic && t.GetConstructor(Type.EmptyTypes) != null)
+                         .OrderBy(t => (int)EffectIcon(t)))
+            {
+                var type = t;
+                var sample = (VectraEffect)Activator.CreateInstance(t);
+                var tile = VxUI.El("vx-effect-tile");
+                tile.Add(new VxIcon(EffectIcon(t), 18));
+                tile.Add(VxUI.Text(sample.DisplayName, "vx-effect-tile__label"));
+                tile.RegisterCallback<ClickEvent>(_ =>
+                {
+                    so.Update();
+                    int i = list.arraySize;
+                    list.InsertArrayElementAtIndex(i);
+                    list.GetArrayElementAtIndex(i).managedReferenceValue = Activator.CreateInstance(type);
+                    so.ApplyModifiedProperties();
+                    menu.style.display = DisplayStyle.None;
+                    Rebuild();
+                });
+                menu.Add(tile);
+            }
+
+            root.Add(VxUI.AddButton("Add effect", () =>
+                menu.style.display = menu.style.display == DisplayStyle.None ? DisplayStyle.Flex : DisplayStyle.None));
+            root.Add(menu);
+            Rebuild();
+            WatchSize(root, so, list, () => size, Rebuild);
+            return root;
+        }
+
+        // ---------------------------------------------------------------------------------------------------
+        // Settings
+        // ---------------------------------------------------------------------------------------------------
+
+        static VisualElement SettingsPage(Context ctx)
+        {
+            var page = new VisualElement();
+            var render = new VisualElement();
+            render.Add(VxUI.Row("Blend", VxSegmented.ForEnum(ctx.content.FindPropertyRelative("blendMode"),
+                new[] { "Normal", "Add", "Multiply", "Screen" },
+                new[] { VxIcon.Kind.BlendNormal, VxIcon.Kind.BlendAdd, VxIcon.Kind.BlendMultiply, VxIcon.Kind.BlendScreen }),
+                "How the whole shape is composited over what is behind it"));
+            render.Add(VxUI.Row("Quality", VxSegmented.ForEnum(ctx.content.FindPropertyRelative("quality"), new[] { "Low", "Medium", "High", "Ultra" }),
+                "Curve tolerance and distance-field resolution"));
+            render.Add(VxFields.For(ctx.content.FindPropertyRelative("forcePath"), typeof(VectraShapeContent), "Force path"));
+            render.Add(VxUI.Text("Force path tessellates the outline even for analytic shapes (exact miter joins, dashes on every shape).", "vx-hint"));
+            var rh = new VisualElement { style = { flexDirection = FlexDirection.Row, flexGrow = 1, alignItems = Align.Center } };
+            rh.Add(new VxIcon(VxIcon.Kind.Effects, 13));
+            rh.Add(VxUI.Text("Rendering", "vx-card__title"));
+            page.Add(VxUI.Card("vectra.settings.render", rh, render));
+
+            var comp = new VisualElement();
+            foreach (var name in ctx.componentFields)
+            {
+                var p = ctx.so.FindProperty(name);
+                if (p != null) comp.Add(VxFields.For(p, ctx.componentType, VxUI.Nice(name)));
+            }
+
+            var ch = new VisualElement { style = { flexDirection = FlexDirection.Row, flexGrow = 1, alignItems = Align.Center } };
+            ch.Add(new VxIcon(VxIcon.Kind.Settings, 13));
+            ch.Add(VxUI.Text(ctx.kind, "vx-card__title"));
+            page.Add(VxUI.Card("vectra.settings.component", ch, comp));
+            page.Bind(ctx.so);
+            return page;
+        }
+    }
+
+    /// <summary>Editable row of dash/gap lengths.</summary>
+    public class VxDashPattern : VisualElement
+    {
+        readonly SerializedProperty m_List;
+        int m_Size = -1;
+
+        public VxDashPattern(SerializedProperty list)
+        {
+            m_List = list;
+            style.flexDirection = FlexDirection.Row;
+            style.flexWrap = Wrap.Wrap;
+            style.alignItems = Align.Center;
+            Rebuild();
+            schedule.Execute(() =>
+            {
+                if (m_List.serializedObject.targetObject == null) return;
+                m_List.serializedObject.UpdateIfRequiredOrScript();
+                if (m_List.arraySize != m_Size) Rebuild();
+            }).Every(300);
+        }
+
+        void Rebuild()
+        {
+            Clear();
+            m_List.serializedObject.UpdateIfRequiredOrScript();
+            m_Size = m_List.arraySize;
+            for (int i = 0; i < m_List.arraySize; i++)
+            {
+                var f = new FloatField { style = { width = 38, marginRight = 2 }, tooltip = i % 2 == 0 ? "Dash" : "Gap" };
+                f.BindProperty(m_List.GetArrayElementAtIndex(i));
+                Add(f);
+            }
+
+            Add(VxUI.IconButton(VxIcon.Kind.Plus, "Add dash and gap", () =>
+            {
+                m_List.serializedObject.Update();
+                for (int k = 0; k < 2; k++)
+                {
+                    int i = m_List.arraySize;
+                    m_List.InsertArrayElementAtIndex(i);
+                    m_List.GetArrayElementAtIndex(i).floatValue = k == 0 ? 6f : 4f;
+                }
+
+                m_List.serializedObject.ApplyModifiedProperties();
+                Rebuild();
+            }));
+            if (m_List.arraySize > 0)
+                Add(VxUI.IconButton(VxIcon.Kind.Trash, "Remove last pair", () =>
+                {
+                    m_List.serializedObject.Update();
+                    m_List.arraySize = Mathf.Max(0, m_List.arraySize - 2);
+                    m_List.serializedObject.ApplyModifiedProperties();
+                    Rebuild();
+                }, true));
         }
     }
 
@@ -477,9 +837,17 @@ namespace FirstSymbol.Vectra.Editor
         public override VisualElement CreateInspectorGUI()
         {
             var shape = (VectraShape)target;
-            return VectraContentInspector.Build(serializedObject, serializedObject.FindProperty("m_Content"),
-                new[] { "m_Color", "m_RaycastTarget", "m_PreciseRaycast", "m_Maskable", "m_WorldPixelSize" },
-                () => shape != null ? shape.Stats : default);
+            return VectraContentInspector.Build(new VectraContentInspector.Context
+            {
+                so = serializedObject,
+                content = serializedObject.FindProperty("m_Content"),
+                componentType = typeof(VectraShape),
+                componentFields = new[] { "m_Color", "m_RaycastTarget", "m_PreciseRaycast", "m_Maskable", "m_WorldPixelSize" },
+                kind = "UI Shape",
+                stats = () => shape != null ? shape.Stats : default,
+                getContent = () => shape != null ? shape.Content : null,
+                getSize = () => shape != null ? shape.rectTransform.rect.size : Vector2.zero
+            });
         }
     }
 
@@ -489,9 +857,17 @@ namespace FirstSymbol.Vectra.Editor
         public override VisualElement CreateInspectorGUI()
         {
             var r = (VectraRenderer)target;
-            return VectraContentInspector.Build(serializedObject, serializedObject.FindProperty("m_Content"),
-                new[] { "m_Size", "m_Pivot", "m_Color", "m_PixelSize", "m_SortingLayer", "m_SortingOrder", "m_GenerateCollider" },
-                () => r != null ? r.Stats : default);
+            return VectraContentInspector.Build(new VectraContentInspector.Context
+            {
+                so = serializedObject,
+                content = serializedObject.FindProperty("m_Content"),
+                componentType = typeof(VectraRenderer),
+                componentFields = new[] { "m_Size", "m_Pivot", "m_Color", "m_PixelSize", "m_SortingLayer", "m_SortingOrder", "m_GenerateCollider" },
+                kind = "World Shape",
+                stats = () => r != null ? r.Stats : default,
+                getContent = () => r != null ? r.Content : null,
+                getSize = () => r != null ? r.Size : Vector2.zero
+            });
         }
     }
 
@@ -500,11 +876,15 @@ namespace FirstSymbol.Vectra.Editor
     {
         public override VisualElement CreateInspectorGUI()
         {
-            var root = new VisualElement();
-            root.Add(new HelpBox("Shared appearance: every shape that references this style updates when it changes.", HelpBoxMessageType.None));
-            root.Add(new PropertyField(serializedObject.FindProperty("fills")));
-            root.Add(new PropertyField(serializedObject.FindProperty("strokes")));
-            root.Add(new PropertyField(serializedObject.FindProperty("effects")));
+            var root = VxUI.Root();
+            root.Add(VxUI.Text("Shared appearance: every shape that references this style updates when it changes.", "vx-hint"));
+            foreach (var name in new[] { "fills", "strokes", "effects" })
+            {
+                root.Add(VxUI.SectionTitle(name));
+                var pf = new PropertyField(serializedObject.FindProperty(name), "");
+                root.Add(pf);
+            }
+
             root.TrackSerializedObjectValue(serializedObject, _ => ((VectraStyle)target).NotifyChanged());
             return root;
         }
