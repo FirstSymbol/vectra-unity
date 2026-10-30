@@ -1,21 +1,110 @@
-# Plugin Name
+# Vectra — векторная графика для Unity
 
-Short description of the plugin.
+Векторные фигуры для **uGUI Canvas** и **world space**. Включает:
+- аналитические SDF-примитивы и произвольные пути;
+- булевы операции, в том числе плавные;
+- градиенты, паттерны, обводки с dash и trim, тени, свечение, bevel и другие эффекты;
+- импорт и экспорт SVG.
 
-## Installation
+Всё рисуется одним общим материалом: фигуры батчатся в один draw call. Геометрия считается на Burst без GC-аллокаций при пересборке.
 
-Unity Package Manager → **+** → **Add package from git URL...**:
+- **Unity:** 6000.0+.
+- **Зависимости:** Burst, Collections, Mathematics, uGUI (с TextMeshPro).
+- **Пайплайны:** Built-in, URP, HDRP. Backdrop-эффекты работают только в URP.
+- **Платформы:** Windows, macOS, Linux, WebGL, iOS, Android и другие с Shader Model 3.5. Compute-шейдеры не используются. На WebGL Burst-код выполняется как обычный IL2CPP.
+
+## Установка
+
+Package Manager → **+** → **Add package from git URL...**
 
 ```
 https://github.com/<user>/<repo>.git
 ```
 
-A specific version (git tag):
+Конкретная версия ставится через тег: `https://github.com/<user>/<repo>.git#0.1.0`.
 
+## Быстрый старт
+
+- **GameObject → UI → Vectra → …** — фигура на канвасе (канвас создаётся автоматически).
+- **GameObject → 2D Object → Vectra → …** — фигура в мире (`VectraRenderer`).
+- Перетащите `.svg` в проект. Чтобы его обрабатывал Vectra, выберите импортёр **Vectra Svg Importer** в инспекторе ассета или включите **Project Settings → Vectra → Use Vectra SVG importer**. Затем создайте **GameObject → UI → Vectra → SVG Image**.
+- Сэмплы: **Package Manager → Vectra → Samples** (*Shapes Gallery*, *SVG Showcase*).
+
+## Компоненты
+
+| Компонент | Назначение |
+|---|---|
+| `VectraShape` | Фигура uGUI (`MaskableGraphic`). Работает с Mask, RectMask2D (с softness), layout, точным raycast. |
+| `VectraRenderer` | Фигура в мире: MeshRenderer, sorting layer и order, опциональный `PolygonCollider2D`. |
+| `VectraSvgImage` / `VectraSvgRenderer` | SVG-документ одним мешем. Текст рисуется через TextMeshPro, встроенные картинки — через RawImage. Есть override цвета по `#id`, `.class` и тегу. |
+| `VectraBooleanGroup` (+ `VectraBooleanOperand`) | Дочерние фигуры становятся операндами булевой операции. Порядок задаётся иерархией. |
+| `VectraBackdrop` (URP) | Frosted glass и 15 сложных blend-режимов. Нужен `VectraBackdropFeature` в URP Renderer. |
+| `VectraStyle` (ассет) | Общий набор заливок, обводок и эффектов, аналог CSS-класса. |
+
+## Фигуры
+
+**Аналитические:** точная функция расстояния, идеальный AA на любом масштабе, эффекты почти бесплатны.
+- **Прямоугольник:** свой радиус на каждый угол; стиль угла Round, Chamfer, Inverted, Notch или Squircle.
+- **Базовые:** эллипс, кольцо, дуга, сектор, многоугольник, звезда, треугольник, линия.
+- **Прочие:** крест, сердце, ромб, трапеция, параллелограмм, полумесяц, яйцо, vesica, суперэллипс, цветок, стрелка, шеврон.
+
+**Path-фигуры:**
+- **Контуры:** Bezier-путь (редактируется в Scene view), полилиния со скруглением углов, спираль, шестерня, волна, SVG-путь (`d`), облачко с хвостиком, галочка.
+- **Составные:** булева группа (exact или smooth), морфинг между любыми двумя фигурами.
+
+У каждой фигуры есть `rotation`. Аналитическую фигуру всегда можно отрисовать и как путь: флаг `Force Path` или автоматически, когда это нужно для dash-обводки.
+
+## Заливки, обводки, эффекты
+
+- **Paint:** solid (HDR); градиенты linear, radial (с focal point), angular, diamond (spread pad/repeat/reflect, без лимита стопов, midpoint, интерполяция sRGB/Linear/OKLab/Step); текстура (stretch, fit, fill, tile); паттерны stripes, checker, dots, grid; шум; freeform-градиент по цветовым точкам.
+- **Обводки:** любое количество; align center/inside/outside; caps; joins с miter limit; dash (абсолютные или относительные длины, offset); trim path; профиль ширины `AnimationCurve`; режим «за заливкой».
+- **Эффекты:** drop shadow, inner shadow, outer glow, inner glow, bevel & emboss, layer blur, noise/grain, color adjust (HSBC), fill amount (horizontal/vertical/radial), dissolve. У каждого слоя есть blend Normal или Additive. Для всей фигуры доступны Normal, Additive, Multiply и Screen.
+
+## Код
+
+```csharp
+var shape = gameObject.AddComponent<VectraShape>();
+var star = shape.SetGeometry<StarShape>();
+star.points = 6;
+shape.SetFill(VectraPaint.Linear(Color.yellow, Color.red, 90f))
+     .SetStroke(Color.white, 3f, StrokeAlignment.Outside);
+shape.AddEffect<DropShadowEffect>().blur = 12f;
+
+// анимация: изменить параметры и пометить фигуру грязной
+shape.Strokes[0].trimEnd = Mathf.PingPong(Time.time, 1f);
+shape.SetShapeDirty();
+
+// SVG в рантайме
+svgImage.LoadSvg(svgText);
 ```
-https://github.com/<user>/<repo>.git#0.1.0
-```
 
-## Usage
+Утилиты:
+- `VectraRasterizer.Render(...)` — фигура или SVG в `Texture2D`.
+- `SvgWriter.Write(...)` — экспорт в SVG.
+- `VectraOutline.GetOutline(...)` — контуры для коллайдеров.
+- `VectraGeometry` — низкоуровневый Burst API: flatten, tessellate (fill rules и N-операндные булевы операции), stroke, SDF, contours.
 
-TODO
+## Редактор
+
+- **Инспектор:**
+  - сетка типов фигур (зелёные — аналитические, оранжевые — path);
+  - карточки заливок, обводок и эффектов с видимостью, порядком и удалением;
+  - редактор градиентов (клик по полосе добавляет стоп, есть пресеты);
+  - стили (Save/Detach) и статистика меша.
+- **Scene view:** инструмент **Edit Vectra Shape**. Им редактируются точки и тангенсы пути (точку добавляет «+» в середине сегмента, удаляет Ctrl+клик), точки полилинии, радиусы углов (Shift — один угол), углы дуги, ручки градиента.
+- **Контекстное меню фигуры:** Export as PNG / Export as SVG.
+
+## Ограничения SVG
+
+- `<mask>` применяется как геометрический клип, яркость маски не учитывается.
+- Паттерн-заливки заменяются цветом первой фигуры паттерна.
+- Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate.
+- Внешние картинки по URL не загружаются, работают только встроенные data-URI.
+- Обо всём неподдержанном пишется в отчёт импорта в инспекторе ассета.
+
+## Производительность
+
+- Пересборка происходит только по изменению. Тесселяция, обводки и SDF кешируются по хешам.
+- Атласы градиентов (RGBAHalf) и SDF (RHalf) общие для всех фигур, поэтому у всех один материал.
+- Запечённые SDF есть только у path-фигур с эффектами. Аналитическим фигурам текстуры не нужны.
+- Размер SDF-атласа задаётся в Project Settings → Vectra.

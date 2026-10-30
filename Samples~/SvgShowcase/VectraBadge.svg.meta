@@ -1,0 +1,21 @@
+fileFormatVersion: 2
+guid: c876f3ef4234f2b428c3a3ffa193d17b
+importerOverride:
+  nativeImporterType: 2089858483
+  scriptedImporterType:
+    serializedVersion: 2
+    Hash: 7a77d9ab14e046226a98c206bc0adc75
+ScriptedImporter:
+  internalIDToNameTable: []
+  externalObjects: {}
+  serializedVersion: 2
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+  script: {fileID: 11500000, guid: 9173803abeb29ef47ae60cac781b210f, type: 3}
+  mode: 0
+  textureSize: 512
+  quality: 2
+  filterMode: 1
+  pixelsPerUnit: 100
+  spritePivot: {x: 0.5, y: 0.5}
