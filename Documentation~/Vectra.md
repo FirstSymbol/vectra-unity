@@ -2,8 +2,9 @@
 
 Vectra draws resolution-independent vector shapes in **uGUI Canvas** and in **world space**: analytic primitives,
 arbitrary paths, boolean operations, gradients, strokes, effects, masks and SVG documents. All shapes share one
-material, so a whole UI made of Vectra shapes batches into a handful of draw calls, and rebuilding geometry does not
-allocate managed memory.
+material, so a whole UI made of Vectra shapes batches into a handful of draw calls, and rebuilding analytic shapes,
+rectangle and ellipse paths and boolean groups of them does not allocate managed memory (path mode of star, polygon and
+a few other shapes still builds a small point array).
 
 *Русская версия: [Vectra.ru.md](Vectra.ru.md).*
 
@@ -210,7 +211,14 @@ assign it on the SVG Image (new images get the default from Project Settings).
 
 **Limitations:** `<mask>` is applied as a geometric clip (luminance is ignored); pattern fills fall back to the colour
 of the first pattern shape; only blur, drop shadow, saturate and hue-rotate filters; external image URLs are not
-loaded.
+loaded; `<marker>` (arrowheads) is not drawn and the import report says so; of a `<switch>` only the first child whose
+`systemLanguage` / `requiredExtensions` conditions pass is drawn (the language list is `SvgParseOptions.languages`,
+default `en`).
+
+**Untrusted files.** The parser stops at budgets instead of crashing or hanging: nesting depth 256, 200 000 elements,
+200 000 elements drawn (every `<use>` copy counts), 10 000 `<use>` copies, 1 000 000 characters of path data, 32 million
+characters per file. A file that hits one keeps what was read so far and gets a warning starting with "SVG limit
+reached". `SvgParser.Parse(text, new SvgParseOptions { ... })` changes the budgets.
 
 ## Animation
 
@@ -295,7 +303,7 @@ unity command vectra expand_svg --target "SVG Image"
 - Keep shapes analytic when possible; path shapes with effects bake a distance field (Quality controls its size).
 - Shapes rebuild only when changed. Animated parameters rebuild every frame without managed allocations.
 - Texture paints, backdrop shapes and soft-masked children use separate materials (they batch among themselves).
-- The SDF atlas size limit is in Project Settings; the Atlas Debugger shows usage.
+- The SDF atlas size limit is in Project Settings and reaches player builds (the build adds a small settings asset to the Preloaded Assets and removes it afterwards); the Atlas Debugger shows usage. A change uploads only the changed blocks of the atlas, not the whole texture.
 
 ## Troubleshooting
 

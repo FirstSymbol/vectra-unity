@@ -4,6 +4,24 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `SvgParseOptions` and `SvgParser.Parse(text, options)`: budgets for untrusted SVG (nesting depth, element count, elements drawn, `<use>` copies, path data length, file size) and the language list used by `<switch>`.
+- `VectraRuntimeSettings`: the distance atlas size now travels to player builds.
+
+### Fixed
+- The distance atlas uploaded the whole texture whenever one shape changed (8 MiB at the default 2048). It now uploads only the changed blocks: for one changed shape 12 780 texels instead of 4 194 304, and 0.19 ms instead of 3.7 ms of editor CPU time per flush.
+- The distance atlas size set in Project Settings applied only in the editor; players always used 2048. A build with another size now adds a `VectraRuntimeSettings` asset to the Preloaded Assets for the duration of the build; with the default size nothing is added.
+- Boolean shapes allocated managed memory on every rebuild (a list and an array per call). They allocate nothing after warm-up. Nested boolean shapes threw `ObjectDisposedException`, and a boolean that contained itself overflowed the stack; both work now (a cycle is cut at the repeated shape).
+- A hostile SVG could crash or hang the parser: 3000 nested groups overflowed the stack, and a 1 KB file of nested `<use>` elements produced 100 000 elements. The parser now stops at budgets and adds a warning starting with "SVG limit reached" to the import report; a `<use>` that references its own ancestor is skipped.
+- `<switch>` drew every child. It draws the first child whose `systemLanguage` and `requiredExtensions` pass and reports the rest.
+- `<marker>` was dropped without a word. Markers are still not drawn, but an element that uses `marker-start`, `marker-mid` or `marker-end` now adds a line to the import report.
+- A world-space `VectraRenderer` hit test counted half the width of an Outside stroke; it counts the whole width, as `VectraShape` does.
+- The SVG importer made a zero-width texture when `Texture Size` was 0.
+- `VectraSvgImage` and `VectraSvgRenderer` destroyed their mesh with `DestroyImmediate` in play mode.
+- The `Rebuild_IsAllocationFree` test counted nothing: `GC.GetAllocatedBytesForCurrentThread` reports 0 on Unity's Mono. It now reads the profiler's GC counters.
+
 ## [0.2.2] - 2026-11-08
 
 ### Changed
