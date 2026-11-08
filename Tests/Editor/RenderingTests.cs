@@ -68,10 +68,9 @@ namespace FirstSymbol.Vectra.Editor.Tests
                 new List<StrokeLayer> { new StrokeLayer(Color.black, 2f) { join = LineJoin.Round } });
             r.Build(input);
             r.Build(input);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 10; i++) r.Build(input);
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            var (allocated, count) = GcProbe.Measure(i => r.Build(input), 10);
             Assert.AreEqual(0, allocated, "bytes allocated by 10 rebuilds");
+            Assert.AreEqual(0, count, "allocations made by 10 rebuilds");
         }
 
         [Test]

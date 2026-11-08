@@ -75,39 +75,63 @@ namespace FirstSymbol.Vectra
             return b;
         }
 
-        static PathBuilder s_Builder;
+        // Booleans may nest (an operand can be a boolean). Every nesting level needs its own scratch objects, and a
+        // boolean that contains itself, directly or through other booleans, must stop instead of recursing forever.
+        const int MaxNesting = 8;
+        static readonly List<PathBuilder> s_Builders = new List<PathBuilder>();
+        static readonly List<List<Operand>> s_OperandTables = new List<List<Operand>>();
+        static readonly List<BooleanShape> s_Active = new List<BooleanShape>();
+
+        static PathBuilder BuilderFor(int level, NativePath path)
+        {
+            while (s_Builders.Count <= level) s_Builders.Add(null);
+            var b = s_Builders[level];
+            if (b == null) s_Builders[level] = b = new PathBuilder(path);
+            return b;
+        }
+
+        static List<Operand> TableFor(int level)
+        {
+            while (s_OperandTables.Count <= level) s_OperandTables.Add(new List<Operand>());
+            return s_OperandTables[level];
+        }
 
         /// <summary>Flattens every enabled operand into <paramref name="output"/> and fills the operand table.</summary>
         public void FlattenOperands(in ShapeFrame frame, float tolerance, ref Polylines output, List<Operand> ops)
         {
             ops.Clear();
+            int level = s_Active.Count;
+            if (level >= MaxNesting || s_Active.Contains(this)) return;
+            s_Active.Add(this);
             var path = new NativePath(Allocator.TempJob, 64);
-            s_Builder ??= new PathBuilder(path);
+            var builder = BuilderFor(level, path);
             int index = 0;
             foreach (var o in operands)
             {
                 if (o == null || !o.enabled || o.geometry == null || o.geometry == this) continue;
                 path.Clear();
-                s_Builder.Reset(path, Affine2.Translate(frame.Center) * Affine2.Rotate(math.radians(rotation)) *
-                                      Affine2.Translate(-frame.Center) * o.transform);
-                o.geometry.BuildPath(o.Frame(frame), s_Builder);
+                builder.Reset(path, Affine2.Translate(frame.Center) * Affine2.Rotate(math.radians(rotation)) *
+                                    Affine2.Translate(-frame.Center) * o.transform);
+                o.geometry.BuildPath(o.Frame(frame), builder);
                 VectraGeometry.Flatten(path, Affine2.Identity, tolerance, index, true, ref output);
                 ops.Add(new Operand(o.geometry.FillRule, index == 0 ? BooleanOp.Union : o.operation));
                 index++;
             }
 
             path.Dispose();
+            s_Active.RemoveAt(s_Active.Count - 1);
         }
 
         /// <summary>The exact (hard) boolean result as trapezoids.</summary>
         public void Tessellate(in ShapeFrame frame, float tolerance, ref NativeList<Trapezoid> traps)
         {
             var poly = new Polylines(Allocator.TempJob, 256);
-            var ops = new List<Operand>();
+            var ops = TableFor(s_Active.Count);
             FlattenOperands(frame, tolerance, ref poly, ops);
             if (ops.Count > 0)
             {
-                var arr = new NativeArray<Operand>(ops.ToArray(), Allocator.TempJob);
+                var arr = new NativeArray<Operand>(ops.Count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                for (int i = 0; i < arr.Length; i++) arr[i] = ops[i];
                 VectraGeometry.Tessellate(poly, arr, ref traps);
                 arr.Dispose();
             }
@@ -135,9 +159,19 @@ namespace FirstSymbol.Vectra
             traps.Dispose();
         }
 
+        static readonly List<BooleanShape> s_Hashing = new List<BooleanShape>();
+
         protected override void Hash(ref HashBuilder h)
         {
             h.Add(smoothness);
+            if (s_Hashing.Contains(this)) return;
+            s_Hashing.Add(this);
+            HashOperands(ref h);
+            s_Hashing.RemoveAt(s_Hashing.Count - 1);
+        }
+
+        void HashOperands(ref HashBuilder h)
+        {
             foreach (var o in operands)
             {
                 if (o == null || o.geometry == null || o.geometry == this) continue;
