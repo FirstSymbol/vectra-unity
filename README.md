@@ -11,7 +11,7 @@
 
 Всё рисуется одним общим материалом: фигуры батчатся. Геометрия считается на Burst без GC-аллокаций при пересборке.
 
-- **Unity:** 6000.0+.
+- **Unity:** 6000.3+ (6.3 LTS).
 - **Зависимости:** Burst, Collections, Mathematics, uGUI (с TextMeshPro).
 - **Пайплайны:** Built-in, URP, HDRP. Backdrop-эффекты работают только в URP.
 - **Платформы:** Windows, macOS, Linux, WebGL, WebGPU, iOS, Android — всё с Shader Model 3.5. Compute-шейдеры не используются. На WebGL Burst-код выполняется как обычный IL2CPP.
@@ -26,7 +26,7 @@ Package Manager → **+** → **Add package from git URL...**
 https://github.com/FirstSymbol/vectra-unity.git
 ```
 
-Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.2.1`.
+Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.2.2`.
 
 ## Быстрый старт
 

@@ -7,7 +7,7 @@ allocate managed memory.
 
 *Русская версия: [Vectra.ru.md](Vectra.ru.md).*
 
-- **Unity** 6000.0 or newer · **Render pipelines** Built-in, URP, HDRP (backdrop effects: URP only)
+- **Unity** 6000.3 (6.3 LTS) or newer · **Render pipelines** Built-in, URP, HDRP (backdrop effects: URP only)
 - **Dependencies** Burst, Collections, Mathematics, uGUI (TextMeshPro for SVG text)
 - **Platforms** Shader Model 3.5 and up: Windows, macOS, Linux, WebGL 2, WebGPU, iOS, Android.
   No compute shaders. On WebGL the Burst jobs run as IL2CPP code.
@@ -33,7 +33,7 @@ allocate managed memory.
 ## Installation
 
 Package Manager → **+** → **Add package from git URL…** →
-`https://github.com/FirstSymbol/vectra-unity.git` (a specific version: append `#0.2.1`).
+`https://github.com/FirstSymbol/vectra-unity.git` (a specific version: append `#0.2.2`).
 
 Samples: **Package Manager → Vectra Vector Graphics → Samples**.
 

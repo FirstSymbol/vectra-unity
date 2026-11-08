@@ -9,7 +9,7 @@ Vectra рисует векторные фигуры в **uGUI Canvas** и в **w
 
 *English version: [Vectra.md](Vectra.md).*
 
-- **Unity:** 6000.0 и новее.
+- **Unity:** 6000.3 (6.3 LTS) и новее.
 - **Пайплайны:** Built-in, URP, HDRP. Backdrop-эффекты работают только в URP.
 - **Зависимости:** Burst, Collections, Mathematics, uGUI. TextMeshPro нужен для текста из SVG.
 - **Платформы:** Shader Model 3.5 и выше — Windows, macOS, Linux, WebGL 2, WebGPU, iOS, Android. Compute-шейдеры не используются. На WebGL Burst-джобы выполняются как код IL2CPP.
@@ -34,7 +34,7 @@ Vectra рисует векторные фигуры в **uGUI Canvas** и в **w
 
 ## Установка
 
-Package Manager → **+** → **Add package from git URL…** → `https://github.com/FirstSymbol/vectra-unity.git`. Чтобы поставить конкретную версию, добавьте к адресу `#0.2.1`.
+Package Manager → **+** → **Add package from git URL…** → `https://github.com/FirstSymbol/vectra-unity.git`. Чтобы поставить конкретную версию, добавьте к адресу `#0.2.2`.
 
 Сэмплы находятся в **Package Manager → Vectra Vector Graphics → Samples**.
 
