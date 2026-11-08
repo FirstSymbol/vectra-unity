@@ -174,3 +174,7 @@ VectraSvg.Expand(svgImage);   // отдельный VectraShape на кажды�
 - Атласы градиентов (RGBAHalf) и SDF (RHalf) общие для всех фигур, поэтому у всех один материал.
 - Запечённые SDF есть только у path-фигур с эффектами и у soft-масок. Аналитическим фигурам текстуры не нужны.
 - Размер SDF-атласа задаётся в Project Settings → Vectra, заполненность видна в Atlas Debugger.
+
+## Лицензия
+
+MIT, см. [LICENSE.md](LICENSE.md).
