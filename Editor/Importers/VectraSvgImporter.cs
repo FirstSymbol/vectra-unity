@@ -47,8 +47,9 @@ namespace FirstSymbol.Vectra.Editor
             }
 
             float aspect = doc.AspectRatio;
-            int w = aspect >= 1f ? textureSize : Mathf.Max(1, Mathf.RoundToInt(textureSize * aspect));
-            int h = aspect >= 1f ? Mathf.Max(1, Mathf.RoundToInt(textureSize / aspect)) : textureSize;
+            int size = Mathf.Clamp(textureSize, 1, 8192);
+            int w = aspect >= 1f ? size : Mathf.Max(1, Mathf.RoundToInt(size * aspect));
+            int h = aspect >= 1f ? Mathf.Max(1, Mathf.RoundToInt(size / aspect)) : size;
             Texture2D tex;
             try
             {

@@ -262,7 +262,7 @@ namespace FirstSymbol.Vectra
             m_HitTester ??= new VectraHitTester();
             float reach = 0f;
             foreach (var s in m_Content.ActiveStrokes)
-                if (s != null && s.enabled) reach = math.max(reach, s.alignment == StrokeAlignment.Inside ? 0f : s.width * 0.5f);
+                if (s != null && s.enabled) reach = math.max(reach, s.alignment == StrokeAlignment.Center ? s.width * 0.5f : s.alignment == StrokeAlignment.Outside ? s.width : 0f);
             return m_HitTester.Contains(m_Content.ActiveGeometry, Frame, local, reach);
         }
 

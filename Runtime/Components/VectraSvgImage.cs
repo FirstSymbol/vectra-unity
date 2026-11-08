@@ -108,7 +108,12 @@ namespace FirstSymbol.Vectra
         {
             m_Renderer?.Dispose();
             m_Renderer = null;
-            if (m_Mesh != null) DestroyImmediate(m_Mesh);
+            if (m_Mesh != null)
+            {
+                if (Application.isPlaying) Destroy(m_Mesh);
+                else DestroyImmediate(m_Mesh);
+            }
+
             base.OnDestroy();
         }
 
