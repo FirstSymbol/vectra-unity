@@ -4,6 +4,8 @@
   "displayName": "Vectra Vector Graphics",
   "description": "Vector shapes for uGUI Canvas and world space: analytic SDF primitives, arbitrary paths, boolean operations, gradients, strokes with dashes, shadows, glows, bevels and other effects, SVG import and export. Burst-accelerated geometry and one batchable material for everything.",
   "unity": "6000.0",
+  "license": "MIT",
+  "licensesUrl": "https://github.com/FirstSymbol/vectra-unity/blob/main/LICENSE.md",
   "author": {
     "name": "FirstSymbol",
     "email": "firstsymbol.0@gmail.com"
