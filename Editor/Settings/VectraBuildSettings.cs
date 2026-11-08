@@ -37,7 +37,26 @@ namespace FirstSymbol.Vectra.Editor
             AssetDatabase.CreateAsset(asset, AssetPath);
             preloaded.Add(asset);
             PlayerSettings.SetPreloadedAssets(preloaded.ToArray());
+            s_SawBuilding = false;
+            EditorApplication.update -= WatchBuild;
+            EditorApplication.update += WatchBuild;
             return true;
+        }
+
+        static bool s_SawBuilding;
+
+        // A failed or cancelled build never reaches the post-process step: clean up once the build is over.
+        static void WatchBuild()
+        {
+            if (BuildPipeline.isBuildingPlayer)
+            {
+                s_SawBuilding = true;
+                return;
+            }
+
+            if (!s_SawBuilding) return;
+            EditorApplication.update -= WatchBuild;
+            Remove();
         }
 
         /// <summary>Takes the generated asset out of the Preloaded Assets and deletes it.</summary>
