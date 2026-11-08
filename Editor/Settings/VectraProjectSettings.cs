@@ -23,7 +23,7 @@ namespace FirstSymbol.Vectra.Editor
 
         void OnEnable() => Apply();
 
-        public void Apply() => VectraSdfAtlas.MaxSize = Mathf.ClosestPowerOfTwo(Mathf.Clamp(sdfAtlasMaxSize, 512, 8192));
+        public void Apply() => VectraSdfAtlas.MaxSize = VectraRuntimeSettings.NormalizeAtlasSize(sdfAtlasMaxSize);
     }
 
     static class VectraSettingsProvider
@@ -84,7 +84,7 @@ namespace FirstSymbol.Vectra.Editor
                 var atlas = new SliderInt(512, 8192) { showInputField = true };
                 atlas.BindProperty(so.FindProperty("sdfAtlasMaxSize"));
                 render.Add(VxUI.Row("Distance atlas max", atlas, "Largest size of the shared signed-distance atlas (power of two)"));
-                render.Add(VxUI.Text("The distance atlas only holds tessellated shapes that use effects. Analytic shapes need no textures.", "vx-hint"));
+                render.Add(VxUI.Text("The distance atlas only holds tessellated shapes that use effects. Analytic shapes need no textures. Player builds use the same size: the build adds a small settings asset to the Preloaded Assets and removes it afterwards.", "vx-hint"));
                 render.Add(VxUI.AddButton("Reset shared atlases", () => VectraSdfAtlas.Reset()));
                 page.Add(VxUI.TitledCard("vectra.settings.render", VxIcon.Kind.Settings, "Rendering", render));
 
