@@ -610,8 +610,11 @@ namespace FirstSymbol.Vectra.Rendering
             m_SdfRange = range;
             VectraGeometry.BakeSdf(m_Fill.AsArray(), region, w, hgt, range, VectraSdfAtlas.Data, VectraSdfAtlas.Size,
                 m_Sdf.rect.x, m_Sdf.rect.y);
-            VectraSdfAtlas.MarkDirty();
+            VectraSdfAtlas.MarkDirty(m_Sdf.rect);
         }
+
+        static readonly List<Operand> s_SmoothOperands = new List<Operand>();
+        static readonly List<NativeList<Trapezoid>> s_SmoothTraps = new List<NativeList<Trapezoid>>();
 
         /// <summary>Smooth booleans: bakes every operand separately and blends the distance fields.</summary>
         void EnsureSmoothSdf(BooleanShape shape, float reach, float tol, VectraQuality quality)
@@ -629,7 +632,7 @@ namespace FirstSymbol.Vectra.Rendering
             m_PolyKey = m_FillKey = 0;
 
             var poly = new Polylines(Allocator.TempJob, 256);
-            var ops = new List<Operand>();
+            var ops = s_SmoothOperands;
             shape.FlattenOperands(m_Frame, tol, ref poly, ops);
             int n = ops.Count;
             if (n == 0)
@@ -640,7 +643,8 @@ namespace FirstSymbol.Vectra.Rendering
             }
 
             // Tessellate each operand on its own.
-            var traps = new List<NativeList<Trapezoid>>(n);
+            var traps = s_SmoothTraps;
+            traps.Clear();
             var bounds = Bounds2.Empty;
             var single = new Polylines(Allocator.TempJob, 128);
             for (int k = 0; k < n; k++)
@@ -715,7 +719,7 @@ namespace FirstSymbol.Vectra.Rendering
             int stride = VectraSdfAtlas.Size;
             for (int y = 0; y < hh; y++)
                 NativeArray<half>.Copy(acc, y * w, dst, (m_Sdf.rect.y + y) * stride + m_Sdf.rect.x, w);
-            VectraSdfAtlas.MarkDirty();
+            VectraSdfAtlas.MarkDirty(m_Sdf.rect);
             acc.Dispose();
             tmp.Dispose();
             foreach (var t in traps) t.Dispose();

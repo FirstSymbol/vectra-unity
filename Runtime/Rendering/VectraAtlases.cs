@@ -399,6 +399,9 @@ namespace FirstSymbol.Vectra.Rendering
         static NativeArray<half> s_Data;
         static int s_Size;
         static bool s_Dirty;
+        static Texture2D s_Staging;
+        static readonly List<RectInt> s_DirtyRects = new List<RectInt>();
+        const int MaxDirtyRects = 16;
         static int s_NextId = 1;
         static int s_Generation = 1;
         static int s_ShelfTop;
@@ -407,6 +410,9 @@ namespace FirstSymbol.Vectra.Rendering
 
         public static int Generation => s_Generation;
         public static int Size => s_Size;
+
+        /// <summary>Texels sent to the GPU by the most recent upload (diagnostics).</summary>
+        public static long LastUploadTexels { get; private set; }
         public static int AllocationCount => s_Allocs.Count;
 
         /// <summary>Collects the allocated regions, padding included (diagnostics).</summary>
@@ -466,6 +472,7 @@ namespace FirstSymbol.Vectra.Rendering
                 anisoLevel = 0
             };
             s_Dirty = true;
+            s_DirtyRects.Clear();
             Shader.SetGlobalTexture(VectraAtlases.SdfId, s_Texture);
         }
 
@@ -621,34 +628,116 @@ namespace FirstSymbol.Vectra.Rendering
             VectraAtlases.InvalidateClients();
         }
 
+        /// <summary>Marks the whole atlas as changed.</summary>
         public static void MarkDirty() => s_Dirty = true;
+
+        /// <summary>Marks a block of texels as changed; only the marked blocks are uploaded on the next flush.</summary>
+        public static void MarkDirty(RectInt texels)
+        {
+            if (s_Dirty) return;
+            int x0 = Mathf.Max(0, texels.xMin - Padding), y0 = Mathf.Max(0, texels.yMin - Padding);
+            int x1 = Mathf.Min(s_Size, texels.xMax + Padding), y1 = Mathf.Min(s_Size, texels.yMax + Padding);
+            if (x1 <= x0 || y1 <= y0) return;
+            var r = new RectInt(x0, y0, x1 - x0, y1 - y0);
+            for (int i = 0; i < s_DirtyRects.Count; i++)
+            {
+                var o = s_DirtyRects[i];
+                if (r.xMin > o.xMax || o.xMin > r.xMax || r.yMin > o.yMax || o.yMin > r.yMax) continue;
+                // Touching or overlapping blocks become one.
+                int ux0 = Mathf.Min(r.xMin, o.xMin), uy0 = Mathf.Min(r.yMin, o.yMin);
+                int ux1 = Mathf.Max(r.xMax, o.xMax), uy1 = Mathf.Max(r.yMax, o.yMax);
+                s_DirtyRects.RemoveAt(i);
+                MarkDirty(new RectInt(ux0, uy0, ux1 - ux0, uy1 - uy0));
+                return;
+            }
+
+            if (s_DirtyRects.Count >= MaxDirtyRects) s_Dirty = true;
+            else s_DirtyRects.Add(r);
+        }
 
         internal static void Flush()
         {
             if (!s_Data.IsCreated) return;
             if (s_Texture == null) CreateTexture();
             Shader.SetGlobalTexture(VectraAtlases.SdfId, s_Texture);
-            if (!s_Dirty) return;
-            s_Dirty = false;
-            if (s_Texture.format == TextureFormat.RHalf)
+            LastUploadTexels = 0;
+            if (!s_Dirty && s_DirtyRects.Count == 0) return;
+
+            long area = 0;
+            foreach (var r in s_DirtyRects) area += (long)r.width * r.height;
+            if (s_Dirty || area * 2 > (long)s_Size * s_Size)
             {
-                s_Texture.SetPixelData(s_Data, 0);
+                s_Dirty = false;
+                s_DirtyRects.Clear();
+                LastUploadTexels = (long)s_Size * s_Size;
+                if (s_Texture.format == TextureFormat.RHalf)
+                {
+                    s_Texture.SetPixelData(s_Data, 0);
+                }
+                else
+                {
+                    var f = new NativeArray<float>(s_Data.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                    for (int i = 0; i < f.Length; i++) f[i] = s_Data[i];
+                    s_Texture.SetPixelData(f, 0);
+                    f.Dispose();
+                }
+
+                s_Texture.Apply(false, false);
+                return;
+            }
+
+            foreach (var r in s_DirtyRects) UploadRegion(r);
+            s_DirtyRects.Clear();
+        }
+
+        /// <summary>Sends one block to the GPU through a small staging texture; the rest of the atlas is not touched.</summary>
+        static void UploadRegion(RectInt r)
+        {
+            bool half = s_Texture.format == TextureFormat.RHalf;
+            if (s_Staging == null || s_Staging.width != r.width || s_Staging.height != r.height || s_Staging.format != s_Texture.format)
+            {
+                if (s_Staging != null) UnityEngine.Object.DestroyImmediate(s_Staging);
+                s_Staging = new Texture2D(r.width, r.height, s_Texture.format, false, true)
+                {
+                    name = "Vectra SDF Staging",
+                    hideFlags = HideFlags.HideAndDontSave,
+                    filterMode = FilterMode.Point
+                };
+            }
+
+            if (half)
+            {
+                var rows = new NativeArray<half>(r.width * r.height, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                for (int y = 0; y < r.height; y++)
+                    NativeArray<half>.Copy(s_Data, (r.y + y) * s_Size + r.x, rows, y * r.width, r.width);
+                s_Staging.SetPixelData(rows, 0);
+                rows.Dispose();
             }
             else
             {
-                var f = new NativeArray<float>(s_Data.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                for (int i = 0; i < f.Length; i++) f[i] = s_Data[i];
-                s_Texture.SetPixelData(f, 0);
-                f.Dispose();
+                var rows = new NativeArray<float>(r.width * r.height, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                for (int y = 0; y < r.height; y++)
+                {
+                    int src = (r.y + y) * s_Size + r.x, dst = y * r.width;
+                    for (int x = 0; x < r.width; x++) rows[dst + x] = s_Data[src + x];
+                }
+
+                s_Staging.SetPixelData(rows, 0);
+                rows.Dispose();
             }
 
-            s_Texture.Apply(false, false);
+            s_Staging.Apply(false, false);
+            Graphics.CopyTexture(s_Staging, 0, 0, 0, 0, r.width, r.height, s_Texture, 0, 0, r.x, r.y);
+            LastUploadTexels += (long)r.width * r.height;
         }
 
         internal static void Dispose()
         {
             if (s_Texture != null) UnityEngine.Object.DestroyImmediate(s_Texture);
             s_Texture = null;
+            if (s_Staging != null) UnityEngine.Object.DestroyImmediate(s_Staging);
+            s_Staging = null;
+            s_DirtyRects.Clear();
             if (s_Data.IsCreated) s_Data.Dispose();
             ResetShelves();
             s_Generation++;
