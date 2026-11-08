@@ -21,7 +21,8 @@ namespace FirstSymbol.Vectra.Svg
         {
             "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap",
             "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "font-family",
-            "font-size", "font-weight", "font-style", "text-anchor", "visibility", "color", "clip-rule", "vector-effect"
+            "font-size", "font-weight", "font-style", "text-anchor", "visibility", "color", "clip-rule", "vector-effect",
+            "marker", "marker-start", "marker-mid", "marker-end"
         };
 
         static readonly HashSet<string> s_Presentation = new HashSet<string>
@@ -30,7 +31,7 @@ namespace FirstSymbol.Vectra.Svg
             "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "font-family",
             "font-size", "font-weight", "font-style", "text-anchor", "visibility", "color", "clip-rule", "opacity",
             "display", "clip-path", "mask", "filter", "stop-color", "stop-opacity", "vector-effect", "flood-color",
-            "flood-opacity"
+            "flood-opacity", "marker-start", "marker-mid", "marker-end"
         };
 
         sealed class Context
@@ -42,6 +43,10 @@ namespace FirstSymbol.Vectra.Svg
             public NativePath path;
             public PathBuilder builder;
             public int depth;
+            public SvgParseOptions opt;
+            public int work, styleWork, uses, styleChars;
+            public bool stopped, styleReady;
+            public readonly List<SvgNode> activeUse = new List<SvgNode>();
             public readonly HashSet<string> warned = new HashSet<string>();
 
             public void Warn(string msg)
@@ -59,11 +64,23 @@ namespace FirstSymbol.Vectra.Svg
         }
 
         /// <summary>Parses into an existing document (its previous content is replaced).</summary>
-        public static void Parse(string svg, VectraSvgDocument doc)
+        public static void Parse(string svg, VectraSvgDocument doc) => Parse(svg, doc, null);
+
+        /// <summary>Parses with explicit budgets and settings (see <see cref="SvgParseOptions"/>).</summary>
+        public static VectraSvgDocument Parse(string svg, SvgParseOptions options)
         {
+            var doc = ScriptableObject.CreateInstance<VectraSvgDocument>();
+            doc.name = "SVG Document";
+            Parse(svg, doc, options);
+            return doc;
+        }
+
+        public static void Parse(string svg, VectraSvgDocument doc, SvgParseOptions options)
+        {
+            options ??= new SvgParseOptions();
             doc.elements.Clear();
             doc.warnings.Clear();
-            var xml = SvgXml.Parse(svg);
+            var xml = SvgXml.Parse(svg, options, doc.warnings);
             var root = FindFirst(xml, "svg");
             if (root == null)
             {
@@ -71,13 +88,14 @@ namespace FirstSymbol.Vectra.Svg
                 return;
             }
 
-            var ctx = new Context { doc = doc };
+            var ctx = new Context { doc = doc, opt = options };
             ctx.path = new NativePath(Allocator.TempJob, 64);
             ctx.builder = new PathBuilder(ctx.path);
             try
             {
                 Index(xml, ctx);
                 ComputeStyles(root, null, ctx);
+                ctx.styleReady = true;
 
                 // Root viewport and viewBox.
                 float w = Length(root.Attr("width"), 0f, 100f, ctx);
@@ -125,7 +143,13 @@ namespace FirstSymbol.Vectra.Svg
         {
             var id = n.Attr("id");
             if (!string.IsNullOrEmpty(id) && !ctx.ids.ContainsKey(id)) ctx.ids[id] = n;
-            if (n.name == "style") ctx.css.AddStylesheet(n.text);
+            if (n.name == "style")
+            {
+                ctx.styleChars += n.text.Length;
+                if (ctx.styleChars <= ctx.opt.maxStyleLength) ctx.css.AddStylesheet(n.text);
+                else ctx.Warn($"SVG limit reached: more than {ctx.opt.maxStyleLength} characters of CSS; the rest is ignored.");
+            }
+
             foreach (var c in n.children) Index(c, ctx);
         }
 
@@ -133,8 +157,29 @@ namespace FirstSymbol.Vectra.Svg
         // Styles
         // ---------------------------------------------------------------------------------------------------
 
+        /// <summary>Counts one visited element against the drawing budget; false once the budget is spent.</summary>
+        static bool Spend(Context ctx)
+        {
+            if (ctx.stopped) return false;
+            if (++ctx.work <= ctx.opt.maxRenderedNodes) return true;
+            ctx.stopped = true;
+            ctx.Warn($"SVG limit reached: more than {ctx.opt.maxRenderedNodes} elements to draw (every <use> copy counts); the rest is skipped.");
+            return false;
+        }
+
         static void ComputeStyles(SvgNode n, Dictionary<string, string> parent, Context ctx)
         {
+            if (ctx.styleReady && (ctx.stopped || ++ctx.styleWork > ctx.opt.maxRenderedNodes))
+            {
+                if (!ctx.stopped)
+                {
+                    ctx.stopped = true;
+                    ctx.Warn($"SVG limit reached: more than {ctx.opt.maxRenderedNodes} elements to draw (every <use> copy counts); the rest is skipped.");
+                }
+
+                return;
+            }
+
             var s = new Dictionary<string, string>(StringComparer.Ordinal);
             if (parent != null)
                 foreach (var kv in parent)
@@ -173,7 +218,13 @@ namespace FirstSymbol.Vectra.Svg
         static void Render(SvgNode n, Affine2 ctm, float opacity, List<SvgPathData> clips, List<VectraEffect> effects,
             Context ctx)
         {
-            if (ctx.depth > 64) return;
+            if (ctx.depth > ctx.opt.maxDepth)
+            {
+                ctx.Warn($"SVG limit reached: drawing nests deeper than {ctx.opt.maxDepth} levels; deeper content is skipped.");
+                return;
+            }
+
+            if (!Spend(ctx)) return;
             if (Style(n, "display") == "none") return;
             switch (n.name)
             {
@@ -217,28 +268,17 @@ namespace FirstSymbol.Vectra.Svg
                 }
                 case "g":
                 case "a":
-                case "switch":
                     foreach (var c in n.children) Render(c, local, op, elementClips, elementEffects, ctx);
                     break;
-                case "use":
+                case "switch":
                 {
-                    var href = n.Attr("href");
-                    if (href == null || !href.StartsWith("#") || !ctx.ids.TryGetValue(href.Substring(1), out var target)) break;
-                    float x = Length(n.Attr("x"), 0f, ctx.viewportW, ctx), y = Length(n.Attr("y"), 0f, ctx.viewportH, ctx);
-                    var m = local * Affine2.Translate(new float2(x, y));
-                    // The referenced content inherits the <use> element's style.
-                    ComputeStyles(target, n.style, ctx);
-                    if (target.name == "symbol")
-                    {
-                        float w = Length(n.Attr("width"), Length(target.Attr("width"), ctx.viewportW, ctx.viewportW, ctx), ctx.viewportW, ctx);
-                        float h = Length(n.Attr("height"), Length(target.Attr("height"), ctx.viewportH, ctx.viewportH, ctx), ctx.viewportH, ctx);
-                        var sm = m * ViewBoxTransform(target, 0, 0, w, h);
-                        foreach (var c in target.children) Render(c, sm, op, elementClips, elementEffects, ctx);
-                    }
-                    else Render(target, m, op, elementClips, elementEffects, ctx);
-
+                    var chosen = ChooseSwitchChild(n, ctx);
+                    if (chosen != null) Render(chosen, local, op, elementClips, elementEffects, ctx);
                     break;
                 }
+                case "use":
+                    RenderUse(n, local, op, elementClips, elementEffects, ctx);
+                    break;
                 case "text":
                     RenderText(n, local, op, ctx);
                     break;
@@ -247,7 +287,10 @@ namespace FirstSymbol.Vectra.Svg
                     break;
                 default:
                     if (BuildShape(n, ctx))
+                    {
+                        WarnMarkers(n, ctx);
                         Emit(n, local, op, elementClips, elementEffects, ctx);
+                    }
                     else if (n.children.Count > 0 && n.name != "foreignObject")
                         foreach (var c in n.children) Render(c, local, op, elementClips, elementEffects, ctx);
                     break;
@@ -255,6 +298,95 @@ namespace FirstSymbol.Vectra.Svg
 
             ctx.depth--;
         }
+
+        static void RenderUse(SvgNode n, Affine2 local, float op, List<SvgPathData> clips, List<VectraEffect> effects, Context ctx)
+        {
+            var href = n.Attr("href");
+            if (href == null || !href.StartsWith("#") || !ctx.ids.TryGetValue(href.Substring(1), out var target)) return;
+            if (ctx.uses >= ctx.opt.maxUseExpansions)
+            {
+                ctx.Warn($"SVG limit reached: more than {ctx.opt.maxUseExpansions} <use> copies; further <use> elements are skipped.");
+                return;
+            }
+
+            if (ctx.activeUse.Contains(target))
+            {
+                ctx.Warn("A <use> element references one of its own ancestors; the reference is skipped.");
+                return;
+            }
+
+            ctx.uses++;
+            float x = Length(n.Attr("x"), 0f, ctx.viewportW, ctx), y = Length(n.Attr("y"), 0f, ctx.viewportH, ctx);
+            var m = local * Affine2.Translate(new float2(x, y));
+            // The referenced content inherits the <use> element's style.
+            ComputeStyles(target, n.style, ctx);
+            ctx.activeUse.Add(target);
+            if (target.name == "symbol")
+            {
+                float w = Length(n.Attr("width"), Length(target.Attr("width"), ctx.viewportW, ctx.viewportW, ctx), ctx.viewportW, ctx);
+                float h = Length(n.Attr("height"), Length(target.Attr("height"), ctx.viewportH, ctx.viewportH, ctx), ctx.viewportH, ctx);
+                var sm = m * ViewBoxTransform(target, 0, 0, w, h);
+                foreach (var c in target.children) Render(c, sm, op, clips, effects, ctx);
+            }
+            else Render(target, m, op, clips, effects, ctx);
+
+            ctx.activeUse.RemoveAt(ctx.activeUse.Count - 1);
+        }
+
+        /// <summary>The first child of a &lt;switch&gt; whose conditional attributes all pass (SVG 1.1 section 5.8).</summary>
+        static SvgNode ChooseSwitchChild(SvgNode n, Context ctx)
+        {
+            SvgNode chosen = null;
+            int skipped = 0;
+            foreach (var c in n.children)
+            {
+                switch (c.name)
+                {
+                    case "title": case "desc": case "metadata": case "style": case "script": case "defs":
+                    case "linearGradient": case "radialGradient": case "pattern": case "filter": case "clipPath":
+                    case "mask": case "marker": case "symbol":
+                        continue;
+                }
+
+                if (chosen == null && ConditionsPass(c, ctx)) chosen = c;
+                else skipped++;
+            }
+
+            if (skipped > 0) ctx.Warn("<switch> draws only the first child whose conditions pass; its other children are skipped.");
+            return chosen;
+        }
+
+        static bool ConditionsPass(SvgNode c, Context ctx)
+        {
+            // No extensions are supported, so any listed extension fails. requiredFeatures is gone from SVG 2 and
+            // browsers treat it as satisfied; a bare empty value still counts as false.
+            if (c.attributes.ContainsKey("requiredExtensions")) return false;
+            if (c.attributes.TryGetValue("requiredFeatures", out var features) && string.IsNullOrWhiteSpace(features)) return false;
+            if (!c.attributes.TryGetValue("systemLanguage", out var wanted)) return true;
+            foreach (var part in wanted.Split(','))
+            {
+                var tag = part.Trim();
+                if (tag.Length == 0) continue;
+                foreach (var user in ctx.opt.languages)
+                {
+                    if (string.Equals(tag, user, StringComparison.OrdinalIgnoreCase) ||
+                        tag.StartsWith(user + "-", StringComparison.OrdinalIgnoreCase) ||
+                        user.StartsWith(tag + "-", StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
+
+            return false;
+        }
+
+        static void WarnMarkers(SvgNode n, Context ctx)
+        {
+            if (n.name != "path" && n.name != "line" && n.name != "polyline" && n.name != "polygon") return;
+            if (HasMarker(Style(n, "marker")) || HasMarker(Style(n, "marker-start")) || HasMarker(Style(n, "marker-mid")) ||
+                HasMarker(Style(n, "marker-end")))
+                ctx.Warn("Markers (marker-start, marker-mid, marker-end) are not drawn; arrowheads and similar shapes are missing.");
+        }
+
+        static bool HasMarker(string value) => !string.IsNullOrEmpty(value) && value.Trim() != "none";
 
         static Affine2 ViewBoxTransform(SvgNode n, float x, float y, float w, float h)
         {
@@ -286,8 +418,17 @@ namespace FirstSymbol.Vectra.Svg
             switch (n.name)
             {
                 case "path":
-                    SvgPathParser.Parse(n.Attr("d"), b);
+                {
+                    var d = n.Attr("d");
+                    if (d != null && d.Length > ctx.opt.maxPathDataLength)
+                    {
+                        ctx.Warn($"SVG limit reached: path data longer than {ctx.opt.maxPathDataLength} characters; the path is skipped.");
+                        return false;
+                    }
+
+                    SvgPathParser.Parse(d, b);
                     break;
+                }
                 case "rect":
                 {
                     float x = Length(n.Attr("x"), 0, vw, ctx), y = Length(n.Attr("y"), 0, vh, ctx);
@@ -337,7 +478,14 @@ namespace FirstSymbol.Vectra.Svg
                 case "polyline":
                 case "polygon":
                 {
-                    var pts = Numbers(n.Attr("points"));
+                    var points = n.Attr("points");
+                    if (points != null && points.Length > ctx.opt.maxPathDataLength)
+                    {
+                        ctx.Warn($"SVG limit reached: point list longer than {ctx.opt.maxPathDataLength} characters; the shape is skipped.");
+                        return false;
+                    }
+
+                    var pts = Numbers(points);
                     if (pts.Count < 4) return false;
                     b.MoveTo(new float2(pts[0], pts[1]));
                     for (int i = 2; i + 1 < pts.Count; i += 2) b.LineTo(new float2(pts[i], pts[i + 1]));
@@ -612,6 +760,7 @@ namespace FirstSymbol.Vectra.Svg
             if (depth > 16) return;
             foreach (var c in n.children)
             {
+                if (!Spend(ctx)) return;
                 if (c.style == null) ComputeStyles(c, n.style, ctx);
                 if (Style(c, "display") == "none") continue;
                 var cm = m * ParseTransform(c.Attr("transform"));

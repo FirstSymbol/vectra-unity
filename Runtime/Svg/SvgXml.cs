@@ -13,6 +13,7 @@ namespace FirstSymbol.Vectra.Svg
         public SvgNode parent;
         /// <summary>Character data directly inside the element (text, CSS of &lt;style&gt;).</summary>
         public string text = "";
+        internal StringBuilder textBuilder;
 
         /// <summary>Computed style after CSS, presentation attributes and the style attribute were merged.</summary>
         public Dictionary<string, string> style;
@@ -28,12 +29,23 @@ namespace FirstSymbol.Vectra.Svg
     /// </summary>
     public static class SvgXml
     {
-        public static SvgNode Parse(string xml)
+        public static SvgNode Parse(string xml) => Parse(xml, null, null);
+
+        /// <summary>Parses with budgets; a hit budget stops the parse, keeps the tree so far and adds a line to <paramref name="report"/>.</summary>
+        public static SvgNode Parse(string xml, SvgParseOptions options, List<string> report)
         {
             if (string.IsNullOrEmpty(xml)) return null;
+            options ??= new SvgParseOptions();
             var root = new SvgNode { name = "#document" };
+            if (xml.Length > options.maxInputLength)
+            {
+                report?.Add($"SVG limit reached: the file has more than {options.maxInputLength} characters; nothing was imported.");
+                return root;
+            }
+
             var current = root;
             int i = 0, n = xml.Length;
+            int depth = 0, count = 0;
             var text = new StringBuilder();
 
             while (i < n)
@@ -73,13 +85,13 @@ namespace FirstSymbol.Vectra.Svg
                 if (Starts(xml, i, "<!"))
                 {
                     // DOCTYPE, possibly with an internal subset in brackets.
-                    int depth = 0;
+                    int brackets = 0;
                     i += 2;
                     while (i < n)
                     {
-                        if (xml[i] == '[') depth++;
-                        else if (xml[i] == ']') depth--;
-                        else if (xml[i] == '>' && depth <= 0) break;
+                        if (xml[i] == '[') brackets++;
+                        else if (xml[i] == ']') brackets--;
+                        else if (xml[i] == '>' && brackets <= 0) break;
                         i++;
                     }
 
@@ -93,8 +105,26 @@ namespace FirstSymbol.Vectra.Svg
                 {
                     int end = xml.IndexOf('>', i);
                     i = end < 0 ? n : end + 1;
-                    if (current.parent != null) current = current.parent;
+                    if (current.parent != null)
+                    {
+                        Finish(current);
+                        current = current.parent;
+                        depth--;
+                    }
+
                     continue;
+                }
+
+                if (depth >= options.maxDepth)
+                {
+                    report?.Add($"SVG limit reached: elements nested deeper than {options.maxDepth} levels; the rest of the file is ignored.");
+                    break;
+                }
+
+                if (++count > options.maxElements)
+                {
+                    report?.Add($"SVG limit reached: more than {options.maxElements} elements; the rest of the file is ignored.");
+                    break;
                 }
 
                 i++;
@@ -149,18 +179,30 @@ namespace FirstSymbol.Vectra.Svg
                     node.attributes[NormalizeAttr(attrName)] = value;
                 }
 
-                if (!selfClosing) current = node;
+                if (!selfClosing)
+                {
+                    current = node;
+                    depth++;
+                }
             }
 
             FlushText(current, text);
+            for (var open = current; open != null; open = open.parent) Finish(open);
             return root;
         }
 
         static void FlushText(SvgNode node, StringBuilder text)
         {
             if (text.Length == 0) return;
-            node.text += text.ToString();
+            (node.textBuilder ??= new StringBuilder()).Append(text);
             text.Clear();
+        }
+
+        static void Finish(SvgNode node)
+        {
+            if (node.textBuilder == null) return;
+            node.text += node.textBuilder.ToString();
+            node.textBuilder = null;
         }
 
         static bool Starts(string s, int i, string prefix) => string.CompareOrdinal(s, i, prefix, 0, prefix.Length) == 0;
