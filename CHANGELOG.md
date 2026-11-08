@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - MIT licence: `LICENSE.md`, and `license` and `licensesUrl` in `package.json`.
 
 ### Fixed
+- A saved `VectraStyle` came back as a missing script: Unity binds a script to its file by name, and the class lived in `VectraShapeContent.cs`. `VectraStyle`, `VectraBooleanOperand` and `VectraSvgRenderer` now each have a file of their own, with fixed GUIDs.
+- Assets, prefabs and scenes already saved with a lost script are relinked once when the package loads, without a prompt, and every repaired file is logged. `Tools > Vectra > Repair Lost Script References` runs it again. Missing scripts of other packages are left alone, and so are open scenes with unsaved changes.
 - The package declares `com.unity.modules.physics2d`: `VectraRenderer` builds a `PolygonCollider2D`, and a project without the 2D physics module failed to compile.
 
 ## [0.2.1] - 2026-10-30
