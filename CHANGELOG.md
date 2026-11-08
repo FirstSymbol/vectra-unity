@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - MIT licence: `LICENSE.md`, and `license` and `licensesUrl` in `package.json`.
 
+### Fixed
+- The package declares `com.unity.modules.physics2d`: `VectraRenderer` builds a `PolygonCollider2D`, and a project without the 2D physics module failed to compile.
+
 ## [0.2.1] - 2026-10-30
 
 ### Fixed
