@@ -42,6 +42,16 @@ namespace FirstSymbol.Vectra.Svg
             }
         }
 
+        /// <summary>Hash of the path content (verbs, points, fill rule): equal paths give equal hashes.</summary>
+        public int ContentHash()
+        {
+            var h = new HashBuilder(verbs.Count * 31 + points.Count);
+            h.Add((int)rule);
+            for (int i = 0; i < verbs.Count; i++) h.Add((int)verbs[i]);
+            for (int i = 0; i < points.Count; i++) h.Add(points[i]);
+            return h.Value;
+        }
+
         public Bounds2 ControlBounds()
         {
             var bb = Bounds2.Empty;
@@ -156,6 +166,7 @@ namespace FirstSymbol.Vectra.Svg
     sealed class SvgElementGeometry : VectraShapeGeometry
     {
         public SvgPathData data;
+        /// <summary>Content hash of <see cref="data"/>, set by the builder once per element.</summary>
         public int key;
 
         public override string DisplayName => "SVG Element";
@@ -201,7 +212,7 @@ namespace FirstSymbol.Vectra.Svg
 
         public static void Build(VectraSvgDocument doc, VectraShapeRenderer renderer, Rect localRect, float localPixelSize,
             Color tint, bool world, VectraQuality quality, List<SvgOverride> overrides = null, SvgAlign? align = null,
-            bool? slice = null)
+            bool? slice = null, int from = 0, int to = int.MaxValue)
         {
             renderer.BeginBatch();
             if (doc == null || doc.elements == null)
@@ -210,6 +221,9 @@ namespace FirstSymbol.Vectra.Svg
                 return;
             }
 
+            // Only the drawable elements in [from, to) are built; text and images are separate objects.
+            to = Mathf.Min(to, doc.elements.Count);
+
             var toLocal = doc.DocumentToLocal(localRect, align, slice);
             float scale = math.max(toLocal.UniformScale, 1e-6f);
             var frame = new ShapeFrame { rect = doc.viewBox, pixelSize = localPixelSize / scale };
@@ -217,7 +231,7 @@ namespace FirstSymbol.Vectra.Svg
             var clipPath = new NativePath(Allocator.TempJob, 32);
             var clipBuilder = new PathBuilder(clipPath);
 
-            for (int i = 0; i < doc.elements.Count; i++)
+            for (int i = Mathf.Max(from, 0); i < to; i++)
             {
                 var e = doc.elements[i];
                 if (e == null || e.isText || e.isImage || e.path == null || e.path.IsEmpty) continue;
@@ -234,7 +248,7 @@ namespace FirstSymbol.Vectra.Svg
 
                 if (hidden) continue;
                 s_Geometry.data = e.path;
-                s_Geometry.key = i * 7919 + doc.GetHashCode();
+                s_Geometry.key = e.path.ContentHash();
                 s_Fills[0].enabled = e.hasFill && e.fill != null;
                 s_Fills[0].paint = e.fill;
                 if (fillOverride.HasValue && e.fill != null)

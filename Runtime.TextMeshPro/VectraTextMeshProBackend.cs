@@ -49,9 +49,47 @@ namespace FirstSymbol.Vectra.TextEngines
             rt.localEulerAngles = new Vector3(0, 0, spec.rotation);
         }
 
+        // World text is set at a fixed size in points and scaled down to the document's world size, so the font size field stays in
+        // a range TextMesh Pro is comfortable with.
+        const float WorldReferenceSize = 36f;
+
+        public bool SupportsWorld => true;
+
+        public void BuildWorld(GameObject go, in VectraTextSpec spec)
+        {
+            var e = spec.element;
+            var t = go.GetComponent<TextMeshPro>();
+            if (t == null) t = go.AddComponent<TextMeshPro>();
+            bool exactBold = false;
+            Object resolved = spec.fontMap != null ? spec.fontMap.Resolve(VectraTextEngine.TextMeshPro, e.fontFamily, e.bold, out exactBold) : null;
+            var font = (resolved as TMP_FontAsset) ?? (spec.fallbackFont as TMP_FontAsset);
+            if (font != null) t.font = font;
+            float worldSize = Mathf.Max(spec.fontSize, 1e-6f);
+            float pointsPerUnit = WorldReferenceSize / worldSize;
+            float scale = (e.fontSize > 1e-4f ? spec.fontSize / e.fontSize : 1f) * pointsPerUnit;
+            t.isOrthographic = true; // one point is one unit, so the transform scale alone sets the world size
+            t.text = VectraRichText.Build(e, VectraMarkupDialect.TextMeshPro, spec.tint, scale, e.bold, e.italic);
+            t.fontSize = WorldReferenceSize;
+            t.color = spec.color;
+            t.fontStyle = (e.bold && !exactBold ? FontStyles.Bold : 0) | (e.italic ? FontStyles.Italic : 0);
+            t.textWrappingMode = TextWrappingModes.NoWrap;
+            t.sortingOrder = spec.sortingOrder;
+            float pivotX = e.anchor == SvgTextAnchor.Middle ? 0.5f : e.anchor == SvgTextAnchor.End ? 1f : 0f;
+            t.alignment = e.anchor == SvgTextAnchor.Middle ? TextAlignmentOptions.Baseline :
+                e.anchor == SvgTextAnchor.End ? TextAlignmentOptions.BaselineRight : TextAlignmentOptions.BaselineLeft;
+            var rt = (RectTransform)t.transform;
+            rt.pivot = new Vector2(pivotX, 0.5f);
+            rt.sizeDelta = new Vector2(t.preferredWidth + 4f, WorldReferenceSize * 1.5f);
+            float s = 1f / pointsPerUnit;
+            rt.localScale = new Vector3(s, s, s);
+            rt.localPosition = new Vector3(spec.origin.x, spec.origin.y, 0f);
+            rt.localEulerAngles = new Vector3(0, 0, spec.rotation);
+        }
+
         public string ReadText(GameObject go)
         {
-            var t = go != null ? go.GetComponent<TextMeshProUGUI>() : null;
+            if (go == null) return null;
+            var t = go.GetComponent<TMP_Text>();
             return t != null ? t.text : null;
         }
     }

@@ -61,10 +61,58 @@ namespace FirstSymbol.Vectra.TextEngines
             return Mathf.Abs(lines[0].Baseline);
         }
 
+        public bool SupportsWorld => true;
+
+        // Same set-up as Build, on the Canvas-free component. The object's origin is the baseline origin of the text.
+        public void BuildWorld(GameObject go, in VectraTextSpec spec)
+        {
+            var e = spec.element;
+            var t = go.GetComponent<LetteraWorldText>();
+            if (t == null) t = go.AddComponent<LetteraWorldText>();
+            bool exactBold = false;
+            Object resolved = spec.fontMap != null ? spec.fontMap.Resolve(VectraTextEngine.Lettera, e.fontFamily, e.bold, out exactBold) : null;
+            if (resolved == null) resolved = spec.fallbackFont;
+            t.Font = resolved as LetteraFontAsset;
+            t.FontStack = resolved as LetteraFontStack;
+            float scale = e.fontSize > 1e-4f ? spec.fontSize / e.fontSize : 1f;
+            t.Text = VectraRichText.Build(e, VectraMarkupDialect.Lettera, spec.tint, scale, exactBold, false);
+            t.FontSize = Mathf.Max(spec.fontSize, 0.01f);
+            t.color = spec.color;
+            t.WordWrap = false;
+            t.Overflow = LetteraOverflow.Visible;
+            t.AutoSize = false;
+            t.Padding = Vector4.zero;
+            t.RaycastTarget = false;
+            t.SortingOrder = spec.sortingOrder;
+            t.HorizontalAlignment = e.anchor == SvgTextAnchor.Middle ? LetteraHorizontalAlignment.Center :
+                e.anchor == SvgTextAnchor.End ? LetteraHorizontalAlignment.Right : LetteraHorizontalAlignment.Left;
+            t.VerticalAlignment = LetteraVerticalAlignment.Top;
+            var rt = (RectTransform)go.transform;
+            float pivotX = e.anchor == SvgTextAnchor.Middle ? 0.5f : e.anchor == SvgTextAnchor.End ? 1f : 0f;
+            rt.pivot = new Vector2(pivotX, 1f);
+            rt.sizeDelta = new Vector2(Mathf.Max(t.GetMaxContentWidth(), spec.fontSize), spec.fontSize * 2f);
+            t.ForceRebuild();
+            float down = BaselineBelowTop(t, spec.fontSize);
+            // The pivot hangs `down` above the baseline along the text's own up axis, so a rotated text still turns about its origin.
+            float turn = spec.rotation * Mathf.Deg2Rad;
+            rt.localPosition = new Vector3(spec.origin.x - Mathf.Sin(turn) * down, spec.origin.y + Mathf.Cos(turn) * down, 0f);
+            rt.localEulerAngles = new Vector3(0, 0, spec.rotation);
+        }
+
+        static float BaselineBelowTop(LetteraWorldText t, float fontSize)
+        {
+            var lines = t.Lines;
+            if (lines == null || lines.Count == 0) return fontSize * 0.8f;
+            return Mathf.Abs(lines[0].Baseline);
+        }
+
         public string ReadText(GameObject go)
         {
-            var t = go != null ? go.GetComponent<LetteraText>() : null;
-            return t != null ? t.Text : null;
+            if (go == null) return null;
+            var t = go.GetComponent<LetteraText>();
+            if (t != null) return t.Text;
+            var w = go.GetComponent<LetteraWorldText>();
+            return w != null ? w.Text : null;
         }
     }
 

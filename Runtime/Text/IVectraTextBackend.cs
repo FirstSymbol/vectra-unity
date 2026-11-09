@@ -22,6 +22,8 @@ namespace FirstSymbol.Vectra.TextEngines
         public VectraFontMap fontMap;
         /// <summary>The component's own font for this engine (used when the map has no match); may be null.</summary>
         public Object fallbackFont;
+        /// <summary>World space only: the sorting order of this text, so it keeps its place among the layers of the document.</summary>
+        public int sortingOrder;
     }
 
     /// <summary>
@@ -43,6 +45,15 @@ namespace FirstSymbol.Vectra.TextEngines
 
         /// <summary>Adds the engine's component to <paramref name="go"/> when missing and sets it up. Safe to call again.</summary>
         void Build(GameObject go, in VectraTextSpec spec);
+
+        /// <summary>Whether <see cref="BuildWorld"/> works: the engine has text that needs no Canvas.</summary>
+        bool SupportsWorld { get; }
+
+        /// <summary>
+        /// Like <see cref="Build"/> for text in world space (no Canvas). <see cref="VectraTextSpec.fontSize"/> is in world units and
+        /// <see cref="VectraTextSpec.origin"/> is the baseline origin relative to the parent object, in world units.
+        /// </summary>
+        void BuildWorld(GameObject go, in VectraTextSpec spec);
 
         /// <summary>The string handed to the engine (markup included), for diagnostics and tests.</summary>
         string ReadText(GameObject go);

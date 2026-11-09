@@ -15,7 +15,7 @@ namespace FirstSymbol.Vectra.Svg
     /// focal points, spread, href inheritance), strokes (dashes, joins, caps, miter, non-scaling), opacity,
     /// clip paths, masks (as geometric clips), common filters (blur, drop shadow, colour matrix), text and images.
     /// </summary>
-    public static class SvgParser
+    public static partial class SvgParser
     {
         static readonly HashSet<string> s_Inherited = new HashSet<string>
         {
@@ -31,7 +31,7 @@ namespace FirstSymbol.Vectra.Svg
             "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "font-family",
             "font-size", "font-weight", "font-style", "text-anchor", "visibility", "color", "clip-rule", "opacity",
             "display", "clip-path", "mask", "filter", "stop-color", "stop-opacity", "vector-effect", "flood-color",
-            "flood-opacity", "marker-start", "marker-mid", "marker-end"
+            "flood-opacity", "marker-start", "marker-mid", "marker-end", "marker", "overflow"
         };
 
         sealed class Context
@@ -44,7 +44,7 @@ namespace FirstSymbol.Vectra.Svg
             public PathBuilder builder;
             public int depth;
             public SvgParseOptions opt;
-            public int work, styleWork, uses, styleChars;
+            public int work, styleWork, uses, styleChars, markerDepth;
             public bool stopped, styleReady;
             public readonly List<SvgNode> activeUse = new List<SvgNode>();
             public readonly HashSet<string> warned = new HashSet<string>();
@@ -268,6 +268,8 @@ namespace FirstSymbol.Vectra.Svg
                 }
                 case "g":
                 case "a":
+                    if (n.name == "g" && n.children.Count > 1 && Number(Style(n, "opacity"), 1f) < 1f)
+                        ctx.Warn("Group opacity is applied to each child separately; overlapping children show through each other.");
                     foreach (var c in n.children) Render(c, local, op, elementClips, elementEffects, ctx);
                     break;
                 case "switch":
@@ -288,8 +290,9 @@ namespace FirstSymbol.Vectra.Svg
                 default:
                     if (BuildShape(n, ctx))
                     {
-                        WarnMarkers(n, ctx);
+                        var markers = CaptureMarkers(n, ctx);
                         Emit(n, local, op, elementClips, elementEffects, ctx);
+                        if (markers != null) DrawMarkers(n, markers, local, op, elementClips, elementEffects, ctx);
                     }
                     else if (n.children.Count > 0 && n.name != "foreignObject")
                         foreach (var c in n.children) Render(c, local, op, elementClips, elementEffects, ctx);
@@ -319,6 +322,9 @@ namespace FirstSymbol.Vectra.Svg
             float x = Length(n.Attr("x"), 0f, ctx.viewportW, ctx), y = Length(n.Attr("y"), 0f, ctx.viewportH, ctx);
             var m = local * Affine2.Translate(new float2(x, y));
             // The referenced content inherits the <use> element's style.
+            // The target is restyled for this copy only; the styles it has where it stands are put back afterwards.
+            var savedStyles = new List<KeyValuePair<SvgNode, Dictionary<string, string>>>();
+            SaveStyles(target, savedStyles, 0);
             ComputeStyles(target, n.style, ctx);
             ctx.activeUse.Add(target);
             if (target.name == "symbol")
@@ -331,6 +337,14 @@ namespace FirstSymbol.Vectra.Svg
             else Render(target, m, op, clips, effects, ctx);
 
             ctx.activeUse.RemoveAt(ctx.activeUse.Count - 1);
+            foreach (var saved in savedStyles) saved.Key.style = saved.Value;
+        }
+
+        static void SaveStyles(SvgNode n, List<KeyValuePair<SvgNode, Dictionary<string, string>>> into, int depth)
+        {
+            into.Add(new KeyValuePair<SvgNode, Dictionary<string, string>>(n, n.style));
+            if (depth > 512) return;
+            foreach (var c in n.children) SaveStyles(c, into, depth + 1);
         }
 
         /// <summary>The first child of a &lt;switch&gt; whose conditional attributes all pass (SVG 1.1 section 5.8).</summary>
@@ -376,14 +390,6 @@ namespace FirstSymbol.Vectra.Svg
             }
 
             return false;
-        }
-
-        static void WarnMarkers(SvgNode n, Context ctx)
-        {
-            if (n.name != "path" && n.name != "line" && n.name != "polyline" && n.name != "polygon") return;
-            if (HasMarker(Style(n, "marker")) || HasMarker(Style(n, "marker-start")) || HasMarker(Style(n, "marker-mid")) ||
-                HasMarker(Style(n, "marker-end")))
-                ctx.Warn("Markers (marker-start, marker-mid, marker-end) are not drawn; arrowheads and similar shapes are missing.");
         }
 
         static bool HasMarker(string value) => !string.IsNullOrEmpty(value) && value.Trim() != "none";

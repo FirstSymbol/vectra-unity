@@ -21,6 +21,10 @@ namespace FirstSymbol.Vectra.TextEngines
         public bool AcceptsFont(Object font) => false;
         public bool IsUsable(VectraFontMap map, Object fallbackFont) => true;
 
+        // uGUI Text only draws inside a Canvas, so it has no world-space mode.
+        public bool SupportsWorld => false;
+        public void BuildWorld(GameObject go, in VectraTextSpec spec) { }
+
         static Font BuiltIn()
         {
             if (s_Font == null) s_Font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");

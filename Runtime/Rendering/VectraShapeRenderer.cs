@@ -459,7 +459,17 @@ namespace FirstSymbol.Vectra.Rendering
             h.Add(m_Frame.rect.width);
             h.Add(m_Frame.rect.height);
             h.Add((int)math.round(math.log2(math.max(tol, 1e-6f)) * 4f));
-            if (input.clip.HasValue) h.Add(input.clip.Value.points.Length * 31 + (int)input.clipRule);
+            if (input.clip.HasValue && input.clip.Value.IsCreated)
+            {
+                // The clip outline itself, not only its size: two clips with as many points are different clips.
+                var clipPoints = input.clip.Value.points;
+                h.Add(clipPoints.Length * 31 + (int)input.clipRule);
+                for (int i = 0; i < clipPoints.Length; i++)
+                {
+                    h.Add(clipPoints[i].x);
+                    h.Add(clipPoints[i].y);
+                }
+            }
             int key = h.Value | 1;
             if (key == m_PolyKey) return;
             m_PolyKey = key;

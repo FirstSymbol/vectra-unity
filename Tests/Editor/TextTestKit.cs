@@ -38,6 +38,17 @@ namespace FirstSymbol.Vectra.Editor.Tests
             go.name = NameOf(Engine); // an Editor-folder script cannot be attached, so the name is the mark
         }
 
+        public bool supportsWorld = true;
+        public int worldBuilds;
+        public bool SupportsWorld => supportsWorld;
+
+        public void BuildWorld(GameObject go, in VectraTextSpec spec)
+        {
+            worldBuilds++;
+            last = spec;
+            go.name = NameOf(Engine);
+        }
+
         public string ReadText(GameObject go) => last.element != null ? last.element.text : null;
     }
 

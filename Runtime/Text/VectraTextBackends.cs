@@ -52,12 +52,15 @@ namespace FirstSymbol.Vectra.TextEngines
         /// <summary>
         /// Picks the backend for <paramref name="requested"/>. Auto takes the first usable of Lettera, TextMesh Pro, Legacy.
         /// A named engine that is missing or unusable falls back along the same order; None draws nothing.
+        /// With <paramref name="world"/> only engines that can draw without a Canvas count (the legacy one cannot).
         /// </summary>
-        public static VectraTextChoice Resolve(VectraTextEngine requested, VectraFontMap map, Object tmpFont, Object letteraFont)
+        public static VectraTextChoice Resolve(VectraTextEngine requested, VectraFontMap map, Object tmpFont, Object letteraFont,
+            bool world = false)
         {
             var choice = new VectraTextChoice { requested = requested };
             if (requested == VectraTextEngine.None) return choice;
-            if (requested != VectraTextEngine.Auto && s_Backends.TryGetValue(requested, out var named) && named.IsUsable(map, FontFor(named, tmpFont, letteraFont)))
+            if (requested != VectraTextEngine.Auto && s_Backends.TryGetValue(requested, out var named) && (!world || named.SupportsWorld) &&
+                named.IsUsable(map, FontFor(named, tmpFont, letteraFont)))
             {
                 choice.backend = named;
                 return choice;
@@ -66,7 +69,8 @@ namespace FirstSymbol.Vectra.TextEngines
             foreach (var engine in s_AutoOrder)
             {
                 if (engine == requested) continue;
-                if (!s_Backends.TryGetValue(engine, out var b) || !b.IsUsable(map, FontFor(b, tmpFont, letteraFont))) continue;
+                if (!s_Backends.TryGetValue(engine, out var b) || (world && !b.SupportsWorld) ||
+                    !b.IsUsable(map, FontFor(b, tmpFont, letteraFont))) continue;
                 choice.backend = b;
                 choice.fellBack = requested != VectraTextEngine.Auto;
                 return choice;

@@ -36,8 +36,23 @@ namespace FirstSymbol.Vectra
 
         VectraShapeRenderer m_Renderer;
         Mesh m_Mesh;
-        readonly List<GameObject> m_Generated = new List<GameObject>();
+        // Everything generated for the document, in paint order: texts, images and the mesh runs that follow them.
+        sealed class Generated
+        {
+            public GameObject go;
+            public SvgElementData element;
+            public VectraSvgLayer layer;
+            public bool isText;
+        }
+
+        readonly List<Generated> m_Generated = new List<Generated>();
+        readonly List<SvgDrawItem> m_Items = new List<SvgDrawItem>();
+        int m_Signature, m_BuiltSignature;
         bool m_ChildrenDirty = true;
+        bool m_LayoutDirty;
+        bool m_LayersDirty;
+        Vector2 m_LaidOutSize;
+        IVectraTextBackend m_Backend;
         VectraTextEngine m_WarnedFor = (VectraTextEngine)(-1);
         VectraSvgDocument m_WarnedDocument;
 
@@ -54,6 +69,7 @@ namespace FirstSymbol.Vectra
         }
 
         public List<SvgOverride> Overrides => m_Overrides;
+        internal ShapeBlendMode BlendMode => m_BlendMode;
         public VectraBuildStats Stats => m_Renderer?.stats ?? default;
 
         public bool PreserveAspect
@@ -174,7 +190,8 @@ namespace FirstSymbol.Vectra
         protected override void OnRectTransformDimensionsChange()
         {
             base.OnRectTransformDimensionsChange();
-            m_ChildrenDirty = true;
+            // Texts and images move to their new places; nothing is destroyed.
+            m_LayoutDirty = true;
         }
 
         float PixelSize()
@@ -197,60 +214,123 @@ namespace FirstSymbol.Vectra
         {
             m_Renderer ??= new VectraShapeRenderer();
             if (m_Mesh == null) m_Mesh = new Mesh { name = "Vectra SVG", hideFlags = HideFlags.HideAndDontSave };
-            VectraSvgBuilder.Build(m_Document, m_Renderer, rectTransform.rect, PixelSize(), color, false, m_Quality,
-                m_Overrides, m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None);
-            m_Renderer.buffer.Upload(m_Mesh);
+            m_Signature = SvgDrawOrder.Split(m_Document, m_GenerateText, true, m_Items);
+            SvgDrawOrder.MainRange(m_Items, out int from, out int to);
+            BuildMesh(m_Renderer, m_Mesh, from, to);
             canvasRenderer.SetMesh(m_Mesh);
+            m_LayersDirty = m_Generated.Count > 0;
         }
 
-        void LateUpdate()
+        /// <summary>Builds the path elements in [from, to) of the document into <paramref name="mesh"/>.</summary>
+        internal void BuildMesh(VectraShapeRenderer renderer, Mesh mesh, int from, int to)
         {
-            if (!m_ChildrenDirty) return;
-            m_ChildrenDirty = false;
-            RebuildChildren();
+            VectraSvgBuilder.Build(m_Document, renderer, rectTransform.rect, PixelSize(), color, false, m_Quality,
+                m_Overrides, m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None, null, from, to);
+            renderer.buffer.Upload(mesh);
+        }
+
+        void LateUpdate() => RefreshGenerated();
+
+        /// <summary>Brings the generated children up to date: rebuilds them when the document changed, otherwise only moves them.</summary>
+        internal void RefreshGenerated()
+        {
+            // The layout of the document changed (elements added or reordered): the generated objects no longer match it.
+            if (m_Signature != m_BuiltSignature) m_ChildrenDirty = true;
+            if (rectTransform.rect.size != m_LaidOutSize) m_LayoutDirty = true;
+            if (m_ChildrenDirty)
+            {
+                m_ChildrenDirty = false;
+                m_LayoutDirty = false;
+                RebuildChildren();
+            }
+            else if (m_LayoutDirty)
+            {
+                m_LayoutDirty = false;
+                LayoutChildren();
+            }
+
+            if (m_LayersDirty)
+            {
+                m_LayersDirty = false;
+                foreach (var g in m_Generated)
+                    if (g.layer != null) g.layer.SetVerticesDirty();
+            }
         }
 
         void ClearGenerated()
         {
-            foreach (var go in m_Generated)
-                if (go != null)
+            foreach (var g in m_Generated)
+                if (g.go != null)
                 {
-                    if (Application.isPlaying) Destroy(go);
-                    else DestroyImmediate(go);
+                    if (Application.isPlaying) Destroy(g.go);
+                    else DestroyImmediate(g.go);
                 }
 
             m_Generated.Clear();
+            m_Backend = null;
         }
 
         /// <summary>Rebuilds the generated text and image children now (otherwise it happens in the next LateUpdate).</summary>
         public void RebuildGenerated()
         {
             m_ChildrenDirty = false;
+            m_LayoutDirty = false;
             RebuildChildren();
         }
 
         void RebuildChildren()
         {
             ClearGenerated();
+            m_BuiltSignature = SvgDrawOrder.Split(m_Document, m_GenerateText, true, m_Items);
+            m_Signature = m_BuiltSignature;
             if (m_Document == null) return;
-            var toLocal = m_Document.DocumentToLocal(rectTransform.rect, m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None);
-            float scale = toLocal.UniformScale;
             VectraTextChoice choice = default;
             bool chosen = false;
-            foreach (var e in m_Document.elements)
+            for (int i = 0; i < m_Items.Count; i++)
             {
-                if (e.isText && m_GenerateText)
+                var item = m_Items[i];
+                if (!item.overlay)
+                {
+                    if (i > 0) CreateLayer(item.from, item.to); // the first run, when it opens the document, is the component's own mesh
+                    continue;
+                }
+
+                var e = m_Document.elements[item.from];
+                if (e.isText)
                 {
                     if (!chosen)
                     {
                         choice = ResolveTextBackend();
                         chosen = true;
                         WarnOnce(choice);
+                        m_Backend = choice.backend;
                     }
 
-                    if (choice.backend != null) CreateText(choice.backend, e, toLocal, scale);
+                    if (choice.backend != null) CreateChild("SVG Text", e, true);
                 }
-                else if (e.isImage) CreateImage(e, toLocal);
+                else CreateImage(e);
+            }
+
+            LayoutChildren();
+            m_LayersDirty = true;
+        }
+
+        // Puts every generated text and image where the current rect says. Safe to repeat; creates nothing.
+        void LayoutChildren()
+        {
+            if (m_Document == null) return;
+            var rect = rectTransform.rect;
+            m_LaidOutSize = rect.size;
+            var toLocal = m_Document.DocumentToLocal(rect, m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None);
+            float scale = toLocal.UniformScale;
+            foreach (var g in m_Generated)
+            {
+                if (g.go == null || g.element == null) continue;
+                if (g.isText)
+                {
+                    if (m_Backend != null) ConfigureText(m_Backend, g.go, g.element, toLocal, scale, rect);
+                }
+                else PlaceImage(g.go, g.element, toLocal, rect);
             }
         }
 
@@ -268,18 +348,25 @@ namespace FirstSymbol.Vectra
                 Debug.LogWarning($"Vectra: the {choice.requested} text engine is not available for '{m_Document.name}'; using {choice.Used}.", this);
         }
 
-        GameObject CreateChild(string name)
+        GameObject CreateChild(string name, SvgElementData element, bool isText)
         {
             var go = new GameObject(name, typeof(RectTransform)) { hideFlags = HideFlags.DontSave | HideFlags.NotEditable };
             go.transform.SetParent(transform, false);
-            m_Generated.Add(go);
+            m_Generated.Add(new Generated { go = go, element = element, isText = isText });
             return go;
         }
 
-        void CreateText(IVectraTextBackend backend, SvgElementData e, Affine2 toLocal, float scale)
+        void CreateLayer(int from, int to)
         {
-            var go = CreateChild("SVG Text");
-            ConfigureText(backend, go, e, toLocal, scale, rectTransform.rect);
+            var go = new GameObject("SVG Layer", typeof(RectTransform)) { hideFlags = HideFlags.DontSave | HideFlags.NotEditable };
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(transform, false);
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            var layer = go.AddComponent<VectraSvgLayer>();
+            layer.Setup(this, from, to);
+            m_Generated.Add(new Generated { go = go, layer = layer });
         }
 
         /// <summary>Sets up a text object of <paramref name="backend"/> for an SVG text element placed in a rect of this image's size.</summary>
@@ -301,7 +388,7 @@ namespace FirstSymbol.Vectra
             backend.Build(go, spec);
         }
 
-        void CreateImage(SvgElementData e, Affine2 toLocal)
+        void CreateImage(SvgElementData e)
         {
             if (e.image == null && e.imageData != null)
             {
@@ -310,15 +397,19 @@ namespace FirstSymbol.Vectra
             }
 
             if (e.image == null) return;
-            var go = CreateChild("SVG Image");
+            var go = CreateChild("SVG Image", e, false);
             var img = go.AddComponent<RawImage>();
             img.texture = e.image;
-            img.color = e.textColor * color;
             img.raycastTarget = false;
+        }
+
+        void PlaceImage(GameObject go, SvgElementData e, Affine2 toLocal, Rect rect)
+        {
+            var img = go.GetComponent<RawImage>();
+            if (img != null) img.color = e.textColor * color;
             var rt = (RectTransform)go.transform;
             float2 a = toLocal.Apply(new float2(e.imageRect.xMin, e.imageRect.yMin));
             float2 b = toLocal.Apply(new float2(e.imageRect.xMax, e.imageRect.yMax));
-            var rect = rectTransform.rect;
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.sizeDelta = new Vector2(math.abs(b.x - a.x), math.abs(b.y - a.y));
             rt.anchoredPosition = new Vector2((a.x + b.x) * 0.5f - rect.center.x, (a.y + b.y) * 0.5f - rect.center.y);

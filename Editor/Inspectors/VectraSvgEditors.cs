@@ -320,6 +320,20 @@ namespace FirstSymbol.Vectra.Editor
             look.Add(VxFields.For(so.FindProperty("m_SortingOrder"), t, "Sorting order"));
             root.Add(VxUI.TitledCard("vectra.svgr.look", VxIcon.Kind.Fill, "Appearance", look));
 
+            var text = new VisualElement();
+            text.Add(VxFields.For(so.FindProperty("m_GenerateText"), t, "Generate text"));
+            text.Add(VxUI.Row("Text engine", VxSegmented.ForEnum(so.FindProperty("m_TextEngine"),
+                new[] { "Project", "Auto", "Lettera", "TMP", "Legacy", "None" },
+                null, new[] { "Follow Project Settings > Vectra", "Lettera if installed, else TextMesh Pro", "Lettera World Text", "TextMesh Pro 3D", "Legacy uGUI Text cannot draw in world space", "Do not draw text" }),
+                "Which engine draws the text of this document").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
+            text.Add(VxFields.For(so.FindProperty("m_FontMap"), t, "Font map").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
+            text.Add(VectraTextSettingsUI.FontField(so.FindProperty("m_Font"), VectraTextEngine.TextMeshPro, "Fallback font (TMP)",
+                "TextMesh Pro font used when the font map has no match (empty = TextMesh Pro default)").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
+            text.Add(VectraTextSettingsUI.FontField(so.FindProperty("m_LetteraFont"), VectraTextEngine.Lettera, "Fallback font (Lettera)",
+                "Lettera font asset or stack used when the font map has no match (empty = Lettera default)").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
+            text.Add(VxUI.Text("World text needs Lettera or TextMesh Pro: the legacy uGUI Text only draws inside a Canvas, so with only that engine the text is skipped. Embedded images are not drawn in world space.", "vx-hint"));
+            root.Add(VxUI.TitledCard("vectra.svgr.text", VxIcon.Kind.Text, "Text", text, null, false));
+
             root.Add(VxUI.TitledCard("vectra.svgr.overrides", VxIcon.Kind.Select, "Overrides", VxSvg.Overrides(so, so.FindProperty("m_Overrides"), () => r != null ? r.Document : null)));
             root.Add(VxUI.TitledCard("vectra.svgr.warn", VxIcon.Kind.Warning, "Import report", VxSvg.Warnings(() => r != null ? r.Document : null), null, false));
             root.Bind(so);
