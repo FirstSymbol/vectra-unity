@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `unity command vectra svg_create` and `svg_parse` take `--text_engine`; `stats` reports the engine in use.
 - The CLI logic lives in `FirstSymbol.Vectra.Editor.CliCore`, which needs no `com.unity.pipeline` and is covered by tests; `FirstSymbol.Vectra.Editor.Cli` only holds command names and arguments.
 
+### Upgrade notes (from 0.2.x)
+- **SVG text moves down.** In 0.2 TextMesh Pro SVG text sat about half a font size too high. It now lands on the SVG's `y`, so a project that keeps TextMesh Pro (the upgrade pins it) still sees its SVG text shift down by about 0.5 em.
+- **API break: `VectraFontMap.Resolve` returns `UnityEngine.Object`, not `TMP_FontAsset`.** `VectraFontMap.fallback`, `Entry.regular`, `Entry.bold` and `VectraSvgImage` fallback font are `Object` too. Cast to `TMP_FontAsset` in code that used them. Saved assets are unchanged. `VectraSvgImage.ConfigureText(TextMeshProUGUI, ...)` is gone.
+- The text engine is pinned to TextMesh Pro once (console line "Vectra 0.3: ..."); choose Auto or Lettera in Project Settings > Vectra to change it.
+
 ### Changed
 - Upgrading from 0.2: a project that already used Vectra (a Vectra settings file, a font map, or an SVG with text) gets **TextMesh Pro** written into its settings once, with a console line, so its SVG text does not change. New projects start on Auto.
 - `VectraFontMap` fields and `VectraSvgImage` fallback font are plain object references now instead of `TMP_FontAsset`, so the core does not depend on TextMesh Pro. Saved data is unchanged; `Resolve` returns `Object`.
@@ -23,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - The core assembly no longer references `Unity.TextMeshPro`.
 
 ### Fixed
+- The text engine chosen in the project settings is in force from the first frame of play mode, and after the 0.2 upgrade pins TextMesh Pro the open SVG images rebuild their text at once (before, an image could be built on Auto, which meant Lettera when installed).
 - SVG text drawn with TextMesh Pro sat about half a font size too high (the baseline was put on the middle of the text box, not at its bottom) and turned about the wrong point when rotated. The baseline now lands on the SVG's `y`, in every engine; a render test checks the pixels. Projects that keep TextMesh Pro see their SVG text move down by that amount.
 
 ### Limits

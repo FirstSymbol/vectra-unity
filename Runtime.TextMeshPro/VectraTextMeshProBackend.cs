@@ -56,9 +56,10 @@ namespace FirstSymbol.Vectra.TextEngines
         }
     }
 
+    [UnityEngine.Scripting.Preserve]
     static class VectraTextMeshProRegistration
     {
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration), UnityEngine.Scripting.Preserve]
         static void RegisterInPlayer() => Register();
 
 #if UNITY_EDITOR

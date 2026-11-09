@@ -64,19 +64,24 @@ namespace FirstSymbol.Vectra.Editor
         [InitializeOnLoadMethod]
         static void OnLoad()
         {
+            // Put the saved choice in force at once: components that build their text in the first frames of play mode must
+            // already see it (a settings object read late would leave them on Auto, and a pinned project on Lettera).
+            var s = VectraProjectSettings.instance;
+            s.Apply();
+            if (s.SettingsVersion >= TextEngineVersion) return;
             // The asset database is not ready while scripts load.
             EditorApplication.delayCall += () =>
             {
-                var s = VectraProjectSettings.instance;
-                if (s.SettingsVersion >= TextEngineVersion)
-                {
-                    s.Apply();
-                    return;
-                }
-
                 bool existed = System.IO.File.Exists(SettingsFile);
-                Upgrade(s, existed, AnyFontMap, AnyTextDocument, true);
+                if (Upgrade(s, existed, AnyFontMap, AnyTextDocument, true)) RefreshImages();
             };
+        }
+
+        /// <summary>Rebuilds the text of every open SVG image, so the engine the upgrade just chose is the one on screen.</summary>
+        internal static void RefreshImages()
+        {
+            foreach (var img in UnityEngine.Object.FindObjectsByType<VectraSvgImage>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                img.RebuildGenerated();
         }
     }
 }

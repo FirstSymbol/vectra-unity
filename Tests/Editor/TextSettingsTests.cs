@@ -181,6 +181,31 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         [Test]
+        public void AfterAnUpgrade_OpenImagesRebuildTheirTextWithTheNewEngine()
+        {
+            using (var scope = new ImageScope())
+            {
+                VectraRuntimeSettings.ProjectTextEngine = VectraTextEngine.Legacy;
+                var img = scope.Image();
+                Assert.AreEqual(3, ImageScope.Texts(img).Count);
+                VectraRuntimeSettings.ProjectTextEngine = VectraTextEngine.None;
+                VectraUpgrade.RefreshImages();
+                Assert.AreEqual(0, ImageScope.Texts(img).Count, "rebuilt with the engine now in force");
+            }
+        }
+
+        [Test]
+        public void TheSatelliteAssemblies_AreKeptByManagedStripping()
+        {
+            foreach (var name in new[] { "FirstSymbol.Vectra.Lettera", "FirstSymbol.Vectra.TextMeshPro" })
+            {
+                var asm = System.AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == name);
+                if (asm == null) continue; // not in this project
+                Assert.IsTrue(asm.GetCustomAttributes(typeof(UnityEngine.Scripting.AlwaysLinkAssemblyAttribute), false).Length == 1, name + " needs [assembly: AlwaysLinkAssembly]");
+            }
+        }
+
+        [Test]
         public void TheAssetProbes_RunWithoutErrors()
         {
             Assert.DoesNotThrow(() => VectraUpgrade.AnyFontMap());
