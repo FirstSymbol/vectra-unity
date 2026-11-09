@@ -70,6 +70,19 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         [Test]
+        public void ImportFailed_SeesAVectraSvgThatCameOutPlain_AndOnlyThat()
+        {
+            string good = Import("good", Svg, VectraSvgImporter.OutputMode.Document);
+            Assert.IsFalse(VectraSvgImporterPostprocessor.ImportFailed(good), "a working import");
+            string other = Folder + "/other.svg";
+            File.WriteAllText(other, Svg);
+            AssetDatabase.ImportAsset(other, ImportAssetOptions.ForceSynchronousImport);
+            Assert.IsFalse(VectraSvgImporterPostprocessor.ImportFailed(other), "not Vectra's importer");
+            Assert.IsFalse(VectraSvgImporterPostprocessor.ImportFailed(Folder + "/missing.svg"));
+            Assert.IsFalse(VectraSvgImporterPostprocessor.ImportFailed(Folder + "/x.png"));
+        }
+
+        [Test]
         public void TextureMode_BakesAPicture()
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) Assert.Ignore("raster import needs a graphics device");

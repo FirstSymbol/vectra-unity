@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - SVG text and images were drawn above the whole document, so a shape that follows a text in the file was drawn below it. Paint order is kept (see Added in the guide: runs of shapes after a text are children of the image, or sorted meshes in world space).
 - A stale outline: the SVG element cache was keyed by element index and document instance, so a document parsed again into the same instance, or a path edited in place, kept the old geometry; two clip paths with as many points as each other were mixed up. The keys hash the path and the clip content now.
 - A `<use>` restyled its target for good: an element drawn where it stands after a `<use>` of it took the `<use>`'s inherited style. The target gets its own style back.
+- An `.svg` that was imported before Vectra's importer scripts were registered (the first import of a project that already holds the file) stayed a plain asset until reimported by hand; it is reimported once, automatically.
+- The URP Backdrop sample broke compilation in a project without URP once imported; it has its own assembly definition now.
 - A group's `opacity` is applied to each child (not to the group as a whole); the import report now says so.
 
 ### Limits

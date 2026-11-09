@@ -81,8 +81,29 @@ namespace FirstSymbol.Vectra.Editor
     /// <summary>Makes Vectra the importer of new .svg files when enabled in the project settings.</summary>
     class VectraSvgImporterPostprocessor : AssetPostprocessor
     {
+        static readonly System.Collections.Generic.HashSet<string> s_Retried = new System.Collections.Generic.HashSet<string>();
+
+        /// <summary>
+        /// An .svg that carries Vectra's importer but came out as a plain asset: the import ran before the importer's own scripts were
+        /// registered (the first import of a project that already holds the file), and Unity caches the failure. Imported again once the
+        /// scripts are there, it works.
+        /// </summary>
+        internal static bool ImportFailed(string path) =>
+            path.EndsWith(".svg", System.StringComparison.OrdinalIgnoreCase) && AssetImporter.GetAtPath(path) is VectraSvgImporter &&
+            AssetDatabase.LoadMainAssetAtPath(path) is DefaultAsset;
+
         static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
         {
+            foreach (var path in imported)
+            {
+                if (!s_Retried.Contains(path) && ImportFailed(path))
+                {
+                    s_Retried.Add(path);
+                    string again = path;
+                    EditorApplication.delayCall += () => AssetDatabase.ImportAsset(again, ImportAssetOptions.ForceUpdate);
+                }
+            }
+
             if (!VectraProjectSettings.instance.useVectraSvgImporter) return;
             foreach (var path in imported)
             {
