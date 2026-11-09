@@ -9,7 +9,7 @@ a few other shapes still builds a small point array).
 *Русская версия: [Vectra.ru.md](Vectra.ru.md).*
 
 - **Unity** 6000.3 (6.3 LTS) or newer · **Render pipelines** Built-in, URP, HDRP (backdrop effects: URP only)
-- **Dependencies** Burst, Collections, Mathematics, uGUI (TextMeshPro for SVG text)
+- **Dependencies** Burst, Collections, Mathematics, uGUI. SVG text uses Lettera or TextMesh Pro when present, else the legacy uGUI Text
 - **Platforms** Shader Model 3.5 and up: Windows, macOS, Linux, WebGL 2, WebGPU, iOS, Android.
   No compute shaders. On WebGL the Burst jobs run as IL2CPP code.
 
@@ -79,7 +79,7 @@ paints, backdrop shapes and soft-masked children are the exceptions (their own t
 | `VectraBackdrop` (URP) | Frosted glass and advanced blend modes |
 
 Assets: `VectraStyle` (shared fills/strokes/effects, like a CSS class), `VectraShapeAsset` (shared geometry: a shape library), `VectraPalette` (named colours per theme),
-`VectraSvgDocument` (imported SVG), `VectraFontMap` (SVG font-family → TextMeshPro font).
+`VectraSvgDocument` (imported SVG), `VectraFontMap` (SVG font-family → font of each text engine).
 
 Create objects from **GameObject → UI → Vectra** (Canvas) or **GameObject → 2D Object → Vectra** (world).
 
@@ -191,8 +191,8 @@ Sprite or Texture. **Window → Vectra → SVG Import Report** lists what each f
 
 **Supported:** paths (all commands), basic shapes, groups, nested svg, use/symbol/defs, transforms, CSS (`<style>`,
 selectors, specificity, inheritance), presentation attributes, linear and radial gradients (with transforms and
-spread), strokes with dashes, opacity, clip paths, blur and drop-shadow filters, saturate / hue-rotate, `<text>` via
-TextMeshPro, embedded data-URI images.
+spread), strokes with dashes, opacity, clip paths, blur and drop-shadow filters, saturate / hue-rotate, `<text>` with
+`<tspan>` styling (see Text engines below), embedded data-URI images.
 
 **Runtime API:**
 
@@ -206,8 +206,36 @@ VectraSvg.Download(url, (d, error) => svgImage.Document = d);
 document into one `VectraShape` per element so each can be edited or animated. Clip paths become boolean operands
 (filled elements) or nested stencil masks (stroked elements).
 
-**Fonts.** A `VectraFontMap` (Assets → Create → Vectra → SVG Font Map) maps `font-family` names to TextMeshPro fonts;
-assign it on the SVG Image (new images get the default from Project Settings).
+**Text engines.** SVG `<text>` is drawn by a text engine, chosen in **Project Settings → Vectra → Text engine**:
+
+| Engine | Drawn with | Needs |
+|---|---|---|
+| Auto (default in new projects) | Lettera if installed, else TextMesh Pro if it has a font, else Legacy | |
+| Lettera | `LetteraText` | the Lettera package 1.0.0 or newer |
+| TextMesh Pro | `TextMeshProUGUI` | TMP Essential Resources, or a TMP font in the font map or on the component |
+| Legacy | uGUI `Text` with the built-in font | nothing; font families are ignored |
+| None | the text is not drawn | |
+
+The page shows which engines this project has and what Auto picks. A named engine that is missing or has no font falls
+back along the Auto order and the console says so once per document. Each SVG Image can override the project choice
+(**Text engine** in its inspector, or `image.TextEngine`). The engine is also carried into player builds.
+
+Text keeps its styling: a `<tspan>` with its own bold, italic, fill or size stays inside one text as markup (`<b>`,
+`<i>`, `<color>`, `<size>`) in every engine. Not drawn: per-`<tspan>` positions (`x`, `y`, `dx`, `dy`), `textPath`,
+`letter-spacing` and text decoration; a `<tspan>` with another `font-family` uses the font of the whole text. World-space
+`VectraSvgRenderer` draws no text yet.
+
+**Upgrading from 0.2.** Before 0.3 all SVG text used TextMesh Pro. A project that already used Vectra (it has a Vectra
+settings file, a font map, or an SVG with text) gets **TextMesh Pro** written into its settings once, with a line in the
+console, so its text looks as before. Choose **Auto** or **Lettera** to move to Lettera. New projects start on Auto.
+`VectraFontMap` keeps its TextMesh Pro fields as they were (they are plain object references now, the saved data is the
+same) and has Lettera fields next to them: `lettera`, `letteraBold`, `letteraFallback` (a Lettera font asset or font
+stack).
+
+**Fonts.** A `VectraFontMap` (Assets → Create → Vectra → SVG Font Map) maps `font-family` names to the fonts of each
+engine; assign it on the SVG Image (new images get the default from Project Settings). Without a match the component's
+fallback font (one per engine), then the engine's default font, is used. Lettera finds fonts only through the map in
+this version.
 
 **Limitations:** `<mask>` is applied as a geometric clip (luminance is ignored); pattern fills fall back to the colour
 of the first pattern shape; only blur, drop shadow, saturate and hue-rotate filters; external image URLs are not
@@ -273,10 +301,10 @@ background. The *URP Backdrop* sample is set up this way. Backdrop shapes use th
 
 ## Command line
 
-With the `com.unity.pipeline` package installed, the optional assembly `FirstSymbol.Vectra.Editor.Cli` registers `unity command vectra …` commands for scripts, CI and AI agents. Every command answers JSON and edits are undoable:
+With the `com.unity.pipeline` package installed, the optional assembly `FirstSymbol.Vectra.Editor.Cli` registers `unity command vectra …` commands for scripts, CI and AI agents. What the commands do lives in `FirstSymbol.Vectra.Editor.CliCore`, which does not need that package (the tests call it directly); the Cli assembly only holds names and arguments. Every command answers JSON and edits are undoable:
 
 - discovery: `help`, `types` (all shapes, effects and paints with defaults), `list`, `get --target` (`--full true` for every field);
-- authoring: `create`, `set --data <json patch>`, `add`, `remove`, `mask`, `states`, `convert_to_path`, `save_style`, `save_shape`, `palette`, `theme`, `svg_parse`, `svg_create`, `select`;
+- authoring: `create`, `set --data <json patch>`, `add`, `remove`, `mask`, `states`, `convert_to_path`, `save_style`, `save_shape`, `palette`, `theme`, `svg_parse` and `svg_create` (both take `--text_engine`), `select`;
 - output: `export_png` (check results visually), `export_svg`.
 
 ```bash
@@ -312,5 +340,5 @@ unity command vectra expand_svg --target "SVG Image"
 | A shape is invisible in a Canvas | The canvas needs TexCoord1–3 shader channels (added automatically when the shape is enabled under it) |
 | Backdrop shapes render plain | Add the Vectra Backdrop Feature to the active URP renderer |
 | Glass does not blur other UI | Draw the background UI with a base camera and the glass with an overlay camera |
-| SVG text is missing | Import TextMeshPro Essential Resources or assign a font / font map |
+| SVG text is missing | Check **Project Settings → Vectra → Text engine**. For TextMesh Pro import TMP Essential Resources or assign a font / font map; Lettera needs the package; the console warns once when an engine had to be replaced |
 | `.svg` imported by another importer | Choose Vectra Svg Importer on the file or enable it in Project Settings |

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using FirstSymbol.Vectra.Geometry;
-using TMPro;
+using FirstSymbol.Vectra.TextEngines;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -47,8 +47,8 @@ namespace FirstSymbol.Vectra.Svg
 
         /// <summary>
         /// Converts the document drawn by <paramref name="image"/> into a hierarchy of separate
-        /// <see cref="VectraShape"/> objects (one per element; text and images become TextMeshPro and RawImage
-        /// objects) so every element can be edited and animated on its own. The new root is created next to the
+        /// <see cref="VectraShape"/> objects (one per element; text becomes objects of the image's text engine and images
+        /// become RawImage objects) so every element can be edited and animated on its own. The new root is created next to the
         /// image with the same rect; the image itself is left untouched.
         /// </summary>
         public static RectTransform Expand(VectraSvgImage image)
@@ -72,12 +72,13 @@ namespace FirstSymbol.Vectra.Svg
             var toLocal = doc.DocumentToLocal(rect, image.PreserveAspect ? (SvgAlign?)null : SvgAlign.None);
             float scale = toLocal.UniformScale;
             var used = new HashSet<string>();
+            var text = image.ResolveTextBackend();
             for (int i = 0; i < doc.elements.Count; i++)
             {
                 var e = doc.elements[i];
                 if (e == null) continue;
                 string name = UniqueName(string.IsNullOrEmpty(e.id) ? e.tag + " " + i : e.id, used);
-                if (e.isText) ExpandText(e, root, rect, toLocal, scale, name, image);
+                if (e.isText) ExpandText(text.backend, e, root, rect, toLocal, scale, name, image);
                 else if (e.isImage) ExpandImage(e, root, rect, toLocal, name, image.color);
                 else if (e.path != null && !e.path.IsEmpty) ExpandPath(e, root, rect, toLocal, scale, name, image.color);
             }
@@ -215,13 +216,13 @@ namespace FirstSymbol.Vectra.Svg
             return fx;
         }
 
-        static void ExpandText(SvgElementData e, Transform root, Rect rootRect, Affine2 toLocal, float scale, string name,
-            VectraSvgImage image)
+        static void ExpandText(IVectraTextBackend backend, SvgElementData e, Transform root, Rect rootRect, Affine2 toLocal, float scale,
+            string name, VectraSvgImage image)
         {
+            if (backend == null) return;
             var go = new GameObject(name, typeof(RectTransform));
             go.transform.SetParent(root, false);
-            var t = go.AddComponent<TextMeshProUGUI>();
-            image.ConfigureText(t, e, toLocal, scale, rootRect);
+            image.ConfigureText(backend, go, e, toLocal, scale, rootRect);
         }
 
         static void ExpandImage(SvgElementData e, Transform root, Rect rootRect, Affine2 toLocal, string name, Color tint)

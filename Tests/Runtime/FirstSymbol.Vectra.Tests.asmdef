@@ -20,6 +20,12 @@
     "defineConstraints": [
         "UNITY_INCLUDE_TESTS"
     ],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.firstsymbol.lettera",
+            "expression": "1.0.0",
+            "define": "VECTRA_TEST_LETTERA"
+        }
+    ],
     "noEngineReferences": false
 }

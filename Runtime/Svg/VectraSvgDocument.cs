@@ -57,6 +57,18 @@ namespace FirstSymbol.Vectra.Svg
         End
     }
 
+    /// <summary>A piece of an SVG text element with its own style (the text of the element or one of its tspans).</summary>
+    [Serializable]
+    public class SvgTextRun
+    {
+        public string text;
+        public bool bold, italic;
+        public Color color = Color.black;
+        /// <summary>Font size in document units (already scaled like <see cref="SvgElementData.fontSize"/>).</summary>
+        public float fontSize = 16f;
+        public string fontFamily;
+    }
+
     /// <summary>One drawable SVG element with its resolved style.</summary>
     [Serializable]
     public class SvgElementData
@@ -76,6 +88,8 @@ namespace FirstSymbol.Vectra.Svg
 
         public bool isText;
         public string text;
+        /// <summary>The text split where the style changes (tspans). Empty in documents saved before 0.3: use <see cref="text"/>.</summary>
+        public List<SvgTextRun> runs = new List<SvgTextRun>();
         public Vector2 textPosition;
         public float fontSize = 16f;
         public string fontFamily;

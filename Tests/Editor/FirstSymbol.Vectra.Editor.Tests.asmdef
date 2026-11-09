@@ -6,6 +6,7 @@
         "UnityEditor.TestRunner",
         "FirstSymbol.Vectra",
         "FirstSymbol.Vectra.Editor",
+        "FirstSymbol.Vectra.Editor.CliCore",
         "Unity.Collections",
         "Unity.Mathematics",
         "UnityEngine.UI"
@@ -23,6 +24,12 @@
     "defineConstraints": [
         "UNITY_INCLUDE_TESTS"
     ],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.firstsymbol.lettera",
+            "expression": "1.0.0",
+            "define": "VECTRA_TEST_LETTERA"
+        }
+    ],
     "noEngineReferences": false
 }

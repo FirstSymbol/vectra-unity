@@ -1,0 +1,40 @@
+{
+    "name": "FirstSymbol.Vectra.TextMeshPro.Tests",
+    "rootNamespace": "FirstSymbol.Vectra.TextEngines.Tests",
+    "references": [
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "FirstSymbol.Vectra",
+        "FirstSymbol.Vectra.TextMeshPro",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "VECTRA_TMP",
+        "!VECTRA_NO_TMP"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.ugui",
+            "expression": "2.0.0",
+            "define": "VECTRA_TMP"
+        },
+        {
+            "name": "com.unity.textmeshpro",
+            "expression": "3.0.0",
+            "define": "VECTRA_TMP"
+        }
+    ],
+    "noEngineReferences": false
+}

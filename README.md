@@ -12,7 +12,7 @@
 Всё рисуется одним общим материалом: фигуры батчатся. Геометрия считается на Burst без GC-аллокаций при пересборке.
 
 - **Unity:** 6000.3+ (6.3 LTS).
-- **Зависимости:** Burst, Collections, Mathematics, uGUI (с TextMeshPro).
+- **Зависимости:** Burst, Collections, Mathematics, uGUI. Текст из SVG рисует Lettera или TextMeshPro, если они есть, иначе встроенный uGUI Text (выбор в Project Settings → Vectra).
 - **Пайплайны:** Built-in, URP, HDRP. Backdrop-эффекты работают только в URP.
 - **Платформы:** Windows, macOS, Linux, WebGL, WebGPU, iOS, Android — всё с Shader Model 3.5. Compute-шейдеры не используются. На WebGL Burst-код выполняется как обычный IL2CPP.
 
@@ -48,7 +48,7 @@ https://github.com/FirstSymbol/vectra-unity.git
 |---|---|
 | `VectraShape` | Фигура uGUI (`MaskableGraphic`). Работает с Mask, RectMask2D (с softness), layout, точным raycast. |
 | `VectraRenderer` | Фигура в мире: MeshRenderer, sorting layer и order, опциональный `PolygonCollider2D`. |
-| `VectraSvgImage` / `VectraSvgRenderer` | SVG-документ одним мешем. Текст рисуется через TextMeshPro, встроенные картинки — через RawImage. Есть override цвета по `#id`, `.class` и тегу, а также разворачивание в иерархию фигур. |
+| `VectraSvgImage` / `VectraSvgRenderer` | SVG-документ одним мешем. Текст рисуется выбранным движком текста (Lettera, TextMeshPro или Legacy), встроенные картинки — через RawImage. Есть override цвета по `#id`, `.class` и тегу, а также разворачивание в иерархию фигур. |
 | `VectraBooleanGroup` (+ `VectraBooleanOperand`) | Дочерние фигуры становятся операндами булевой операции. Порядок задаётся иерархией. |
 | `VectraMask` | Маска по контуру фигуры. Stencil — для любого UI. Soft — с пером и инверсией, для дочерних фигур Vectra. |
 | `VectraTheme` (+ ассет `VectraPalette`) | Именованные цвета по темам. Смена темы перекрашивает все фигуры с токенами палитры. |

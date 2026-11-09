@@ -1,0 +1,32 @@
+{
+    "name": "FirstSymbol.Vectra.TextMeshPro",
+    "rootNamespace": "FirstSymbol.Vectra.TextEngines",
+    "references": [
+        "FirstSymbol.Vectra",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "VECTRA_TMP",
+        "!VECTRA_NO_TMP"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.ugui",
+            "expression": "2.0.0",
+            "define": "VECTRA_TMP"
+        },
+        {
+            "name": "com.unity.textmeshpro",
+            "expression": "3.0.0",
+            "define": "VECTRA_TMP"
+        }
+    ],
+    "noEngineReferences": false
+}

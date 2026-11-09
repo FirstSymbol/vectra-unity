@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using FirstSymbol.Vectra.Rendering;
+using FirstSymbol.Vectra.TextEngines;
 using UnityEditor;
 using UnityEngine;
 using UnityEditor.UIElements;
@@ -18,12 +19,26 @@ namespace FirstSymbol.Vectra.Editor
         public int sdfAtlasMaxSize = 2048;
         [Tooltip("Font map given to SVG images created from the menu.")]
         public Svg.VectraFontMap defaultFontMap;
+        [Tooltip("Which engine draws SVG text. Auto is Lettera when installed, else TextMesh Pro, else the legacy uGUI Text.")]
+        public VectraTextEngine textEngine = VectraTextEngine.Auto;
+        [SerializeField, HideInInspector] int settingsVersion;
+
+        /// <summary>0 for settings saved before the text engines existed (Vectra 0.2); see <see cref="VectraUpgrade"/>.</summary>
+        internal int SettingsVersion
+        {
+            get => settingsVersion;
+            set => settingsVersion = value;
+        }
 
         public void Save() => Save(true);
 
         void OnEnable() => Apply();
 
-        public void Apply() => VectraSdfAtlas.MaxSize = VectraRuntimeSettings.NormalizeAtlasSize(sdfAtlasMaxSize);
+        public void Apply()
+        {
+            VectraSdfAtlas.MaxSize = VectraRuntimeSettings.NormalizeAtlasSize(sdfAtlasMaxSize);
+            VectraRuntimeSettings.ProjectTextEngine = textEngine;
+        }
     }
 
     static class VectraSettingsProvider
@@ -75,8 +90,10 @@ namespace FirstSymbol.Vectra.Editor
                     Debug.Log($"Vectra: {n} SVG file(s) now use the Vectra importer.");
                 }));
                 svg.Add(VxFields.For(so.FindProperty("defaultFontMap"), t, "Default font map"));
-                svg.Add(VxUI.Text("Maps SVG font-family names to TextMeshPro fonts for new SVG images (Assets > Create > Vectra > SVG Font Map).", "vx-hint"));
+                svg.Add(VxUI.Text("Maps SVG font-family names to fonts for new SVG images (Assets > Create > Vectra > SVG Font Map).", "vx-hint"));
                 page.Add(VxUI.TitledCard("vectra.settings.svg", VxIcon.Kind.Document, "SVG import", svg));
+
+                page.Add(VectraTextSettingsUI.Build(so, s, Save));
 
                 var render = new VisualElement();
                 render.Add(VxUI.Row("Default quality", VxSegmented.ForEnum(so.FindProperty("defaultQuality"), new[] { "Low", "Medium", "High", "Ultra" }, changed: Save),

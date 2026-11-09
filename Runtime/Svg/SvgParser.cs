@@ -916,8 +916,13 @@ namespace FirstSymbol.Vectra.Svg
 
         static void RenderText(SvgNode n, Affine2 ctm, float opacity, Context ctx)
         {
-            var text = CollectText(n).Trim();
-            if (text.Length == 0) return;
+            float scale = ctm.UniformScale;
+            var runs = new List<SvgTextRun>();
+            CollectRuns(n, ctm, scale, opacity, ctx, runs, 0);
+            TrimRuns(runs);
+            if (runs.Count == 0) return;
+            var text = new System.Text.StringBuilder();
+            foreach (var r in runs) text.Append(r.text);
             float x = Length(FirstListValue(n.Attr("x")), 0, ctx.viewportW, ctx);
             float y = Length(FirstListValue(n.Attr("y")), 0, ctx.viewportH, ctx);
             var span = n.children.Find(c => c.name == "tspan");
@@ -927,37 +932,114 @@ namespace FirstSymbol.Vectra.Svg
                 if (span.Attr("y") != null) y = Length(FirstListValue(span.Attr("y")), y, ctx.viewportH, ctx);
             }
 
-            float scale = ctm.UniformScale;
-            var fillValue = Style(n, "fill", "black");
-            var color = fillValue == "none" ? Color.clear : ColorOf(fillValue.StartsWith("url") ? "black" : fillValue, n);
-            color.a *= Number(Style(n, "fill-opacity"), 1f) * opacity;
             string anchor = Style(n, "text-anchor", "start");
-            string weight = Style(n, "font-weight", "normal");
+            var own = RunStyle(n, scale, opacity, ctx);
             var e = new SvgElementData
             {
                 tag = "text",
                 id = n.Attr("id"),
                 className = n.Attr("class"),
                 isText = true,
-                text = text,
+                text = text.ToString(),
+                runs = runs,
                 textPosition = ctm.Apply(new float2(x, y)),
-                fontSize = Length(Style(n, "font-size", "16"), 16, ctx.viewportH, ctx) * scale,
-                fontFamily = Style(n, "font-family", ""),
-                bold = weight == "bold" || weight == "bolder" || (int.TryParse(weight, out int wv) && wv >= 600),
-                italic = Style(n, "font-style") == "italic",
+                fontSize = own.fontSize,
+                fontFamily = own.fontFamily,
+                bold = own.bold,
+                italic = own.italic,
                 anchor = anchor == "middle" ? SvgTextAnchor.Middle : anchor == "end" ? SvgTextAnchor.End : SvgTextAnchor.Start,
-                textColor = color,
+                textColor = own.color,
                 textRotation = math.degrees(math.atan2(ctm.b, ctm.a))
             };
             ctx.doc.elements.Add(e);
         }
 
-        static string CollectText(SvgNode n)
+        // The style a piece of text draws with: that of the element holding it.
+        static SvgTextRun RunStyle(SvgNode n, float scale, float opacity, Context ctx)
         {
-            var sb = new System.Text.StringBuilder(n.text);
-            foreach (var c in n.children)
-                if (c.name == "tspan" || c.name == "textPath" || c.name == "a") sb.Append(' ').Append(CollectText(c));
-            return System.Text.RegularExpressions.Regex.Replace(sb.ToString(), "\\s+", " ");
+            var fillValue = Style(n, "fill", "black");
+            var color = fillValue == "none" ? Color.clear : ColorOf(fillValue.StartsWith("url") ? "black" : fillValue, n);
+            color.a *= Number(Style(n, "fill-opacity"), 1f) * opacity;
+            string weight = Style(n, "font-weight", "normal");
+            return new SvgTextRun
+            {
+                color = color,
+                fontSize = Length(Style(n, "font-size", "16"), 16, ctx.viewportH, ctx) * scale,
+                fontFamily = Style(n, "font-family", ""),
+                bold = weight == "bold" || weight == "bolder" || (int.TryParse(weight, out int wv) && wv >= 600),
+                italic = Style(n, "font-style") == "italic"
+            };
+        }
+
+        // Walks text and tspans in document order; whitespace collapses across runs as XML says for default spacing.
+        static void CollectRuns(SvgNode n, Affine2 ctm, float scale, float opacity, Context ctx, List<SvgTextRun> runs, int depth)
+        {
+            if (depth > 16) return;
+            var style = RunStyle(n, scale, opacity, ctx);
+            var parts = n.textParts;
+            int p = 0;
+            for (int k = 0; k <= n.children.Count; k++)
+            {
+                while (parts != null && p < parts.Count && parts[p].Key <= k) AddPiece(runs, style, parts[p++].Value);
+                if (k == n.children.Count) break;
+                var c = n.children[k];
+                if (c.name == "tspan" || c.name == "textPath" || c.name == "a") CollectRuns(c, ctm, scale, opacity, ctx, runs, depth + 1);
+            }
+
+            if (parts == null && !string.IsNullOrEmpty(n.text)) AddPiece(runs, style, n.text);
+        }
+
+        static void AddPiece(List<SvgTextRun> runs, SvgTextRun style, string raw)
+        {
+            var sb = new System.Text.StringBuilder(raw.Length);
+            bool space = runs.Count > 0 && runs[runs.Count - 1].text.EndsWith(" ", StringComparison.Ordinal);
+            foreach (char ch in raw)
+            {
+                if (ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t')
+                {
+                    if (!space) sb.Append(' ');
+                    space = true;
+                }
+                else
+                {
+                    sb.Append(ch);
+                    space = false;
+                }
+            }
+
+            if (sb.Length == 0) return;
+            var last = runs.Count > 0 ? runs[runs.Count - 1] : null;
+            if (last != null && last.bold == style.bold && last.italic == style.italic && last.color == style.color &&
+                Mathf.Approximately(last.fontSize, style.fontSize) && last.fontFamily == style.fontFamily)
+            {
+                last.text += sb.ToString();
+                return;
+            }
+
+            runs.Add(new SvgTextRun
+            {
+                text = sb.ToString(), bold = style.bold, italic = style.italic, color = style.color,
+                fontSize = style.fontSize, fontFamily = style.fontFamily
+            });
+        }
+
+        static void TrimRuns(List<SvgTextRun> runs)
+        {
+            while (runs.Count > 0)
+            {
+                var first = runs[0];
+                first.text = first.text.TrimStart(' ');
+                if (first.text.Length > 0) break;
+                runs.RemoveAt(0);
+            }
+
+            while (runs.Count > 0)
+            {
+                var last = runs[runs.Count - 1];
+                last.text = last.text.TrimEnd(' ');
+                if (last.text.Length > 0) break;
+                runs.RemoveAt(runs.Count - 1);
+            }
         }
 
         static string FirstListValue(string v)

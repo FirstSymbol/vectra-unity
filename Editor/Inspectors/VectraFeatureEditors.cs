@@ -1,4 +1,5 @@
 using FirstSymbol.Vectra.Svg;
+using FirstSymbol.Vectra.TextEngines;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -231,11 +232,12 @@ namespace FirstSymbol.Vectra.Editor
         {
             var so = serializedObject;
             var root = VxUI.Root();
-            root.Add(VxUI.IconHeader(VxIcon.Kind.Text, target.name, "SVG font-family → TextMeshPro font", out _));
+            root.Add(VxUI.IconHeader(VxIcon.Kind.Text, target.name, "SVG font-family → font of each text engine", out _));
             var body = new VisualElement();
-            body.Add(VxFields.For(so.FindProperty("fallback"), typeof(VectraFontMap), "Fallback"));
+            body.Add(VectraTextSettingsUI.FontField(so.FindProperty("fallback"), VectraTextEngine.TextMeshPro, "Fallback (TMP)", "TextMesh Pro font used when no family matches"));
+            body.Add(VectraTextSettingsUI.FontField(so.FindProperty("letteraFallback"), VectraTextEngine.Lettera, "Fallback (Lettera)", "Lettera font asset or stack used when no family matches"));
             body.Add(new PropertyField(so.FindProperty("entries"), "Families"));
-            body.Add(VxUI.Text("Families are matched case-insensitively against each name of the CSS font-family list, in order.", "vx-hint"));
+            body.Add(VxUI.Text("Families are matched case-insensitively against each name of the CSS font-family list, in order. Each family can hold a TextMesh Pro font and a Lettera font; the engine in use reads its own.", "vx-hint"));
             root.Add(VxUI.TitledCard("vectra.fontmap.main", VxIcon.Kind.Text, "Fonts", body));
             root.Bind(so);
             return root;

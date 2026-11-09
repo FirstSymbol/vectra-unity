@@ -2,8 +2,7 @@
     "name": "FirstSymbol.Vectra.Editor.Cli",
     "rootNamespace": "FirstSymbol.Vectra.Editor.Cli",
     "references": [
-        "FirstSymbol.Vectra",
-        "FirstSymbol.Vectra.Editor",
+        "FirstSymbol.Vectra.Editor.CliCore",
         "Unity.Pipeline.Attributes"
     ],
     "includePlatforms": [

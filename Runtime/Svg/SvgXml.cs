@@ -15,6 +15,12 @@ namespace FirstSymbol.Vectra.Svg
         public string text = "";
         internal StringBuilder textBuilder;
 
+        /// <summary>
+        /// Character data of text-bearing elements (text, tspan, a, textPath) with the number of child elements that came
+        /// before each piece, so mixed content keeps its order.
+        /// </summary>
+        public List<KeyValuePair<int, string>> textParts;
+
         /// <summary>Computed style after CSS, presentation attributes and the style attribute were merged.</summary>
         public Dictionary<string, string> style;
 
@@ -195,6 +201,8 @@ namespace FirstSymbol.Vectra.Svg
         {
             if (text.Length == 0) return;
             (node.textBuilder ??= new StringBuilder()).Append(text);
+            if (node.name == "text" || node.name == "tspan" || node.name == "a" || node.name == "textPath")
+                (node.textParts ??= new List<KeyValuePair<int, string>>()).Add(new KeyValuePair<int, string>(node.children.Count, text.ToString()));
             text.Clear();
         }
 

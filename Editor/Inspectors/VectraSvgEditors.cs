@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using FirstSymbol.Vectra.Rendering;
 using FirstSymbol.Vectra.Svg;
+using FirstSymbol.Vectra.TextEngines;
 using UnityEditor;
 using UnityEditor.AssetImporters;
 using UnityEditor.UIElements;
@@ -272,9 +273,17 @@ namespace FirstSymbol.Vectra.Editor
 
             var text = new VisualElement();
             text.Add(VxFields.For(so.FindProperty("m_GenerateText"), t, "Generate text"));
+            var engine = VxUI.Row("Text engine", VxSegmented.ForEnum(so.FindProperty("m_TextEngine"),
+                new[] { "Project", "Auto", "Lettera", "TMP", "Legacy", "None" },
+                null, new[] { "Follow Project Settings > Vectra", "Lettera if installed, else TextMesh Pro, else legacy", "Lettera", "TextMesh Pro", "Legacy uGUI Text", "Do not draw text" }),
+                "Which engine draws the text of this document");
+            text.Add(engine.VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
             text.Add(VxFields.For(so.FindProperty("m_FontMap"), t, "Font map").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
-            text.Add(VxFields.For(so.FindProperty("m_Font"), t, "Fallback font").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
-            text.Add(VxUI.Text("<text> elements become TextMeshPro children (generated, not saved). The font map picks a font per font-family (Assets > Create > Vectra > SVG Font Map); without a match the fallback font, then the TMP default, is used.", "vx-hint"));
+            text.Add(VectraTextSettingsUI.FontField(so.FindProperty("m_Font"), VectraTextEngine.TextMeshPro, "Fallback font (TMP)",
+                "TextMesh Pro font used when the font map has no match (empty = TextMesh Pro default)").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
+            text.Add(VectraTextSettingsUI.FontField(so.FindProperty("m_LetteraFont"), VectraTextEngine.Lettera, "Fallback font (Lettera)",
+                "Lettera font asset or stack used when the font map has no match (empty = Lettera default)").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
+            text.Add(VxUI.Text("<text> elements become children of the text engine (generated, not saved); tspans with their own bold, italic, colour or size stay in one text. The font map picks a font per font-family (Assets > Create > Vectra > SVG Font Map); without a match the fallback font, then the engine's default, is used.", "vx-hint"));
             root.Add(VxUI.TitledCard("vectra.svg.text", VxIcon.Kind.Text, "Text", text, null, false));
 
             root.Add(VxUI.TitledCard("vectra.svg.overrides", VxIcon.Kind.Select, "Overrides", VxSvg.Overrides(so, so.FindProperty("m_Overrides"), () => img != null ? img.Document : null)));

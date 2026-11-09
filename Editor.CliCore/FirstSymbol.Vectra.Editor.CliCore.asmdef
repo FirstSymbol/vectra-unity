@@ -1,0 +1,24 @@
+{
+    "name": "FirstSymbol.Vectra.Editor.CliCore",
+    "rootNamespace": "FirstSymbol.Vectra.Editor.Cli",
+    "references": [
+        "FirstSymbol.Vectra",
+        "FirstSymbol.Vectra.Editor",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Mathematics",
+        "UnityEngine.UI",
+        "UnityEditor.UI"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

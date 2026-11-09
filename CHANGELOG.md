@@ -4,6 +4,33 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Text engines. SVG `<text>` is drawn through a backend seam in the core (`IVectraTextBackend`, `VectraTextBackends`), with no reference to any text package. Backends: `FirstSymbol.Vectra.Lettera` (turns on by itself when `com.firstsymbol.lettera` 1.0.0 or newer is installed), `FirstSymbol.Vectra.TextMeshPro` (the old behaviour), and a built-in legacy uGUI `Text` fallback that needs nothing.
+- Project setting **Text engine**: Auto, Lettera, TextMesh Pro, Legacy or None. Auto takes Lettera when installed, else TextMesh Pro when a font resolves, else Legacy. The page shows what the project has and what Auto picks. The choice reaches player builds through `VectraRuntimeSettings`, which now also holds the engine (`TextEngine`, `ProjectTextEngine`).
+- Per-component override: `VectraSvgImage.TextEngine` (Project Setting, Auto, Lettera, TextMesh Pro, Legacy, None), plus a fallback font for each engine (`FallbackFont`, `LetteraFallbackFont`) and `RebuildGenerated()`.
+- A named engine that is missing or has no font falls back along the Auto order; the console says so once per document.
+- `<tspan>` styling survives: the text of a `<text>` is split into runs (`SvgElementData.runs`) and bold, italic, colour and size of a run become markup inside one text in every engine.
+- `VectraFontMap` has Lettera fields (`lettera`, `letteraBold`, `letteraFallback`: a Lettera font asset or font stack); the inspector takes only the right type per engine and an edit clears a font of the wrong type.
+- `unity command vectra svg_create` and `svg_parse` take `--text_engine`; `stats` reports the engine in use.
+- The CLI logic lives in `FirstSymbol.Vectra.Editor.CliCore`, which needs no `com.unity.pipeline` and is covered by tests; `FirstSymbol.Vectra.Editor.Cli` only holds command names and arguments.
+
+### Changed
+- Upgrading from 0.2: a project that already used Vectra (a Vectra settings file, a font map, or an SVG with text) gets **TextMesh Pro** written into its settings once, with a console line, so its SVG text does not change. New projects start on Auto.
+- `VectraFontMap` fields and `VectraSvgImage` fallback font are plain object references now instead of `TMP_FontAsset`, so the core does not depend on TextMesh Pro. Saved data is unchanged; `Resolve` returns `Object`.
+- Whitespace between a `<text>` and its `<tspan>` children follows SVG: `A<tspan>B</tspan>` reads "AB", not "A B".
+- The core assembly no longer references `Unity.TextMeshPro`.
+
+### Fixed
+- SVG text drawn with TextMesh Pro sat about half a font size too high (the baseline was put on the middle of the text box, not at its bottom) and turned about the wrong point when rotated. The baseline now lands on the SVG's `y`, in every engine; a render test checks the pixels. Projects that keep TextMesh Pro see their SVG text move down by that amount.
+
+### Limits
+- Per-`<tspan>` positions (`x`, `y`, `dx`, `dy`), `textPath`, `letter-spacing` and text decoration are not drawn; a tspan with another `font-family` uses the font of the whole text.
+- World-space `VectraSvgRenderer` still draws no text (planned with Lettera world text and TextMesh Pro 3D).
+- Lettera finds fonts only through the font map or the component's fallback; resolving system fonts by CSS family name needs a Lettera API that does not exist yet.
+- The legacy engine ignores font families and uses the built-in font.
+
 ## [0.2.3] - 2026-11-09
 
 ### Added

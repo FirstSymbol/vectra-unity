@@ -5,8 +5,7 @@
         "Unity.Burst",
         "Unity.Collections",
         "Unity.Mathematics",
-        "UnityEngine.UI",
-        "Unity.TextMeshPro"
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

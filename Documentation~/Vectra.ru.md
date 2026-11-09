@@ -11,7 +11,7 @@ Vectra рисует векторные фигуры в **uGUI Canvas** и в **w
 
 - **Unity:** 6000.3 (6.3 LTS) и новее.
 - **Пайплайны:** Built-in, URP, HDRP. Backdrop-эффекты работают только в URP.
-- **Зависимости:** Burst, Collections, Mathematics, uGUI. TextMeshPro нужен для текста из SVG.
+- **Зависимости:** Burst, Collections, Mathematics, uGUI. Текст из SVG рисует Lettera или TextMeshPro, если они есть, иначе встроенный uGUI Text.
 - **Платформы:** Shader Model 3.5 и выше — Windows, macOS, Linux, WebGL 2, WebGPU, iOS, Android. Compute-шейдеры не используются. На WebGL Burst-джобы выполняются как код IL2CPP.
 
 ## Содержание
@@ -80,7 +80,7 @@ Package Manager → **+** → **Add package from git URL…** → `https://githu
 - `VectraShapeAsset` — общая геометрия, основа библиотеки фигур;
 - `VectraPalette` — именованные цвета по темам;
 - `VectraSvgDocument` — импортированный SVG;
-- `VectraFontMap` — соответствие font-family шрифтам TextMeshPro.
+- `VectraFontMap` — соответствие font-family шрифтам каждого движка текста.
 
 Объекты создаются через **GameObject → UI → Vectra** (Canvas) или **GameObject → 2D Object → Vectra** (мир).
 
@@ -232,7 +232,7 @@ shape.SetShapeDirty();
 - обводки с dash, opacity;
 - clip-path;
 - фильтры blur, drop shadow, saturate и hue-rotate;
-- `<text>` через TextMeshPro;
+- `<text>` со стилями `<tspan>` (см. «Движки текста» ниже);
 - встроенные data-URI картинки.
 
 **Рантайм-API:**
@@ -245,7 +245,23 @@ VectraSvg.Download(url, (d, error) => svgImage.Document = d);
 
 **Expand to hierarchy** превращает документ в отдельный `VectraShape` на каждый элемент, чтобы их можно было редактировать и анимировать по отдельности. Запуск: кнопка в инспекторе SVG Image, контекстное меню или `VectraSvg.Expand(image)`. Clip-path превращается в операнды булевой операции у залитых элементов или во вложенные stencil-маски у элементов с обводкой.
 
-**Шрифты.** `VectraFontMap` (Assets → Create → Vectra → SVG Font Map) сопоставляет имена `font-family` шрифтам TextMeshPro. Назначается на SVG Image; новые изображения получают шрифт по умолчанию из Project Settings.
+**Движки текста.** `<text>` из SVG рисует движок текста; выбирается в **Project Settings → Vectra → Text engine**:
+
+| Движок | Чем рисуется | Что нужно |
+|---|---|---|
+| Auto (по умолчанию в новых проектах) | Lettera, если установлена; иначе TextMesh Pro, если есть шрифт; иначе Legacy | |
+| Lettera | `LetteraText` | пакет Lettera 1.0.0 или новее |
+| TextMesh Pro | `TextMeshProUGUI` | TMP Essential Resources или шрифт TMP в font map или на компоненте |
+| Legacy | uGUI `Text` со встроенным шрифтом | ничего; семейства шрифтов игнорируются |
+| None | текст не рисуется | |
+
+Страница показывает, какие движки есть в проекте и что выберет Auto. Если названный движок не установлен или у него нет шрифта, берётся следующий по порядку Auto, а консоль один раз на документ говорит об этом. Каждый SVG Image может переопределить выбор проекта (**Text engine** в инспекторе или `image.TextEngine`). Выбор попадает и в сборку плеера.
+
+Стиль текста сохраняется: `<tspan>` со своим bold, italic, цветом или размером остаётся внутри одного текста разметкой (`<b>`, `<i>`, `<color>`, `<size>`) в любом движке. Не рисуется: позиции отдельных `<tspan>` (`x`, `y`, `dx`, `dy`), `textPath`, `letter-spacing` и подчёркивание; `<tspan>` с другим `font-family` берёт шрифт всего текста. `VectraSvgRenderer` в мировом пространстве текст пока не рисует.
+
+**Обновление с 0.2.** До 0.3 весь текст SVG шёл через TextMesh Pro. Проект, который уже пользовался Vectra (есть файл настроек Vectra, font map или SVG с текстом), один раз получает в настройках **TextMesh Pro** и строку в консоли, поэтому текст выглядит как раньше. Чтобы перейти на Lettera, выберите **Auto** или **Lettera**. Новые проекты стартуют с Auto. Поля `VectraFontMap` для TextMesh Pro остаются как были (теперь это обычные ссылки на объекты, сохранённые данные те же); рядом появились поля Lettera: `lettera`, `letteraBold`, `letteraFallback` (шрифт Lettera или набор шрифтов).
+
+**Шрифты.** `VectraFontMap` (Assets → Create → Vectra → SVG Font Map) сопоставляет имена `font-family` шрифтам каждого движка. Назначается на SVG Image; новые изображения получают font map по умолчанию из Project Settings. Без совпадения берётся запасной шрифт компонента (свой для каждого движка), затем шрифт движка по умолчанию. В этой версии Lettera находит шрифты только через font map.
 
 **Ограничения:**
 - `<mask>` применяется как геометрический клип, яркость маски не учитывается;
@@ -341,7 +357,7 @@ Backdrop-фигуры используют собственный материа
 Если установлен пакет `com.unity.pipeline`, опциональная сборка `FirstSymbol.Vectra.Editor.Cli` регистрирует команды `unity command vectra …` для скриптов, CI и AI-агентов. Каждая команда отвечает JSON, правки отменяются через Undo.
 
 - **Обзор:** `help`, `types` (все фигуры, эффекты и paint со значениями по умолчанию), `list`, `get --target` (`--full true` — все поля).
-- **Правка:** `create`, `set --data <JSON-патч>`, `add`, `remove`, `mask`, `states`, `convert_to_path`, `save_style`, `save_shape`, `palette`, `theme`, `svg_parse`, `svg_create`, `select`.
+- **Правка:** `create`, `set --data <JSON-патч>`, `add`, `remove`, `mask`, `states`, `convert_to_path`, `save_style`, `save_shape`, `palette`, `theme`, `svg_parse` и `svg_create` (у обеих есть `--text_engine`), `select`.
 - **Вывод:** `export_png` (визуальная проверка результата), `export_svg`.
 
 ```bash
@@ -377,5 +393,5 @@ unity command vectra expand_svg --target "SVG Image"
 | Фигура не видна в Canvas | Канвасу нужны шейдерные каналы TexCoord1–3. Они добавляются автоматически, когда фигура включается под канвасом |
 | Backdrop-фигуры рисуются без эффекта | Добавьте Vectra Backdrop Feature в активный URP Renderer |
 | Стекло не размывает другой UI | Фоновый UI рисуйте базовой камерой, стекло — overlay-камерой |
-| Нет текста из SVG | Импортируйте TextMeshPro Essential Resources или назначьте шрифт / font map |
+| Нет текста из SVG | Проверьте **Project Settings → Vectra → Text engine**. Для TextMesh Pro импортируйте TMP Essential Resources или назначьте шрифт / font map; Lettera нужен как пакет; если движок пришлось заменить, консоль один раз предупреждает |
 | `.svg` импортируется другим импортёром | Выберите Vectra Svg Importer на файле или включите его в Project Settings |

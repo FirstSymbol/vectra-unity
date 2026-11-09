@@ -10,12 +10,15 @@ namespace FirstSymbol.Vectra.Editor.Tests
     {
         int m_Max;
         int m_Project;
+        FirstSymbol.Vectra.TextEngines.VectraTextEngine m_Engine;
 
         [SetUp]
         public void SetUp()
         {
             m_Max = VectraSdfAtlas.MaxSize;
             m_Project = VectraProjectSettings.instance.sdfAtlasMaxSize;
+            m_Engine = VectraProjectSettings.instance.textEngine;
+            VectraProjectSettings.instance.textEngine = FirstSymbol.Vectra.TextEngines.VectraTextEngine.Auto;
             VectraBuildSettings.Remove();
         }
 
@@ -24,6 +27,8 @@ namespace FirstSymbol.Vectra.Editor.Tests
         {
             VectraBuildSettings.Remove();
             VectraProjectSettings.instance.sdfAtlasMaxSize = m_Project;
+            VectraProjectSettings.instance.textEngine = m_Engine;
+            VectraRuntimeSettings.ProjectTextEngine = m_Engine;
             VectraSdfAtlas.MaxSize = m_Max;
         }
 

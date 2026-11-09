@@ -33,8 +33,8 @@ Every command answers JSON. Edits are undoable in the editor and mark the scene 
 | `save_style --target <t> --path Assets/…asset`, `save_shape …` | Shared style / shared geometry assets |
 | `palette --path Assets/…asset [--themes Light,Dark] [--data {"Accent":["#3B82F6","#93C5FD"]}]` | Named colours per theme |
 | `theme --palette <asset> --theme Dark` | Switch theme (adds a VectraTheme to the scene) |
-| `svg_parse --svg "<svg…>" --save Assets/…asset [--create true]` | SVG markup → document asset (+ image) |
-| `svg_create --asset <svg or document path>`, `expand_svg --target <t>`, `use_importer --path <file or folder>` | SVG images |
+| `svg_parse --svg "<svg…>" --save Assets/…asset [--create true] [--text_engine]` | SVG markup → document asset (+ image) |
+| `svg_create --asset <svg or document path> [--text_engine project\|auto\|lettera\|textmeshpro\|legacy\|none]`, `expand_svg --target <t>`, `use_importer --path <file or folder>` | SVG images |
 | `export_png --target <t> --output <file> [--scale 2]`, `export_svg …` | Previews and exports |
 | `select --target <t>` | Select and frame the object for the user |
 | `stats`, `reset_atlases` | Diagnostics |

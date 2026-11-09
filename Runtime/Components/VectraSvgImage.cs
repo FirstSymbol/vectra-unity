@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using FirstSymbol.Vectra.Geometry;
 using FirstSymbol.Vectra.Rendering;
 using FirstSymbol.Vectra.Svg;
-using TMPro;
+using FirstSymbol.Vectra.TextEngines;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,7 +11,8 @@ namespace FirstSymbol.Vectra
 {
     /// <summary>
     /// Draws a <see cref="VectraSvgDocument"/> in a uGUI Canvas as one batchable mesh. Text elements become
-    /// TextMeshPro children and embedded images become RawImage children (both generated, not saved).
+    /// children of the project's text engine (Lettera, TextMesh Pro or the legacy uGUI Text) and embedded images
+    /// become RawImage children (both generated, not saved).
     /// </summary>
     [ExecuteAlways]
     [RequireComponent(typeof(CanvasRenderer))]
@@ -23,16 +24,22 @@ namespace FirstSymbol.Vectra
         [SerializeField] VectraQuality m_Quality = VectraQuality.High;
         [SerializeField] ShapeBlendMode m_BlendMode;
         [SerializeField] bool m_GenerateText = true;
-        [Tooltip("Maps SVG font-family names to TextMeshPro fonts.")]
+        [Tooltip("Which engine draws the text of this document. Use Project Setting to follow Project Settings > Vectra.")]
+        [SerializeField] VectraTextEngineChoice m_TextEngine;
+        [Tooltip("Maps SVG font-family names to fonts of the text engines.")]
         [SerializeField] VectraFontMap m_FontMap;
-        [Tooltip("Font used when the font map has no match (empty = TextMeshPro default).")]
-        [SerializeField] TMP_FontAsset m_Font;
+        [Tooltip("TextMesh Pro font used when the font map has no match (empty = TextMesh Pro default).")]
+        [SerializeField] Object m_Font;
+        [Tooltip("Lettera font asset or font stack used when the font map has no match (empty = Lettera default).")]
+        [SerializeField] Object m_LetteraFont;
         [SerializeField] List<SvgOverride> m_Overrides = new List<SvgOverride>();
 
         VectraShapeRenderer m_Renderer;
         Mesh m_Mesh;
         readonly List<GameObject> m_Generated = new List<GameObject>();
         bool m_ChildrenDirty = true;
+        VectraTextEngine m_WarnedFor = (VectraTextEngine)(-1);
+        VectraSvgDocument m_WarnedDocument;
 
         public VectraSvgDocument Document
         {
@@ -69,6 +76,47 @@ namespace FirstSymbol.Vectra
                 m_ChildrenDirty = true;
             }
         }
+
+        /// <summary>The text engine this component asks for; <see cref="VectraTextEngineChoice.UseProjectSetting"/> follows the project.</summary>
+        public VectraTextEngineChoice TextEngine
+        {
+            get => m_TextEngine;
+            set
+            {
+                if (m_TextEngine == value) return;
+                m_TextEngine = value;
+                m_ChildrenDirty = true;
+            }
+        }
+
+        /// <summary>The engine asked for after the project setting is applied (may still be Auto).</summary>
+        public VectraTextEngine RequestedTextEngine => VectraTextEngineChoices.Effective(m_TextEngine, VectraRuntimeSettings.ProjectTextEngine);
+
+        /// <summary>TextMesh Pro font used when the font map has no match.</summary>
+        public Object FallbackFont
+        {
+            get => m_Font;
+            set
+            {
+                m_Font = value;
+                m_ChildrenDirty = true;
+            }
+        }
+
+        /// <summary>Lettera font asset or stack used when the font map has no match.</summary>
+        public Object LetteraFallbackFont
+        {
+            get => m_LetteraFont;
+            set
+            {
+                m_LetteraFont = value;
+                m_ChildrenDirty = true;
+            }
+        }
+
+        /// <summary>The backend that draws this document's text now, and whether it is not the one asked for.</summary>
+        public VectraTextChoice ResolveTextBackend() =>
+            VectraTextBackends.Resolve(RequestedTextEngine, m_FontMap, m_Font, m_LetteraFont);
 
         /// <summary>Loads SVG text at runtime (creates a document owned by this component).</summary>
         public void LoadSvg(string svgText)
@@ -174,17 +222,50 @@ namespace FirstSymbol.Vectra
             m_Generated.Clear();
         }
 
+        /// <summary>Rebuilds the generated text and image children now (otherwise it happens in the next LateUpdate).</summary>
+        public void RebuildGenerated()
+        {
+            m_ChildrenDirty = false;
+            RebuildChildren();
+        }
+
         void RebuildChildren()
         {
             ClearGenerated();
             if (m_Document == null) return;
             var toLocal = m_Document.DocumentToLocal(rectTransform.rect, m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None);
             float scale = toLocal.UniformScale;
+            VectraTextChoice choice = default;
+            bool chosen = false;
             foreach (var e in m_Document.elements)
             {
-                if (e.isText && m_GenerateText) CreateText(e, toLocal, scale);
+                if (e.isText && m_GenerateText)
+                {
+                    if (!chosen)
+                    {
+                        choice = ResolveTextBackend();
+                        chosen = true;
+                        WarnOnce(choice);
+                    }
+
+                    if (choice.backend != null) CreateText(choice.backend, e, toLocal, scale);
+                }
                 else if (e.isImage) CreateImage(e, toLocal);
             }
+        }
+
+        // One console line per document and engine, not one per rebuild.
+        void WarnOnce(VectraTextChoice choice)
+        {
+            if (!choice.fellBack && choice.backend != null) return;
+            if (choice.requested == VectraTextEngine.None) return;
+            if (m_WarnedDocument == m_Document && m_WarnedFor == choice.requested) return;
+            m_WarnedDocument = m_Document;
+            m_WarnedFor = choice.requested;
+            if (choice.backend == null)
+                Debug.LogWarning($"Vectra: no text engine can draw the text of '{m_Document.name}' (asked for {choice.requested}); the text is skipped.", this);
+            else
+                Debug.LogWarning($"Vectra: the {choice.requested} text engine is not available for '{m_Document.name}'; using {choice.Used}.", this);
         }
 
         GameObject CreateChild(string name)
@@ -195,37 +276,29 @@ namespace FirstSymbol.Vectra
             return go;
         }
 
-        void CreateText(SvgElementData e, Affine2 toLocal, float scale)
+        void CreateText(IVectraTextBackend backend, SvgElementData e, Affine2 toLocal, float scale)
         {
             var go = CreateChild("SVG Text");
-            var t = go.AddComponent<TextMeshProUGUI>();
-            ConfigureText(t, e, toLocal, scale, rectTransform.rect);
+            ConfigureText(backend, go, e, toLocal, scale, rectTransform.rect);
         }
 
-        /// <summary>Sets up a TextMeshPro object for an SVG text element placed in a rect of this image's size.</summary>
-        internal void ConfigureText(TextMeshProUGUI t, SvgElementData e, Affine2 toLocal, float scale, Rect rect)
+        /// <summary>Sets up a text object of <paramref name="backend"/> for an SVG text element placed in a rect of this image's size.</summary>
+        internal void ConfigureText(IVectraTextBackend backend, GameObject go, SvgElementData e, Affine2 toLocal, float scale, Rect rect)
         {
-            bool exactBold = false;
-            var font = m_FontMap != null ? m_FontMap.Resolve(e.fontFamily, e.bold, out exactBold) : null;
-            if (font == null) font = m_Font;
-            if (font != null) t.font = font;
-            t.text = e.text;
-            t.fontSize = e.fontSize * scale;
-            t.color = e.textColor * color;
-            t.fontStyle = (e.bold && !exactBold ? FontStyles.Bold : 0) | (e.italic ? FontStyles.Italic : 0);
-            t.textWrappingMode = TextWrappingModes.NoWrap;
-            t.raycastTarget = false;
-            var rt = (RectTransform)t.transform;
             float2 p = toLocal.Apply(e.textPosition);
-            float pivotX = e.anchor == SvgTextAnchor.Middle ? 0.5f : e.anchor == SvgTextAnchor.End ? 1f : 0f;
-            t.alignment = e.anchor == SvgTextAnchor.Middle ? TextAlignmentOptions.Baseline :
-                e.anchor == SvgTextAnchor.End ? TextAlignmentOptions.BaselineRight : TextAlignmentOptions.BaselineLeft;
-            rt.pivot = new Vector2(pivotX, 0f);
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(t.preferredWidth + 4f, t.fontSize * 1.5f);
-            // SVG y is the baseline; TMP baseline alignment puts the baseline at the bottom of the box + descender.
-            rt.anchoredPosition = new Vector2(p.x - rect.center.x, p.y - rect.center.y - t.fontSize * 0.25f);
-            rt.localEulerAngles = new Vector3(0, 0, -e.textRotation);
+            var fallback = VectraTextBackends.FontFor(backend, m_Font, m_LetteraFont);
+            var spec = new VectraTextSpec
+            {
+                element = e,
+                fontSize = e.fontSize * scale,
+                tint = color,
+                color = e.textColor * color,
+                origin = new Vector2(p.x - rect.center.x, p.y - rect.center.y),
+                rotation = -e.textRotation,
+                fontMap = m_FontMap,
+                fallbackFont = fallback
+            };
+            backend.Build(go, spec);
         }
 
         void CreateImage(SvgElementData e, Affine2 toLocal)

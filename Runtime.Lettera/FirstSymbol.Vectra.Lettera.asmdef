@@ -1,0 +1,26 @@
+{
+    "name": "FirstSymbol.Vectra.Lettera",
+    "rootNamespace": "FirstSymbol.Vectra.TextEngines",
+    "references": [
+        "FirstSymbol.Vectra",
+        "FirstSymbol.Lettera",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "VECTRA_LETTERA"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.firstsymbol.lettera",
+            "expression": "1.0.0",
+            "define": "VECTRA_LETTERA"
+        }
+    ],
+    "noEngineReferences": false
+}

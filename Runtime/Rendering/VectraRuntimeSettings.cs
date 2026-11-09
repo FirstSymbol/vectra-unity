@@ -1,3 +1,4 @@
+using FirstSymbol.Vectra.TextEngines;
 using UnityEngine;
 
 namespace FirstSymbol.Vectra.Rendering
@@ -16,6 +17,25 @@ namespace FirstSymbol.Vectra.Rendering
         [SerializeField, Tooltip("Largest size of the shared signed-distance atlas.")]
         int m_SdfAtlasMaxSize = DefaultAtlasSize;
 
+        [SerializeField, Tooltip("Which engine draws SVG text. Auto is Lettera when installed, else TextMesh Pro, else the legacy uGUI Text.")]
+        VectraTextEngine m_TextEngine = VectraTextEngine.Auto;
+
+        /// <summary>
+        /// The engine SVG components use when they follow the project. The editor sets it from the project settings;
+        /// a player takes it from this asset (Auto when the project has none).
+        /// </summary>
+        public static VectraTextEngine ProjectTextEngine { get; set; } = VectraTextEngine.Auto;
+
+        public VectraTextEngine TextEngine
+        {
+            get => m_TextEngine;
+            set
+            {
+                m_TextEngine = value;
+                Apply();
+            }
+        }
+
         public int SdfAtlasMaxSize
         {
             get => NormalizeAtlasSize(m_SdfAtlasMaxSize);
@@ -29,15 +49,20 @@ namespace FirstSymbol.Vectra.Rendering
         /// <summary>Nearest power of two between 512 and 8192.</summary>
         public static int NormalizeAtlasSize(int size) => Mathf.ClosestPowerOfTwo(Mathf.Clamp(size, MinAtlasSize, MaxAtlasSize));
 
-        public static VectraRuntimeSettings Create(int sdfAtlasMaxSize)
+        public static VectraRuntimeSettings Create(int sdfAtlasMaxSize, VectraTextEngine textEngine = VectraTextEngine.Auto)
         {
             var s = CreateInstance<VectraRuntimeSettings>();
             s.name = "Vectra Runtime Settings";
+            s.m_TextEngine = textEngine;
             s.SdfAtlasMaxSize = sdfAtlasMaxSize;
             return s;
         }
 
-        public void Apply() => VectraSdfAtlas.MaxSize = SdfAtlasMaxSize;
+        public void Apply()
+        {
+            VectraSdfAtlas.MaxSize = SdfAtlasMaxSize;
+            ProjectTextEngine = m_TextEngine;
+        }
 
         // Preloaded assets are enabled before the first scene loads, ahead of the first shape.
         void OnEnable() => Apply();
