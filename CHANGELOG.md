@@ -4,7 +4,7 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] - 2026-11-09
 
 ### Added
 - Text engines. SVG `<text>` is drawn through a backend seam in the core (`IVectraTextBackend`, `VectraTextBackends`), with no reference to any text package. Backends: `FirstSymbol.Vectra.Lettera` (turns on by itself when `com.firstsymbol.lettera` 1.0.0 or newer is installed), `FirstSymbol.Vectra.TextMeshPro` (the old behaviour), and a built-in legacy uGUI `Text` fallback that needs nothing.
