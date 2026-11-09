@@ -4,6 +4,11 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **The Lettera detection waited for an idle editor.** It ran from `EditorApplication.delayCall`, which an editor nobody has focused may not run for a long time, so `VECTRA_LETTERA` was not set. It now runs as the scripts load, and once more when the editor is idle. **Tools > FirstSymbol > Vectra > Detect Lettera** runs it by hand and says what it found.
+
 ## [0.5.2] - 2026-11-09
 
 ### Added

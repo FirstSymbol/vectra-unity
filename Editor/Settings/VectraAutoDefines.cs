@@ -128,7 +128,34 @@ namespace FirstSymbol.Vectra.Editor
         }
 
         [InitializeOnLoadMethod]
-        static void OnLoad() => EditorApplication.delayCall += () => Sync(Wanted(FindLettera(null, null), VersionNear));
+        static void OnLoad()
+        {
+            // Now, and again when the editor is idle. delayCall alone is not enough: an editor nobody has focused may not run it for a long time.
+            Run();
+            EditorApplication.delayCall += Run;
+        }
+
+        [MenuItem("Tools/FirstSymbol/Vectra/Detect Lettera", false, 101)]
+        static void DetectNow()
+        {
+            string path = FindLettera(null, null);
+            bool wanted = Wanted(path, VersionNear);
+            int changed = Sync(wanted);
+            Debug.Log("Vectra: Lettera assembly definition " + (path ?? "not found") + (wanted ? ", needs " + Define + "." : ", " + Define + " not needed from here (a package sets it itself).")
+                      + (changed == 0 ? " Nothing to change." : ""));
+        }
+
+        static void Run()
+        {
+            try
+            {
+                Sync(Wanted(FindLettera(null, null), VersionNear));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("Vectra: could not update the scripting define symbols for Lettera: " + e.Message);
+            }
+        }
 
         sealed class Watcher : AssetPostprocessor
         {
