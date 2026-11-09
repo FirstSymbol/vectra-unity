@@ -192,7 +192,20 @@ Sprite or Texture. **Window → Vectra → SVG Import Report** lists what each f
 **Supported:** paths (all commands), basic shapes, groups, nested svg, use/symbol/defs, transforms, CSS (`<style>`,
 selectors, specificity, inheritance), presentation attributes, linear and radial gradients (with transforms and
 spread), strokes with dashes, opacity, clip paths, blur and drop-shadow filters, saturate / hue-rotate, `<text>` with
-`<tspan>` styling (see Text engines below), embedded data-URI images.
+`<tspan>` styling (see Text engines below), embedded data-URI images, and markers (see Markers below).
+
+**Paint order.** Text and images are separate objects, and the shapes that follow them in the file are drawn above
+them: a `VectraSvgImage` draws the shapes before the first text as its own mesh and puts each later run of shapes in a
+child (`SVG Layer`) after the text it follows. A red block that comes after a text in the file covers the text, as in a
+browser. `VectraSvgRenderer` does the same with sorting orders. The children are generated, not saved, and stay put when
+the image is resized (only their positions change).
+
+**Markers.** `marker-start`, `marker-mid`, `marker-end` and the `marker` shorthand work on `path`, `line`, `polyline` and
+`polygon`: `orient` (`auto`, `auto-start-reverse` or an angle), `markerUnits` (`strokeWidth` by default, or
+`userSpaceOnUse`), `refX` / `refY`, `viewBox`, `markerWidth` / `markerHeight` and `overflow` (hidden by default: the
+marker is clipped to its viewport). Markers are drawn as ordinary elements after the shape, so they take its transform,
+clip path and filter. Markers on a marker's own content are not drawn, and every marker counts against the `<use>`
+budget.
 
 **Runtime API:**
 
@@ -222,8 +235,14 @@ back along the Auto order and the console says so once per document. Each SVG Im
 
 Text keeps its styling: a `<tspan>` with its own bold, italic, fill or size stays inside one text as markup (`<b>`,
 `<i>`, `<color>`, `<size>`) in every engine. Not drawn: per-`<tspan>` positions (`x`, `y`, `dx`, `dy`), `textPath`,
-`letter-spacing` and text decoration; a `<tspan>` with another `font-family` uses the font of the whole text. World-space
-`VectraSvgRenderer` draws no text yet.
+`letter-spacing` and text decoration; a `<tspan>` with another `font-family` uses the font of the whole text.
+
+**Text in world space.** `VectraSvgRenderer` draws text through the same backends, with the engines' Canvas-free text:
+Lettera **World Text** (`LetteraWorldText`) or TextMesh Pro **3D** (`TextMeshPro`). The legacy uGUI `Text` only draws inside
+a Canvas, so with only that engine the text of a world SVG is skipped and the console says so once. The renderer has the
+same **Text engine**, **Font map** and fallback fonts as the UI image. Text and the shapes after it keep their order
+through sorting orders: this component's `SortingOrder` plus one per step of the document. An engine written for 0.3
+must add `SupportsWorld` and `BuildWorld` (return `false` and do nothing if it cannot draw without a Canvas).
 
 **Upgrading from 0.2.** Before 0.3 all SVG text used TextMesh Pro. A project that already used Vectra (it has a Vectra
 settings file, a font map, or an SVG with text) gets **TextMesh Pro** written into its settings once, with a line in the
@@ -239,9 +258,11 @@ this version.
 
 **Limitations:** `<mask>` is applied as a geometric clip (luminance is ignored); pattern fills fall back to the colour
 of the first pattern shape; only blur, drop shadow, saturate and hue-rotate filters; external image URLs are not
-loaded; `<marker>` (arrowheads) is not drawn and the import report says so; of a `<switch>` only the first child whose
-`systemLanguage` / `requiredExtensions` conditions pass is drawn (the language list is `SvgParseOptions.languages`,
-default `en`).
+loaded; a group's `opacity` is applied to each child separately, so overlapping children show through each other (the
+import report says so); text and images are not clipped by `clip-path`; images are axis-aligned rectangles and
+`preserveAspectRatio` is ignored for them; of a `<switch>` only the first child whose `systemLanguage` /
+`requiredExtensions` conditions pass is drawn (the language list is `SvgParseOptions.languages`, default `en`). A `<use>`
+restyles its target for that copy only; the target keeps its own style where it stands.
 
 **Untrusted files.** The parser stops at budgets instead of crashing or hanging: nesting depth 256, 200 000 elements,
 200 000 elements drawn (every `<use>` copy counts), 10 000 `<use>` copies, 1 000 000 characters of path data, 32 million
@@ -332,6 +353,8 @@ unity command vectra expand_svg --target "SVG Image"
 - Shapes rebuild only when changed. Animated parameters rebuild every frame without managed allocations.
 - Texture paints, backdrop shapes and soft-masked children use separate materials (they batch among themselves).
 - The SDF atlas size limit is in Project Settings and reaches player builds (the build adds a small settings asset to the Preloaded Assets and removes it afterwards); the Atlas Debugger shows usage. A change uploads only the changed blocks of the atlas, not the whole texture.
+- The gradient atlas (256 texels wide, up to 4096 rows, 8 MiB of half floats at most) shares rows between paints with the same colours and stops. Rows are compared by content, so two paints can never end up on one row. A row nobody uses any more stays baked; the least recently used ones are dropped when the atlas is full. If 4095 different gradients are alive at once, the rest draw white and the console warns once.
+- What has been built and run on which platform: [Platforms](Platforms.md).
 
 ## Troubleshooting
 

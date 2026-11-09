@@ -4,6 +4,35 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- SVG markers: `marker-start`, `marker-mid`, `marker-end` and the `marker` shorthand on `path`, `line`, `polyline` and `polygon`, with `orient` (`auto`, `auto-start-reverse`, an angle), `markerUnits`, `refX` / `refY`, `viewBox`, `markerWidth` / `markerHeight` and `overflow`. They replace the 0.2.3 import-report line.
+- Text in world space: `VectraSvgRenderer` draws SVG text through the text backends (Lettera World Text, TextMesh Pro 3D) and has the same text engine, font map and fallback fonts as `VectraSvgImage`. `IVectraTextBackend` gets `SupportsWorld` and `BuildWorld`; `VectraTextBackends.Resolve` takes `world`. `VectraSvgRenderer.SortingOrder`, `Height`, `GenerateText`, `TextEngine`, `RebuildNow()`.
+- `Documentation~/Platforms.md` (and `.ru.md`): what was built, run and seen on each platform, as in Lettera's page.
+- English `README.md`; the Russian one is `README.ru.md`.
+- Tests that keep the guides true: every C# block in the guides compiles, and every English guide has a Russian twin with the same headings, code blocks, tables and links.
+- Gradient atlas diagnostics: `VectraGradientAtlas.LiveRows`, `ColdRows`, `EvictionCount`, `BakeCount`, `OverflowCount`.
+
+### Changed
+- `VectraSvgImage` no longer destroys and recreates its text and image children when its rect changes; it moves them. The children are rebuilt only when the document, the engine or the fonts change.
+- Gradient atlas: rows are shared by the content that is baked (linear and radial paints with the same stops share a row), and a row nobody uses stays baked until the space is needed.
+- API: `IVectraTextBackend` has two new members (`SupportsWorld`, `BuildWorld`). A backend written for 0.3 must add them (`false` and an empty method if it cannot draw without a Canvas).
+
+### Fixed
+- Gradient atlas: two paints whose 32-bit hashes collided shared one row and drew with the wrong colours. Rows are compared by every input of the bake now.
+- Gradient atlas: it could not recover when full (4096 rows) and gave out a bad row. Unused rows are evicted least recently used first; when every row is held by a live paint the request gets a reserved white row and the console warns once.
+- SVG text and images were drawn above the whole document, so a shape that follows a text in the file was drawn below it. Paint order is kept (see Added in the guide: runs of shapes after a text are children of the image, or sorted meshes in world space).
+- A stale outline: the SVG element cache was keyed by element index and document instance, so a document parsed again into the same instance, or a path edited in place, kept the old geometry; two clip paths with as many points as each other were mixed up. The keys hash the path and the clip content now.
+- A `<use>` restyled its target for good: an element drawn where it stands after a `<use>` of it took the `<use>`'s inherited style. The target gets its own style back.
+- A group's `opacity` is applied to each child (not to the group as a whole); the import report now says so.
+
+### Limits
+- Text and images are not clipped by `clip-path`; images are axis-aligned rectangles and ignore `preserveAspectRatio`; embedded images are not drawn in world space.
+- Group opacity is not composited as a layer.
+- World-space text needs Lettera or TextMesh Pro; the legacy uGUI `Text` cannot draw without a Canvas, so the text is skipped (one console line).
+- The gradient atlas holds 4095 different live gradients; the rest draw white.
+
 ## [0.3.0] - 2026-11-09
 
 ### Added

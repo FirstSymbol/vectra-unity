@@ -1,24 +1,26 @@
-# Vectra — векторная графика для Unity
+# Vectra — vector graphics for Unity
 
-Векторные фигуры для **uGUI Canvas** и **world space**. Включает:
-- аналитические SDF-примитивы и произвольные пути;
-- булевы операции, в том числе плавные;
-- градиенты, паттерны, обводки с dash и trim;
-- тени, свечение, bevel и другие эффекты;
-- маски, палитры с темами, анимацию и состояния взаимодействия;
-- фигуры из спрайтов и общую библиотеку фигур;
-- импорт и экспорт SVG.
+*Русская версия: [README.ru.md](README.ru.md).*
 
-Всё рисуется одним общим материалом: фигуры батчатся. Геометрия считается на Burst без GC-аллокаций при пересборке.
+Vector shapes for the **uGUI Canvas** and **world space**. Includes:
+- analytic SDF primitives and arbitrary paths;
+- boolean operations, including smooth ones;
+- gradients, patterns, strokes with dashes and trim;
+- shadows, glows, bevels and other effects;
+- masks, palettes with themes, animation and interaction states;
+- shapes traced from sprites and a shared shape library;
+- SVG import and export, with text, markers and paint order.
+
+Everything is drawn with one shared material, so shapes batch. Geometry is computed by Burst and rebuilding does not allocate managed memory.
 
 - **Unity:** 6000.3+ (6.3 LTS).
-- **Зависимости:** Burst, Collections, Mathematics, uGUI. Текст из SVG рисует Lettera или TextMeshPro, если они есть, иначе встроенный uGUI Text (выбор в Project Settings → Vectra).
-- **Пайплайны:** Built-in, URP, HDRP. Backdrop-эффекты работают только в URP.
-- **Платформы:** Windows, macOS, Linux, WebGL, WebGPU, iOS, Android — всё с Shader Model 3.5. Compute-шейдеры не используются. На WebGL Burst-код выполняется как обычный IL2CPP.
+- **Dependencies:** Burst, Collections, Mathematics, uGUI. SVG text is drawn by Lettera or TextMesh Pro when they are installed, otherwise by the built-in uGUI Text (chosen in Project Settings → Vectra).
+- **Pipelines:** Built-in, URP, HDRP. Backdrop effects work in URP only.
+- **Platforms:** Windows, macOS, Linux, WebGL, WebGPU, iOS, Android — all with Shader Model 3.5. No compute shaders. On WebGL the Burst code runs as ordinary IL2CPP. What has actually been built and run where is on the [Platforms](Documentation~/Platforms.md) page.
 
-Подробное руководство: [Documentation~/Vectra.ru.md](Documentation~/Vectra.ru.md), на английском — [Documentation~/Vectra.md](Documentation~/Vectra.md).
+Full guide: [Documentation~/Vectra.md](Documentation~/Vectra.md); in Russian: [Documentation~/Vectra.ru.md](Documentation~/Vectra.ru.md).
 
-## Установка
+## Installation
 
 Package Manager → **+** → **Add package from git URL...**
 
@@ -26,14 +28,14 @@ Package Manager → **+** → **Add package from git URL...**
 https://github.com/FirstSymbol/vectra-unity.git
 ```
 
-Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.3.0`.
+A specific version is installed through its tag: `https://github.com/FirstSymbol/vectra-unity.git#0.3.0`.
 
-## Быстрый старт
+## Quick start
 
-- **GameObject → UI → Vectra → …** — фигура на канвасе (канвас создаётся автоматически).
-- **GameObject → 2D Object → Vectra → …** — фигура в мире (`VectraRenderer`).
-- Перетащите `.svg` в проект. Чтобы его обрабатывал Vectra, выберите импортёр **Vectra Svg Importer** в инспекторе ассета или включите **Project Settings → Vectra → Use Vectra SVG importer**. Затем создайте **GameObject → UI → Vectra → SVG Image**.
-- **Сэмплы** (Package Manager → Vectra → Samples):
+- **GameObject → UI → Vectra → …** — a shape on a canvas (the canvas is created for you).
+- **GameObject → 2D Object → Vectra → …** — a shape in the world (`VectraRenderer`).
+- Drop an `.svg` into the project. To have Vectra import it, pick the **Vectra Svg Importer** in the asset's inspector or turn on **Project Settings → Vectra → Use Vectra SVG importer**. Then create **GameObject → UI → Vectra → SVG Image**.
+- **Samples** (Package Manager → Vectra → Samples):
   - Shapes Gallery;
   - SVG Showcase;
   - Effects & Masks;
@@ -42,67 +44,67 @@ https://github.com/FirstSymbol/vectra-unity.git
   - World Space;
   - URP Backdrop.
 
-## Компоненты
+## Components
 
-| Компонент | Назначение |
+| Component | Purpose |
 |---|---|
-| `VectraShape` | Фигура uGUI (`MaskableGraphic`). Работает с Mask, RectMask2D (с softness), layout, точным raycast. |
-| `VectraRenderer` | Фигура в мире: MeshRenderer, sorting layer и order, опциональный `PolygonCollider2D`. |
-| `VectraSvgImage` / `VectraSvgRenderer` | SVG-документ одним мешем. Текст рисуется выбранным движком текста (Lettera, TextMeshPro или Legacy), встроенные картинки — через RawImage. Есть override цвета по `#id`, `.class` и тегу, а также разворачивание в иерархию фигур. |
-| `VectraBooleanGroup` (+ `VectraBooleanOperand`) | Дочерние фигуры становятся операндами булевой операции. Порядок задаётся иерархией. |
-| `VectraMask` | Маска по контуру фигуры. Stencil — для любого UI. Soft — с пером и инверсией, для дочерних фигур Vectra. |
-| `VectraTheme` (+ ассет `VectraPalette`) | Именованные цвета по темам. Смена темы перекрашивает все фигуры с токенами палитры. |
-| `VectraAnimatedProperties` | Поля для ключей Animator и Timeline: trim, цвета, ширина, rotation, fill amount, dissolve, morph. |
-| `VectraInteractionStates` | Hover, pressed, selected (фокус) и disabled: оттенок, масштаб, цвета, сила эффектов, плавные переходы. |
-| `VectraShapeAsset` (ассет) | Общая геометрия для многих объектов: библиотека фигур. |
-| `VectraBackdrop` (URP) | Frosted glass и 15 сложных blend-режимов. Нужен `VectraBackdropFeature` в URP Renderer. |
-| `VectraStyle` (ассет) | Общий набор заливок, обводок и эффектов, аналог CSS-класса. |
+| `VectraShape` | A uGUI shape (`MaskableGraphic`). Works with Mask, RectMask2D (with softness), layout and exact raycast. |
+| `VectraRenderer` | A shape in the world: MeshRenderer, sorting layer and order, an optional `PolygonCollider2D`. |
+| `VectraSvgImage` / `VectraSvgRenderer` | An SVG document as one mesh per run of shapes. Text is drawn by the chosen text engine (Lettera, TextMesh Pro or Legacy; in world space Lettera or TextMesh Pro), embedded images through RawImage. Colour overrides by `#id`, `.class` and tag, and expanding into a hierarchy of shapes. |
+| `VectraBooleanGroup` (+ `VectraBooleanOperand`) | Child shapes become the operands of a boolean operation. The hierarchy sets the order. |
+| `VectraMask` | A mask that follows a shape's outline. Stencil works for any UI. Soft has feather and invert, for Vectra children. |
+| `VectraTheme` (+ `VectraPalette` asset) | Named colours by theme. Switching the theme recolours every shape that uses palette tokens. |
+| `VectraAnimatedProperties` | Fields for Animator and Timeline keys: trim, colours, width, rotation, fill amount, dissolve, morph. |
+| `VectraInteractionStates` | Hover, pressed, selected (focus) and disabled: tint, scale, colours, effect strength, smooth transitions. |
+| `VectraShapeAsset` (asset) | Shared geometry for many objects: a shape library. |
+| `VectraBackdrop` (URP) | Frosted glass and 15 advanced blend modes. Needs `VectraBackdropFeature` in the URP Renderer. |
+| `VectraStyle` (asset) | A shared set of fills, strokes and effects, like a CSS class. |
 
-## Фигуры
+## Shapes
 
-**Аналитические:** точная функция расстояния, идеальный AA на любом масштабе, эффекты почти бесплатны.
-- **Прямоугольник:** свой радиус на каждый угол; стиль угла Round, Chamfer, Inverted, Notch или Squircle.
-- **Базовые:** эллипс, кольцо, дуга, сектор, многоугольник, звезда, треугольник, линия.
-- **Прочие:** крест, сердце, ромб, трапеция, параллелограмм, полумесяц, яйцо, vesica, суперэллипс, цветок, стрелка, шеврон.
+**Analytic:** an exact distance function, perfect anti-aliasing at any scale, nearly free effects.
+- **Rectangle:** its own radius per corner; corner style Round, Chamfer, Inverted, Notch or Squircle.
+- **Basic:** ellipse, ring, arc, pie, polygon, star, triangle, line.
+- **Other:** cross, heart, diamond, trapezoid, parallelogram, crescent, egg, vesica, superellipse, flower, arrow, chevron.
 
-**Path-фигуры:**
-- **Контуры:** Bezier-путь (редактируется в Scene view; точки Corner, Smooth, Symmetric), полилиния со скруглением углов, спираль, шестерня, волна, SVG-путь (`d`), облачко с хвостиком, галочка.
-- **Составные:** булева группа (exact или smooth), морфинг между любыми двумя фигурами.
-- **Из спрайтов:** силуэт спрайта как редактируемый контур (порог альфы, разрешение, упрощение, сглаживание).
+**Path shapes:**
+- **Outlines:** a Bezier path (edited in the Scene view; points Corner, Smooth, Symmetric), a polyline with rounded corners, spiral, gear, wave, an SVG path (`d`), a speech bubble with a tail, a checkmark.
+- **Compound:** a boolean group (exact or smooth), a morph between any two shapes.
+- **From sprites:** a sprite's silhouette as an editable outline (alpha threshold, resolution, simplification, smoothing).
 
-Любую фигуру, SVG-путь или трассированный спрайт можно превратить в редактируемый Bezier-путь (**Convert to editable path**).
+Any shape, SVG path or traced sprite can be turned into an editable Bezier path (**Convert to editable path**).
 
-У каждой фигуры есть `rotation`. Аналитическую фигуру всегда можно отрисовать и как путь: флаг `Force Path` или автоматически, когда это нужно для dash-обводки.
+Every shape has `rotation`. An analytic shape can always be drawn as a path too: the `Force Path` flag, or automatically when a dashed stroke needs it.
 
-## Заливки, обводки, эффекты
+## Fills, strokes, effects
 
 - **Paint:**
   - solid (HDR);
-  - градиенты linear, radial (с focal point), angular, diamond: spread pad/repeat/reflect, без лимита стопов, midpoint, интерполяция sRGB/Linear/OKLab/Step, dithering против бэндинга;
-  - текстура (stretch, fit, fill, tile);
-  - паттерны stripes, checker, dots, grid;
-  - шум;
-  - freeform-градиент по цветовым точкам;
-  - contour gradient: градиент и полосы, повторяющие форму (затухание к краю, кольца).
+  - gradients linear, radial (with a focal point), angular, diamond: spread pad/repeat/reflect, unlimited stops, midpoint, interpolation sRGB/Linear/OKLab/Step, dithering against banding;
+  - texture (stretch, fit, fill, tile);
+  - patterns stripes, checker, dots, grid;
+  - noise;
+  - a freeform gradient from colour points;
+  - contour gradient: a gradient and stripes that follow the shape (fade to the edge, rings).
 
-  Цвет можно брать из палитры по имени.
-- **Обводки:** любое количество; align center/inside/outside; caps; joins с miter limit; dash (абсолютные или относительные длины, offset); trim path; профиль ширины `AnimationCurve`; режим «за заливкой».
-- **Эффекты:**
+  A colour can be taken from a palette by name.
+- **Strokes:** any number; align center/inside/outside; caps; joins with miter limit; dashes (absolute or relative lengths, offset); trim path; a width profile `AnimationCurve`; a "behind the fill" mode.
+- **Effects:**
   - drop shadow, inner shadow;
   - outer glow, inner glow;
   - bevel & emboss, layer blur, noise/grain;
   - color adjust (HSBC);
   - fill amount (horizontal/vertical/radial), dissolve, pixelate;
-  - outline (по полю расстояний);
+  - outline (from the distance field);
   - color overlay, gradient overlay;
-  - extrude (слои силуэта);
-  - deform (анимированная деформация на GPU).
+  - extrude (silhouette layers);
+  - deform (animated deformation on the GPU).
 
-  Свои эффекты пишутся наследованием от `VectraCustomEffect`.
+  Write your own effects by inheriting `VectraCustomEffect`.
 
-  У каждого слоя есть blend Normal или Additive. Для всей фигуры доступны Normal, Additive, Multiply и Screen.
+  Every layer has blend Normal or Additive. The whole shape can use Normal, Additive, Multiply or Screen.
 
-## Код
+## Code
 
 ```csharp
 var shape = gameObject.AddComponent<VectraShape>();
@@ -112,69 +114,70 @@ shape.SetFill(VectraPaint.Linear(Color.yellow, Color.red, 90f))
      .SetStroke(Color.white, 3f, StrokeAlignment.Outside);
 shape.AddEffect<DropShadowEffect>().blur = 12f;
 
-// анимация твинами
+// animation with tweens
 shape.TweenTrim(0f, 1f, 0.6f).SetEase(VectraEase.OutCubic).SetLoops(-1, true);
 
-// или вручную: изменить параметры и пометить фигуру грязной
+// or by hand: change the parameters and mark the shape dirty
 shape.Strokes[0].trimEnd = Mathf.PingPong(Time.time, 1f);
 shape.SetShapeDirty();
 
-// палитра: смена темы перекрашивает фигуры с токенами
+// palette: switching the theme recolours shapes that use tokens
 shape.Fills[0].paint.colorToken = "Accent";
 theme.SetTheme("Dark");
 
-// SVG в рантайме
+// SVG at runtime
 svgImage.Document = VectraSvg.Parse(svgText);
-VectraSvg.Expand(svgImage);   // отдельный VectraShape на каждый элемент
+VectraSvg.Expand(svgImage);   // one VectraShape per element
 ```
 
-Утилиты:
-- `VectraRasterizer.Render(...)` — фигура или SVG в `Texture2D`.
-- `SvgWriter.Write(...)` — экспорт в SVG.
-- `VectraOutline.GetOutline(...)` — контуры для коллайдеров.
-- `VectraGeometry` — низкоуровневый Burst API: flatten, tessellate (fill rules и N-операндные булевы операции), stroke, SDF, contours.
+Utilities:
+- `VectraRasterizer.Render(...)` — a shape or SVG into a `Texture2D`.
+- `SvgWriter.Write(...)` — export to SVG.
+- `VectraOutline.GetOutline(...)` — outlines for colliders.
+- `VectraGeometry` — the low-level Burst API: flatten, tessellate (fill rules and N-operand booleans), stroke, SDF, contours.
 
-## Редактор
+## Editor
 
-- **Инспектор:**
-  - сетка типов фигур (зелёные — аналитические, оранжевые — path);
-  - карточки заливок, обводок и эффектов: видимость, перетаскивание за «⋯», удаление;
-  - редактор градиентов (клик по полосе добавляет стоп, есть пресеты);
-  - выбор цвета палитры;
-  - стили (Save/Detach) и статистика меша.
-- **Scene view:** инструмент **Edit Vectra Shape**. Им редактируются:
-  - точки и тангенсы пути: точку добавляет «+» в середине сегмента, удаляет Ctrl+клик;
-  - точки полилинии;
-  - радиусы углов (Shift — один угол);
-  - углы дуги;
-  - ручки градиента и смещение тени.
+- **Inspector:**
+  - a grid of shape types (green are analytic, orange are path);
+  - cards for fills, strokes and effects: visibility, drag by "⋯", delete;
+  - a gradient editor (click the bar to add a stop, with presets);
+  - a palette colour picker;
+  - styles (Save/Detach) and mesh statistics.
+- **Scene view:** the **Edit Vectra Shape** tool edits:
+  - path points and tangents: "+" in the middle of a segment adds a point, Ctrl+click removes it;
+  - polyline points;
+  - corner radii (Shift — one corner);
+  - arc angles;
+  - gradient handles and the shadow offset.
 
-  Оверлей инструмента переключает режим точки, включает привязку к сетке и ручки.
-- **Контекстное меню:** Copy/Paste Vectra Style, Export as PNG / SVG / Sprite Asset, Expand to Hierarchy (SVG Image).
-- **Окна:** Window → Vectra → Atlas Debugger и SVG Import Report.
-- **CLI для скриптов и AI-агентов** (при установленном `com.unity.pipeline`): `unity command vectra help | types | list | get | create | set | add | remove | mask | states | palette | theme | svg_parse | export_png …`.
-  - Вход и выход — JSON, правки отменяются через Undo.
-  - **Tools → Vectra → Install Claude Code Skill** ставит в проект skill с инструкцией для Claude Code.
+  The tool's overlay switches the point mode, turns on grid snapping and the handles.
+- **Context menu:** Copy/Paste Vectra Style, Export as PNG / SVG / Sprite Asset, Expand to Hierarchy (SVG Image).
+- **Windows:** Window → Vectra → Atlas Debugger and SVG Import Report.
+- **CLI for scripts and AI agents** (with `com.unity.pipeline` installed): `unity command vectra help | types | list | get | create | set | add | remove | mask | states | palette | theme | svg_parse | export_png …`.
+  - Input and output are JSON, edits are undoable.
+  - **Tools → Vectra → Install Claude Code Skill** puts a skill with instructions for Claude Code into the project.
 
 ## URP backdrop
 
-Добавьте **Vectra Backdrop Feature** в ассет URP Renderer. Захват идёт до прозрачных объектов. Поэтому стекло поверх другого UI делается стеком камер: фон рисует базовая камера, а стекло — overlay-камера. Так устроен сэмпл URP Backdrop.
+Add the **Vectra Backdrop Feature** to the URP Renderer asset. It captures before transparent objects. That is why glass over other UI is built with a camera stack: the base camera draws the background and an overlay camera draws the glass. The URP Backdrop sample is built this way.
 
-## Ограничения SVG
+## SVG limits
 
-- `<mask>` применяется как геометрический клип, яркость маски не учитывается.
-- Паттерн-заливки заменяются цветом первой фигуры паттерна.
-- Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate.
-- Внешние картинки по URL не загружаются, работают только встроенные data-URI.
-- Обо всём неподдержанном пишется в отчёт импорта (инспектор ассета и Window → Vectra → SVG Import Report).
+- `<mask>` is applied as a geometric clip; the mask's luminance is ignored.
+- Pattern fills are replaced by the colour of the pattern's first shape.
+- Of the filters, blur, drop shadow (including the offset + blur + merge chain), saturate and hueRotate are supported.
+- A group's `opacity` is applied to each child separately.
+- External images by URL are not loaded; only embedded data URIs work.
+- Anything unsupported is written to the import report (the asset's inspector and Window → Vectra → SVG Import Report).
 
-## Производительность
+## Performance
 
-- Пересборка происходит только по изменению. Тесселяция, обводки и SDF кешируются по хешам.
-- Атласы градиентов (RGBAHalf) и SDF (RHalf) общие для всех фигур, поэтому у всех один материал.
-- Запечённые SDF есть только у path-фигур с эффектами и у soft-масок. Аналитическим фигурам текстуры не нужны.
-- Размер SDF-атласа задаётся в Project Settings → Vectra, заполненность видна в Atlas Debugger.
+- A rebuild happens only on change. Tessellation, strokes and SDFs are cached by hash.
+- The gradient atlas (RGBAHalf) and the SDF atlas (RHalf) are shared by all shapes, which is why everything has one material. Gradient rows are shared by content and the least recently used are dropped when the atlas is full.
+- Baked SDFs exist only for path shapes with effects and for soft masks. Analytic shapes need no textures.
+- The SDF atlas size is set in Project Settings → Vectra; how full it is shows in the Atlas Debugger.
 
-## Лицензия
+## License
 
-MIT, см. [LICENSE.md](LICENSE.md).
+MIT, see [LICENSE.md](LICENSE.md).
