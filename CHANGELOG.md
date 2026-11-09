@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - The README no longer asks you to add `VECTRA_LETTERA` or `FIRSTSYMBOL_HUB` by hand for folders under `Assets`.
 
+### Limits
+- Deleting Lettera while the editor is closed leaves `VECTRA_LETTERA` set, so Unity opens with compile errors. Remove it in Project Settings > Player > Scripting Define Symbols, or put the folder back and delete it from inside Unity.
+
 ## [0.5.1] - 2026-11-09
 
 ### Docs

@@ -420,11 +420,9 @@ namespace FirstSymbol.Vectra.Editor.Tests
         [Test]
         public void TheRegistry_MatchesWhatTheProjectHas()
         {
-#if VECTRA_TEST_LETTERA
-            Assert.IsTrue(VectraTextBackends.IsRegistered(VectraTextEngine.Lettera), "Lettera is in the project");
-#else
-            Assert.IsFalse(VectraTextBackends.IsRegistered(VectraTextEngine.Lettera), "Lettera is not in the project");
-#endif
+            // What the project has: Lettera as a package or as a folder under Assets.
+            bool lettera = !string.IsNullOrEmpty(UnityEditor.Compilation.CompilationPipeline.GetAssemblyDefinitionFilePathFromAssemblyName("FirstSymbol.Lettera"));
+            Assert.AreEqual(lettera, VectraTextBackends.IsRegistered(VectraTextEngine.Lettera), lettera ? "Lettera is in the project" : "Lettera is not in the project");
 #if VECTRA_NO_TMP
             Assert.IsFalse(VectraTextBackends.IsRegistered(VectraTextEngine.TextMeshPro), "the TextMesh Pro backend is switched off");
 #else
