@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using FirstSymbol.Vectra.Svg;
@@ -6,15 +7,17 @@ using FirstSymbol.Vectra.TextEngines;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
-namespace FirstSymbol.Vectra.Editor.Tests
+namespace FirstSymbol.Vectra.Tests
 {
     /// <summary>
-    /// SVG text in world space, drawn by every engine that can do it into a render texture (never the screen), then measured by
-    /// pixels: where the ink lands against the baseline the SVG names. Set VECTRA_SHOTS to a folder to keep the pictures.
+    /// SVG text in world space in a running player loop (Lettera's world text batches its meshes from the loop), drawn by every
+    /// engine that can do it into a render texture and measured by pixels: where the ink lands against the baseline the SVG names,
+    /// and that a shape after the text covers it. Set VECTRA_SHOTS to a folder to keep the pictures.
     /// </summary>
-    public class WorldTextRenderTests
+    public class WorldTextPlayModeTests
     {
         const int W = 800, H = 400;
 
@@ -24,13 +27,34 @@ namespace FirstSymbol.Vectra.Editor.Tests
             "<rect width='200' height='100' fill='#101820'/>" +
             "<text x='20' y='70' font-size='60' fill='#ffffff'>HHHH</text></svg>";
 
-        static IEnumerable<VectraTextEngine> Engines()
+        const string Covered =
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 100'>" +
+            "<rect width='200' height='100' fill='#101820'/>" +
+            "<text x='20' y='70' font-size='60' fill='#ffffff'>HHHH</text>" +
+            "<rect x='10' y='10' width='180' height='80' fill='#cc0000'/></svg>";
+
+        bool m_IgnoreFailing;
+
+        [SetUp]
+        public void SetUp()
         {
+            m_IgnoreFailing = LogAssert.ignoreFailingMessages;
+            LogAssert.ignoreFailingMessages = true; // TextMesh Pro without its Essential Resources complains; the pixels tell
+        }
+
+        [TearDown]
+        public void TearDown() => LogAssert.ignoreFailingMessages = m_IgnoreFailing;
+
+        static List<VectraTextEngine> Engines()
+        {
+            var list = new List<VectraTextEngine>();
             foreach (var e in new[] { VectraTextEngine.Lettera, VectraTextEngine.TextMeshPro })
             {
                 var b = VectraTextBackends.Get(e);
-                if (b != null && b.SupportsWorld && b.IsUsable(null, null)) yield return e;
+                if (b != null && b.SupportsWorld && b.IsUsable(null, null)) list.Add(e);
             }
+
+            return list;
         }
 
         static string ShotDir()
@@ -41,13 +65,13 @@ namespace FirstSymbol.Vectra.Editor.Tests
             return dir;
         }
 
-        static Color32[] Render(string svg, VectraTextEngine engine, out Texture2D tex)
+        // Draws the document in world space with one engine for a few frames; returns the pixels, bottom row first.
+        static IEnumerator Draw(string svg, VectraTextEngine engine, Action<Color32[]> done)
         {
-            var rt = RenderTexture.GetTemporary(W, H, 24, RenderTextureFormat.ARGB32);
+            var rt = new RenderTexture(W, H, 24, RenderTextureFormat.ARGB32);
             var camGo = new GameObject("shot camera") { tag = "MainCamera" };
             var go = new GameObject("world svg");
             var doc = SvgParser.Parse(svg);
-            var previous = RenderTexture.active;
             try
             {
                 var cam = camGo.AddComponent<Camera>();
@@ -63,21 +87,27 @@ namespace FirstSymbol.Vectra.Editor.Tests
                 r.Height = 2f;
                 r.TextEngine = (VectraTextEngineChoice)((int)engine + 1);
                 r.Document = doc;
-                r.RebuildNow();
-                for (int i = 0; i < 3; i++) cam.Render();
+                for (int i = 0; i < 4; i++) yield return null;
+                cam.Render();
+                yield return null;
+                cam.Render();
+                var previous = RenderTexture.active;
                 RenderTexture.active = rt;
-                tex = new Texture2D(W, H, TextureFormat.RGBA32, false);
+                var tex = new Texture2D(W, H, TextureFormat.RGBA32, false);
                 tex.ReadPixels(new Rect(0, 0, W, H), 0, 0);
                 tex.Apply();
-                return tex.GetPixels32();
+                RenderTexture.active = previous;
+                File.WriteAllBytes(Path.Combine(ShotDir(), "world_" + engine.ToString().ToLowerInvariant() + (svg == Covered ? "_covered" : "") + ".png"), tex.EncodeToPNG());
+                var px = tex.GetPixels32();
+                Object.Destroy(tex);
+                done(px);
             }
             finally
             {
-                RenderTexture.active = previous;
-                RenderTexture.ReleaseTemporary(rt);
-                Object.DestroyImmediate(go);
-                Object.DestroyImmediate(camGo);
-                Object.DestroyImmediate(doc);
+                Object.Destroy(go);
+                Object.Destroy(camGo);
+                Object.Destroy(doc);
+                rt.Release();
             }
         }
 
@@ -101,42 +131,35 @@ namespace FirstSymbol.Vectra.Editor.Tests
             return maxX >= 0;
         }
 
-        [Test]
-        public void TheBaseline_LandsOnTheSvgY_InEveryWorldEngine()
+        [UnityTest]
+        public IEnumerator TheBaseline_LandsOnTheSvgY_InEveryWorldEngine()
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) Assert.Ignore("needs a graphics device");
-            int ran = 0;
-            foreach (var engine in Engines())
+            var engines = Engines();
+            if (engines.Count == 0) Assert.Ignore("no engine that draws in world space is usable in this project");
+            foreach (var engine in engines)
             {
-                var px = Render(Svg, engine, out var tex);
-                File.WriteAllBytes(Path.Combine(ShotDir(), "world_" + engine.ToString().ToLowerInvariant() + ".png"), tex.EncodeToPNG());
-                Object.DestroyImmediate(tex);
+                Color32[] px = null;
+                yield return Draw(Svg, engine, p => px = p);
                 Assert.IsTrue(Ink(px, out int minX, out int maxX, out int top, out int bottom), engine + ": no text was drawn");
                 Debug.Log($"VECTRA-METRIC world text {engine}: ink x {minX}..{maxX}, y {top}..{bottom} (baseline expected at 280, left edge about 80..140)");
                 Assert.That(bottom, Is.InRange(262, 296), engine + ": the bottom of the letters sits on the baseline");
                 Assert.That(top, Is.InRange(85, 150), engine + ": four letters of 60 units are about 170 pixels tall");
                 Assert.That(minX, Is.InRange(70, 150), engine + ": the text starts at x = 20");
                 Assert.Greater(maxX, 300, engine + ": four letters are wide");
-                ran++;
             }
-
-            if (ran == 0) Assert.Ignore("no engine that draws in world space is usable in this project");
         }
 
-        [Test]
-        public void ARectangleAfterTheText_CoversIt_InWorldSpace()
+        [UnityTest]
+        public IEnumerator ARectangleAfterTheText_CoversIt_InWorldSpace()
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) Assert.Ignore("needs a graphics device");
-            const string covered =
-                "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 100'>" +
-                "<rect width='200' height='100' fill='#101820'/>" +
-                "<text x='20' y='70' font-size='60' fill='#ffffff'>HHHH</text>" +
-                "<rect x='10' y='10' width='180' height='80' fill='#cc0000'/></svg>";
-            int ran = 0;
-            foreach (var engine in Engines())
+            var engines = Engines();
+            if (engines.Count == 0) Assert.Ignore("no engine that draws in world space is usable in this project");
+            foreach (var engine in engines)
             {
-                var px = Render(covered, engine, out var tex);
-                Object.DestroyImmediate(tex);
+                Color32[] px = null;
+                yield return Draw(Covered, engine, p => px = p);
                 int white = 0, red = 0;
                 for (int y = 60; y < 340; y++)
                     for (int x = 60; x < 740; x++)
@@ -149,10 +172,22 @@ namespace FirstSymbol.Vectra.Editor.Tests
                 Debug.Log($"VECTRA-METRIC world z-order {engine}: white {white}, red {red}");
                 Assert.AreEqual(0, white, engine + ": text drawn above a shape that follows it");
                 Assert.Greater(red, 20000, engine.ToString());
-                ran++;
             }
+        }
 
-            if (ran == 0) Assert.Ignore("no engine that draws in world space is usable in this project");
+        [UnityTest]
+        public IEnumerator WithoutAnyWorldEngine_TheDocumentStillDrawsItsShapes()
+        {
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) Assert.Ignore("needs a graphics device");
+            // The legacy engine cannot draw in world space: the text is skipped, the shapes remain.
+            LogAssert.ignoreFailingMessages = true;
+            Color32[] px = null;
+            yield return Draw(Covered, VectraTextEngine.Legacy, p => px = p);
+            int red = 0;
+            for (int y = 60; y < 340; y++)
+                for (int x = 60; x < 740; x++)
+                    if (px[y * W + x].r > 150 && px[y * W + x].g < 60) red++;
+            Assert.Greater(red, 20000, "the red block still shows");
         }
     }
 }
