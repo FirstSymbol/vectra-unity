@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Text in world space: `VectraSvgRenderer` draws SVG text through the text backends (Lettera World Text, TextMesh Pro 3D) and has the same text engine, font map and fallback fonts as `VectraSvgImage`. `IVectraTextBackend` gets `SupportsWorld` and `BuildWorld`; `VectraTextBackends.Resolve` takes `world`. `VectraSvgRenderer.SortingOrder`, `Height`, `GenerateText`, `TextEngine`, `RebuildNow()`.
 - `Documentation~/Platforms.md` (and `.ru.md`): what was built, run and seen on each platform, as in Lettera's page.
 - English `README.md`; the Russian one is `README.ru.md`.
+- Tests for all of the above (EditMode 266 / PlayMode 27 in the plain project; 279 / 27 with Lettera; 280 / 27 with TextMesh Pro; 293 / 27 with both; none fail): gradient atlas collisions, eviction order and overflow with timings, markers, paint order in pixels, children kept on resize, cache keys, world text by pixels in every engine, the SVG importer, and a player check of every sample on seven platforms (see Platforms).
 - Tests that keep the guides true: every C# block in the guides compiles, and every English guide has a Russian twin with the same headings, code blocks, tables and links.
 - Gradient atlas diagnostics: `VectraGradientAtlas.LiveRows`, `ColdRows`, `EvictionCount`, `BakeCount`, `OverflowCount`.
 
