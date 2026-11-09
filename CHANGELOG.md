@@ -4,7 +4,7 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] - 2026-11-09
 
 ### Added
 - SVG markers: `marker-start`, `marker-mid`, `marker-end` and the `marker` shorthand on `path`, `line`, `polyline` and `polygon`, with `orient` (`auto`, `auto-start-reverse`, an angle), `markerUnits`, `refX` / `refY`, `viewBox`, `markerWidth` / `markerHeight` and `overflow`. They replace the 0.2.3 import-report line.
