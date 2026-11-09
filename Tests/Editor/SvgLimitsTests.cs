@@ -141,13 +141,13 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         [Test]
-        public void Markers_AreReportedNotSilentlyDropped()
+        public void Markers_AreDrawnNotReported()
         {
             const string svg = @"<svg viewBox='0 0 10 10'><defs><marker id='m' markerWidth='2' markerHeight='2'><path d='M0 0 L2 1 L0 2z'/></marker></defs>
                 <path d='M1 1 L8 8' stroke='black' marker-end='url(#m)'/></svg>";
             var doc = SvgParser.Parse(svg);
-            Assert.AreEqual(1, doc.elements.Count);
-            Assert.IsTrue(Reported(doc, "marker"), string.Join(" | ", doc.warnings));
+            Assert.AreEqual(2, doc.elements.Count, "the path and its end marker");
+            Assert.IsFalse(Reported(doc, "marker"), string.Join(" | ", doc.warnings));
             Object.DestroyImmediate(doc);
         }
 
