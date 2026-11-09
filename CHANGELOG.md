@@ -4,6 +4,15 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Lettera as a folder under `Assets` is detected.** Vectra finds Lettera's assembly wherever it lives and adds `VECTRA_LETTERA` to the scripting define symbols of the build targets, so SVG text through Lettera works without a package. The symbol goes again, before anything is compiled against a missing assembly, when Lettera's folder is deleted or moved. Only a symbol the tool added is ever removed (it keeps a list in `ProjectSettings/FirstSymbolAutoDefines.txt`); a symbol you set yourself stays, and so does one on a target where you set it. One log line says when it changed anything. With Lettera as a package nothing changes: the package manager still sets it.
+- **A question after installing: which importer for .svg files?** Once per project, in a floating window in Vectra's look: **Use Vectra's importer** (and offers to switch the .svg files already there), **Keep Unity's importer**, **Ask me later**. When the Vector Graphics package is installed the window says that it imports .svg as well and recommends neither. It does not appear in batch mode, when `VECTRA_NO_PROMPTS` is set, when the importer is already on, or once answered. **Project Settings > FirstSymbol > Vectra > SVG import > Which importer?** asks again.
+
+### Changed
+- The README no longer asks you to add `VECTRA_LETTERA` or `FIRSTSYMBOL_HUB` by hand for folders under `Assets`.
+
 ## [0.5.1] - 2026-11-09
 
 ### Docs

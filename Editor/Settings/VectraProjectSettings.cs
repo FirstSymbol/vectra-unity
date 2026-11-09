@@ -30,6 +30,15 @@ namespace FirstSymbol.Vectra.Editor
             set => settingsVersion = value;
         }
 
+        [SerializeField, HideInInspector] bool svgImporterAnswered;
+
+        /// <summary>Whether the project has said which importer it wants for .svg files (the prompt after installing is shown until it has).</summary>
+        internal bool SvgImporterAnswered
+        {
+            get => svgImporterAnswered;
+            set => svgImporterAnswered = value;
+        }
+
         public void Save() => Save(true);
 
         void OnEnable() => Apply();
@@ -76,19 +85,8 @@ namespace FirstSymbol.Vectra.Editor
                 var svg = new VisualElement();
                 svg.Add(VxFields.For(so.FindProperty("useVectraSvgImporter"), t, "Use Vectra importer"));
                 svg.Add(VxUI.Text("When on, new .svg files use the Vectra importer instead of Unity's built-in one. Existing files can be switched with the button below.", "vx-hint"));
-                svg.Add(VxUI.AddButton("Switch every existing SVG to Vectra", () =>
-                {
-                    int n = 0;
-                    foreach (var guid in AssetDatabase.FindAssets("glob:\"*.svg\""))
-                    {
-                        var path = AssetDatabase.GUIDToAssetPath(guid);
-                        if (!path.EndsWith(".svg", System.StringComparison.OrdinalIgnoreCase)) continue;
-                        AssetDatabase.SetImporterOverride<VectraSvgImporter>(path);
-                        n++;
-                    }
-
-                    Debug.Log($"Vectra: {n} SVG file(s) now use the Vectra importer.");
-                }));
+                svg.Add(VxUI.AddButton("Switch every existing SVG to Vectra", () => VectraSvgImporterPrompt.SwitchExisting()));
+                svg.Add(VxUI.Button("Which importer? (asks again)", VectraSvgImporterPrompt.Open, "Opens the question that is asked once after installing Vectra"));
                 svg.Add(VxFields.For(so.FindProperty("defaultFontMap"), t, "Default font map"));
                 svg.Add(VxUI.Text("Maps SVG font-family names to fonts for new SVG images (Assets > Create > Vectra > SVG Font Map).", "vx-hint"));
                 page.Add(VxUI.TitledCard("vectra.settings.svg", VxIcon.Kind.Document, "SVG import", svg));

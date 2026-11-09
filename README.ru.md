@@ -30,7 +30,7 @@ https://github.com/FirstSymbol/vectra-unity.git
 
 Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.5.1`.
 
-Если Vectra и Lettera лежат обычными папками в `Assets`, а не пакетами, менеджер пакетов не сообщит Vectra, что Lettera есть: добавьте `VECTRA_LETTERA` в **Project Settings > Player > Scripting Define Symbols**, чтобы SVG-текст шёл через Lettera (и `FIRSTSYMBOL_HUB` для страницы в FirstSymbol Hub).
+Vectra и Lettera работают и как пакеты, и как обычные папки в `Assets`: когда Lettera лежит папкой, Vectra замечает её и сам добавляет `VECTRA_LETTERA` в символы компиляции (и убирает, когда папка исчезает). Символ, который вы поставили сами, остаётся как есть.
 
 ## Быстрый старт
 
