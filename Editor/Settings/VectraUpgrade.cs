@@ -36,7 +36,7 @@ namespace FirstSymbol.Vectra.Editor
             {
                 settings.textEngine = VectraTextEngine.TextMeshPro;
                 Debug.Log("Vectra 0.3: SVG text is drawn with TextMesh Pro in this project, as before, so it does not change. " +
-                          "Set Project Settings > Vectra > Text engine to Auto or Lettera to use Lettera.");
+                          "Set Project Settings > FirstSymbol > Vectra > Text engine to Auto or Lettera to use Lettera.");
             }
             else pin = false;
 

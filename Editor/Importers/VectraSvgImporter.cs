@@ -11,7 +11,7 @@ namespace FirstSymbol.Vectra.Editor
     /// Imports .svg files as <see cref="VectraSvgDocument"/> (resolution independent, for VectraSvgImage and
     /// VectraSvgRenderer) or bakes them into a Sprite/Texture. Registered as an override importer so it coexists with
     /// Unity's built-in SVG importer; select it in the importer dropdown or enable it project-wide in
-    /// Project Settings > Vectra.
+    /// Project Settings > FirstSymbol > Vectra.
     /// </summary>
     [ScriptedImporter(4, new string[0], new[] { "svg" })]
     public class VectraSvgImporter : ScriptedImporter

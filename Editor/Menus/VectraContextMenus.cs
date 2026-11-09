@@ -141,7 +141,7 @@ namespace FirstSymbol.Vectra.Editor
         // -----------------------------------------------------------------------------------------------------
 
         /// <summary>Copies the agent guide into the project's Claude Code skills so agents know the vectra CLI commands.</summary>
-        [MenuItem("Tools/Vectra/Install Claude Code Skill", false, 100)]
+        [MenuItem("Tools/FirstSymbol/Vectra/Install Claude Code Skill", false, 100)]
         static void InstallClaudeSkill()
         {
             var root = PackageRoot();

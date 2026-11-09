@@ -16,7 +16,7 @@ namespace FirstSymbol.Vectra.Editor
         Image m_GradImage, m_SdfImage;
         VisualElement m_SdfOverlay;
 
-        [MenuItem("Window/Vectra/Atlas Debugger", false, 2200)]
+        [MenuItem("Window/FirstSymbol/Vectra/Atlas Debugger", false, 2200)]
         public static void Open() => GetWindow<VectraAtlasDebugger>("Vectra Atlases").minSize = new Vector2(360, 420);
 
         void CreateGUI()
@@ -112,7 +112,7 @@ namespace FirstSymbol.Vectra.Editor
         VisualElement m_List;
         Toggle m_OnlyWarnings;
 
-        [MenuItem("Window/Vectra/SVG Import Report", false, 2201)]
+        [MenuItem("Window/FirstSymbol/Vectra/SVG Import Report", false, 2201)]
         public static void Open() => GetWindow<VectraSvgReportWindow>("SVG Import Report").minSize = new Vector2(380, 300);
 
         void CreateGUI()

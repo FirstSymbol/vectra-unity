@@ -4,6 +4,14 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **FirstSymbol Hub page.** With the FirstSymbol Hub package (`com.firstsymbol.hub`) installed, Vectra appears in its window with a status card (text engine, SVG importer default, distance atlas size) and its settings page. The assembly `FirstSymbol.Vectra.HubPage` compiles only when the hub is there; without it Vectra is unchanged.
+
+### Changed
+- **Menus and settings under FirstSymbol.** `Tools > Vectra` is now `Tools > FirstSymbol > Vectra`, `Window > Vectra` is `Window > FirstSymbol > Vectra`, and `Project Settings > Vectra` is `Project Settings > FirstSymbol > Vectra`. The old paths are gone; `EditorApplication.ExecuteMenuItem` calls of your own need the new path.
+
 ## [0.4.0] - 2026-11-09
 
 ### Added

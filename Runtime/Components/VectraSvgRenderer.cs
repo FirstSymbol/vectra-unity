@@ -29,7 +29,7 @@ namespace FirstSymbol.Vectra
         [SerializeField] int m_SortingOrder;
         [SerializeField] List<SvgOverride> m_Overrides = new List<SvgOverride>();
         [SerializeField] bool m_GenerateText = true;
-        [Tooltip("Which engine draws the text of this document. Use Project Setting to follow Project Settings > Vectra.")]
+        [Tooltip("Which engine draws the text of this document. Use Project Setting to follow Project Settings > FirstSymbol > Vectra.")]
         [SerializeField] VectraTextEngineChoice m_TextEngine;
         [Tooltip("Maps SVG font-family names to fonts of the text engines.")]
         [SerializeField] VectraFontMap m_FontMap;

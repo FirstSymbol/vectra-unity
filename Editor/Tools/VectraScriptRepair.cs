@@ -145,7 +145,7 @@ namespace FirstSymbol.Vectra.Editor
             return changed;
         }
 
-        [MenuItem("Tools/Vectra/Repair Lost Script References", false, 60)]
+        [MenuItem("Tools/FirstSymbol/Vectra/Repair Lost Script References", false, 60)]
         static void Run()
         {
             List<string> changed = Repair("Assets", skipDirtyScenes: true, out int objects);

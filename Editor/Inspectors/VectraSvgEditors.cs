@@ -275,7 +275,7 @@ namespace FirstSymbol.Vectra.Editor
             text.Add(VxFields.For(so.FindProperty("m_GenerateText"), t, "Generate text"));
             var engine = VxUI.Row("Text engine", VxSegmented.ForEnum(so.FindProperty("m_TextEngine"),
                 new[] { "Project", "Auto", "Lettera", "TMP", "Legacy", "None" },
-                null, new[] { "Follow Project Settings > Vectra", "Lettera if installed, else TextMesh Pro, else legacy", "Lettera", "TextMesh Pro", "Legacy uGUI Text", "Do not draw text" }),
+                null, new[] { "Follow Project Settings > FirstSymbol > Vectra", "Lettera if installed, else TextMesh Pro, else legacy", "Lettera", "TextMesh Pro", "Legacy uGUI Text", "Do not draw text" }),
                 "Which engine draws the text of this document");
             text.Add(engine.VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
             text.Add(VxFields.For(so.FindProperty("m_FontMap"), t, "Font map").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
@@ -324,7 +324,7 @@ namespace FirstSymbol.Vectra.Editor
             text.Add(VxFields.For(so.FindProperty("m_GenerateText"), t, "Generate text"));
             text.Add(VxUI.Row("Text engine", VxSegmented.ForEnum(so.FindProperty("m_TextEngine"),
                 new[] { "Project", "Auto", "Lettera", "TMP", "Legacy", "None" },
-                null, new[] { "Follow Project Settings > Vectra", "Lettera if installed, else TextMesh Pro", "Lettera World Text", "TextMesh Pro 3D", "Legacy uGUI Text cannot draw in world space", "Do not draw text" }),
+                null, new[] { "Follow Project Settings > FirstSymbol > Vectra", "Lettera if installed, else TextMesh Pro", "Lettera World Text", "TextMesh Pro 3D", "Legacy uGUI Text cannot draw in world space", "Do not draw text" }),
                 "Which engine draws the text of this document").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
             text.Add(VxFields.For(so.FindProperty("m_FontMap"), t, "Font map").VisibleWhen(so.FindProperty("m_GenerateText"), p => p.boolValue));
             text.Add(VectraTextSettingsUI.FontField(so.FindProperty("m_Font"), VectraTextEngine.TextMeshPro, "Fallback font (TMP)",

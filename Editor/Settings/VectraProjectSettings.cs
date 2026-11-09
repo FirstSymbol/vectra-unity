@@ -44,7 +44,7 @@ namespace FirstSymbol.Vectra.Editor
     static class VectraSettingsProvider
     {
         [SettingsProvider]
-        static SettingsProvider Create() => new SettingsProvider("Project/Vectra", SettingsScope.Project)
+        static SettingsProvider Create() => new SettingsProvider("Project/FirstSymbol/Vectra", SettingsScope.Project)
         {
             label = "Vectra",
             keywords = new HashSet<string> { "Vectra", "SVG", "Vector", "Shape" },

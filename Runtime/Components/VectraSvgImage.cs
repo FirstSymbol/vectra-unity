@@ -24,7 +24,7 @@ namespace FirstSymbol.Vectra
         [SerializeField] VectraQuality m_Quality = VectraQuality.High;
         [SerializeField] ShapeBlendMode m_BlendMode;
         [SerializeField] bool m_GenerateText = true;
-        [Tooltip("Which engine draws the text of this document. Use Project Setting to follow Project Settings > Vectra.")]
+        [Tooltip("Which engine draws the text of this document. Use Project Setting to follow Project Settings > FirstSymbol > Vectra.")]
         [SerializeField] VectraTextEngineChoice m_TextEngine;
         [Tooltip("Maps SVG font-family names to fonts of the text engines.")]
         [SerializeField] VectraFontMap m_FontMap;
