@@ -28,7 +28,9 @@ Package Manager → **+** → **Add package from git URL...**
 https://github.com/FirstSymbol/vectra-unity.git
 ```
 
-A specific version is installed through its tag: `https://github.com/FirstSymbol/vectra-unity.git#0.5.0`.
+A specific version is installed through its tag: `https://github.com/FirstSymbol/vectra-unity.git#0.5.1`.
+
+If you keep Vectra and Lettera as plain folders under `Assets` instead of packages, the package manager cannot tell Vectra that Lettera is there: add `VECTRA_LETTERA` to **Project Settings > Player > Scripting Define Symbols** for SVG text through Lettera (and `FIRSTSYMBOL_HUB` for the FirstSymbol Hub page).
 
 ## Quick start
 

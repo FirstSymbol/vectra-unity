@@ -28,7 +28,9 @@ Package Manager → **+** → **Add package from git URL...**
 https://github.com/FirstSymbol/vectra-unity.git
 ```
 
-Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.5.0`.
+Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.5.1`.
+
+Если Vectra и Lettera лежат обычными папками в `Assets`, а не пакетами, менеджер пакетов не сообщит Vectra, что Lettera есть: добавьте `VECTRA_LETTERA` в **Project Settings > Player > Scripting Define Symbols**, чтобы SVG-текст шёл через Lettera (и `FIRSTSYMBOL_HUB` для страницы в FirstSymbol Hub).
 
 ## Быстрый старт
 

@@ -4,6 +4,11 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-11-09
+
+### Docs
+- The README says what to add when Vectra and Lettera are folders under `Assets` instead of packages: `VECTRA_LETTERA` for SVG text through Lettera, `FIRSTSYMBOL_HUB` for the hub page.
+
 ## [0.5.0] - 2026-11-09
 
 ### Added
