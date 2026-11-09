@@ -34,7 +34,7 @@ a few other shapes still builds a small point array).
 ## Installation
 
 Package Manager → **+** → **Add package from git URL…** →
-`https://github.com/FirstSymbol/vectra-unity.git` (a specific version: append `#0.5.1`).
+`https://github.com/FirstSymbol/vectra-unity.git` (a specific version: append `#0.5.2`).
 
 Samples: **Package Manager → Vectra Vector Graphics → Samples**.
 
