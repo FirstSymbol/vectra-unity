@@ -4,7 +4,7 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0] - 2026-11-09
 
 ### Added
 - **FirstSymbol Hub page.** With the FirstSymbol Hub package (`com.firstsymbol.hub`) installed, Vectra appears in its window with a status card (text engine, SVG importer default, distance atlas size) and its settings page. The assembly `FirstSymbol.Vectra.HubPage` compiles only when the hub is there; without it Vectra is unchanged.

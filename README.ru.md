@@ -28,7 +28,7 @@ Package Manager → **+** → **Add package from git URL...**
 https://github.com/FirstSymbol/vectra-unity.git
 ```
 
-Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.4.0`.
+Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.5.0`.
 
 ## Быстрый старт
 

@@ -28,7 +28,7 @@ Package Manager → **+** → **Add package from git URL...**
 https://github.com/FirstSymbol/vectra-unity.git
 ```
 
-A specific version is installed through its tag: `https://github.com/FirstSymbol/vectra-unity.git#0.4.0`.
+A specific version is installed through its tag: `https://github.com/FirstSymbol/vectra-unity.git#0.5.0`.
 
 ## Quick start
 
