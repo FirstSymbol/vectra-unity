@@ -85,6 +85,7 @@ namespace FirstSymbol.Vectra.Rendering
     /// <summary>A reference to rows of the gradient atlas.</summary>
     public struct GradientRows
     {
+        /// <summary>Hash of the baked content; with <see cref="row"/> it identifies the entry.</summary>
         public int key;
         public int row;
         public int count;
@@ -93,20 +94,28 @@ namespace FirstSymbol.Vectra.Rendering
 
     /// <summary>
     /// 256-texel-wide RGBAHalf texture whose rows are baked gradients (and pattern colour pairs and freeform blocks).
-    /// Identical rows are shared and reference counted.
+    /// Rows with equal baked content are shared and reference counted; the sharing compares the content itself, not
+    /// only a hash, so two different paints can never end up on one row. A row nobody uses any more stays baked
+    /// ("cold") until the space is needed; then the least recently used cold row is evicted. Only when every row is
+    /// held by a live paint does the atlas grow, up to <see cref="MaxHeight"/>; past that, new paints share a reserved
+    /// white row and one warning is logged.
     /// </summary>
     public static class VectraGradientAtlas
     {
         public const int Width = 256;
         public const int FreeformRows = 32;
         const int InitialHeight = 64;
-        const int MaxHeight = 4096;
+        internal const int MaxHeight = 4096;
 
-        struct Entry
+        sealed class Entry
         {
+            public int hash;
+            public float[] key;
             public int row;
             public int count;
             public int refs;
+            public Entry next; // hash collision chain
+            public LinkedListNode<Entry> cold; // set while refs == 0
         }
 
         static Texture2D s_Texture;
@@ -115,8 +124,14 @@ namespace FirstSymbol.Vectra.Rendering
         static int s_Height;
         static bool s_Dirty;
         static bool s_UseHalf;
+        static bool s_Warned;
         static readonly Dictionary<int, Entry> s_Entries = new Dictionary<int, Entry>();
+        static readonly LinkedList<Entry> s_Cold = new LinkedList<Entry>(); // oldest first
+        static readonly List<float> s_KeyScratch = new List<float>(64);
         static readonly Color[] s_RowBuffer = new Color[Width * FreeformRows];
+
+        /// <summary>Test hook: forces every hash to one value so all lookups collide.</summary>
+        internal static bool ForceHashCollisions;
 
         public static Texture2D Texture
         {
@@ -129,8 +144,23 @@ namespace FirstSymbol.Vectra.Rendering
 
         public static int Height => s_Height;
 
-        /// <summary>Number of rows currently in use (diagnostics).</summary>
+        /// <summary>Number of rows holding a baked gradient, live or cold (diagnostics).</summary>
         public static int UsedRows => s_Used != null ? CountUsed() : 0;
+
+        /// <summary>Rows held by paints that are in use right now.</summary>
+        public static int LiveRows { get; private set; }
+
+        /// <summary>Rows kept baked for reuse but held by no paint (evicted first).</summary>
+        public static int ColdRows { get; private set; }
+
+        /// <summary>Cold rows evicted since the last reset (diagnostics, tests).</summary>
+        public static int EvictionCount { get; private set; }
+
+        /// <summary>Rows baked since the last reset (diagnostics, tests).</summary>
+        public static int BakeCount { get; private set; }
+
+        /// <summary>Requests that found no room and fell back to the shared row.</summary>
+        public static int OverflowCount { get; private set; }
 
         static void Ensure()
         {
@@ -142,6 +172,12 @@ namespace FirstSymbol.Vectra.Rendering
                 s_Pixels = new Color[Width * s_Height];
                 s_Used = new bool[s_Height];
                 s_Entries.Clear();
+                s_Cold.Clear();
+                LiveRows = 0;
+                ColdRows = 0;
+                // Row 0 is the fallback for requests that cannot be served: plain white, never evicted.
+                s_Used[0] = true;
+                for (int x = 0; x < Width; x++) s_Pixels[x] = Color.white;
             }
 
             CreateTexture();
@@ -173,43 +209,121 @@ namespace FirstSymbol.Vectra.Rendering
         {
             Ensure();
             int count = paint.type == PaintType.Freeform ? FreeformRows : 1;
-            int key = paint.ComputeRowHash(adjust.hue, adjust.saturation, adjust.brightness, adjust.contrast);
-            if (s_Entries.TryGetValue(key, out var e))
+            var scratch = s_KeyScratch;
+            WriteKey(scratch, paint, adjust);
+            int hash = HashKey(scratch);
+
+            if (s_Entries.TryGetValue(hash, out var chain))
             {
-                e.refs++;
-                s_Entries[key] = e;
-                return new GradientRows { key = key, row = e.row, count = e.count };
+                for (var e = chain; e != null; e = e.next)
+                {
+                    if (!SameKey(e.key, scratch)) continue;
+                    if (e.refs == 0)
+                    {
+                        s_Cold.Remove(e.cold);
+                        e.cold = null;
+                        LiveRows += e.count;
+                        ColdRows -= e.count;
+                    }
+
+                    e.refs++;
+                    return new GradientRows { key = hash, row = e.row, count = e.count };
+                }
             }
 
             int row = FindRows(count);
+            // Cold rows are a cache. They are dropped when the atlas cannot grow any more, or when they take half of it;
+            // otherwise growing is cheaper than baking them again later.
+            if (row < 0 && (s_Height >= MaxHeight || ColdRows * 2 >= s_Height)) row = EvictFor(count);
             if (row < 0)
             {
                 Grow(count);
                 row = FindRows(count);
-                if (row < 0) return default;
+            }
+
+            if (row < 0) row = EvictFor(count);
+
+            if (row < 0)
+            {
+                OverflowCount++;
+                if (!s_Warned)
+                {
+                    s_Warned = true;
+                    Debug.LogWarning($"Vectra: the gradient atlas is full ({LiveRows} rows in use by live paints); extra paints draw white. Reduce the number of distinct gradients on screen.");
+                }
+
+                return new GradientRows { key = 0, row = 0, count = 1 };
             }
 
             for (int i = 0; i < count; i++) s_Used[row + i] = true;
             Bake(paint, adjust, row, count);
-            s_Entries[key] = new Entry { row = row, count = count, refs = 1 };
-            return new GradientRows { key = key, row = row, count = count };
+            BakeCount++;
+            LiveRows += count;
+            var entry = new Entry { hash = hash, key = scratch.ToArray(), row = row, count = count, refs = 1 };
+            if (s_Entries.TryGetValue(hash, out var head)) entry.next = head;
+            s_Entries[hash] = entry;
+            return new GradientRows { key = hash, row = row, count = count };
         }
 
         public static void Release(ref GradientRows rows)
         {
             if (!rows.IsValid) return;
-            if (s_Entries.TryGetValue(rows.key, out var e))
+            if (rows.row != 0 && s_Entries.TryGetValue(rows.key, out var chain))
             {
-                e.refs--;
-                if (e.refs <= 0)
+                for (var e = chain; e != null; e = e.next)
                 {
-                    for (int i = 0; i < e.count && e.row + i < s_Used.Length; i++) s_Used[e.row + i] = false;
-                    s_Entries.Remove(rows.key);
+                    if (e.row != rows.row) continue;
+                    if (e.refs > 0 && --e.refs == 0)
+                    {
+                        LiveRows -= e.count;
+                        ColdRows += e.count;
+                        e.cold = s_Cold.AddLast(e);
+                    }
+
+                    break;
                 }
-                else s_Entries[rows.key] = e;
             }
 
             rows = default;
+        }
+
+        static void RemoveEntry(Entry target)
+        {
+            if (!s_Entries.TryGetValue(target.hash, out var head)) return;
+            if (head == target)
+            {
+                if (target.next != null) s_Entries[target.hash] = target.next;
+                else s_Entries.Remove(target.hash);
+            }
+            else
+            {
+                for (var e = head; e != null; e = e.next)
+                {
+                    if (e.next != target) continue;
+                    e.next = target.next;
+                    break;
+                }
+            }
+
+            for (int i = 0; i < target.count && target.row + i < s_Used.Length; i++) s_Used[target.row + i] = false;
+            ColdRows -= target.count;
+            EvictionCount++;
+        }
+
+        /// <summary>Evicts the least recently used cold rows until <paramref name="count"/> contiguous rows are free.</summary>
+        static int EvictFor(int count)
+        {
+            while (s_Cold.First != null)
+            {
+                var e = s_Cold.First.Value;
+                s_Cold.RemoveFirst();
+                e.cold = null;
+                RemoveEntry(e);
+                int row = FindRows(count);
+                if (row >= 0) return row;
+            }
+
+            return -1;
         }
 
         static int FindRows(int count)
@@ -248,6 +362,87 @@ namespace FirstSymbol.Vectra.Rendering
             for (int i = 0; i < s_Used.Length; i++)
                 if (s_Used[i]) n++;
             return n;
+        }
+
+        // The key lists every input of Bake as floats, so two paints are the same row exactly when their keys are equal.
+        static void WriteKey(List<float> k, VectraPaint paint, in ColorAdjust adjust)
+        {
+            k.Clear();
+            k.Add(QualitySettings.activeColorSpace == ColorSpace.Linear ? 1f : 0f);
+            k.Add(adjust.hue);
+            k.Add(adjust.saturation);
+            k.Add(adjust.brightness);
+            k.Add(adjust.contrast);
+            if (paint.type == PaintType.Freeform)
+            {
+                k.Add(1f);
+                AddColor(k, paint.ResolvedColor);
+                var pts = paint.freeformPoints;
+                int n = pts?.Count ?? 0;
+                k.Add(n);
+                for (int i = 0; i < n; i++)
+                {
+                    k.Add(pts[i].position.x);
+                    k.Add(pts[i].position.y);
+                    AddColor(k, pts[i].color);
+                    k.Add(pts[i].falloff);
+                }
+            }
+            else if (paint.IsGradient)
+            {
+                k.Add(2f);
+                var g = paint.gradient;
+                if (g == null)
+                {
+                    k.Add(-1f);
+                    return;
+                }
+
+                int n = g.stops?.Count ?? 0;
+                k.Add(n);
+                k.Add((int)g.interpolation);
+                for (int i = 0; i < n; i++)
+                {
+                    var s = g.stops[i];
+                    k.Add(s.position);
+                    AddColor(k, s.color);
+                    k.Add(s.midpoint);
+                }
+            }
+            else
+            {
+                k.Add(3f);
+                AddColor(k, paint.ResolvedColor);
+                AddColor(k, paint.ResolvedSecondaryColor);
+            }
+        }
+
+        static void AddColor(List<float> k, Color c)
+        {
+            k.Add(c.r);
+            k.Add(c.g);
+            k.Add(c.b);
+            k.Add(c.a);
+        }
+
+        static bool SameKey(float[] a, List<float> b)
+        {
+            if (a.Length != b.Count) return false;
+            for (int i = 0; i < a.Length; i++)
+                if (BitConverter.SingleToInt32Bits(a[i]) != BitConverter.SingleToInt32Bits(b[i]))
+                    return false;
+            return true;
+        }
+
+        static int HashKey(List<float> k)
+        {
+            if (ForceHashCollisions) return 1;
+            unchecked
+            {
+                uint h = 2166136261u;
+                for (int i = 0; i < k.Count; i++) h = (h ^ (uint)BitConverter.SingleToInt32Bits(k[i])) * 16777619u;
+                return (int)h;
+            }
         }
 
         static void Bake(VectraPaint paint, in ColorAdjust adjust, int row, int count)
@@ -349,6 +544,20 @@ namespace FirstSymbol.Vectra.Rendering
             s_Used = null;
             s_Height = 0;
             s_Entries.Clear();
+            s_Cold.Clear();
+            LiveRows = 0;
+            ColdRows = 0;
+        }
+
+        /// <summary>Drops every row and counter. For tests; live paints must be rebuilt afterwards.</summary>
+        internal static void ResetForTests()
+        {
+            Dispose();
+            EvictionCount = 0;
+            BakeCount = 0;
+            OverflowCount = 0;
+            s_Warned = false;
+            ForceHashCollisions = false;
         }
     }
 
