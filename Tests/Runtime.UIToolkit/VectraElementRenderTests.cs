@@ -127,7 +127,7 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
         {
             m_H.Place(new VectraElement { Fill = new Color(0, 0, 0, 0), Stroke = Color.blue, StrokeWidth = 8 }, 40, 40, 100, 100);
             yield return m_H.Frames();
-            Assert.IsTrue(UitkHarness.Near(m_H.Px(90, 43), 0, 0, 255), "top stroke " + UitkHarness.Hex(m_H.Px(90, 43)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(90, 41), 0, 0, 255), "top stroke " + UitkHarness.Hex(m_H.Px(90, 41)));
             Assert.IsTrue(UitkHarness.Near(m_H.Px(90, 90), 0, 0, 0), "hollow middle " + UitkHarness.Hex(m_H.Px(90, 90)));
         }
 

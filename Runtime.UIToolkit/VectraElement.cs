@@ -119,6 +119,7 @@ namespace FirstSymbol.Vectra.UIToolkit
         VectraHitTester m_HitTester;
         IVisualElementScheduledItem m_Rebuild, m_Poll;
         bool m_Dirty = true;
+        bool m_Appearance;
         bool m_Scheduled;
         Vector2 m_Center;
         Vector2 m_BuiltSize;
@@ -272,6 +273,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             set
             {
                 m_Fill = value;
+                m_Appearance = true;
                 SetShapeDirty();
             }
         }
@@ -283,6 +285,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             set
             {
                 m_Stroke = value;
+                m_Appearance = true;
                 SetShapeDirty();
             }
         }
@@ -294,6 +297,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             set
             {
                 m_StrokeWidth = value;
+                m_Appearance = true;
                 SetShapeDirty();
             }
         }
@@ -306,6 +310,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             set
             {
                 m_Radius = value;
+                m_Appearance = true;
                 SetShapeDirty();
             }
         }
@@ -430,6 +435,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             m_UssStroke = stroke;
             m_UssStrokeWidth = width;
             m_UssRadius = radius;
+            m_Appearance = true;
             SetShapeDirty();
         }
 
@@ -473,7 +479,12 @@ namespace FirstSymbol.Vectra.UIToolkit
 
             m_Layer ??= new VectraRasterLayer();
             float density = VectraUitk.Density(this);
-            ApplyAppearance();
+            if (m_Appearance)
+            {
+                m_Appearance = false;
+                ApplyAppearance();
+            }
+
             var frame = new ShapeFrame
             {
                 rect = new Rect(-cr.width * 0.5f, -cr.height * 0.5f, cr.width, cr.height),

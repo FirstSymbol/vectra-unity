@@ -79,11 +79,15 @@ namespace FirstSymbol.Vectra.UIToolkit
             if (tex == null) return;
             var q = m_Quad;
             var uv = m_Uv;
+            // The projection used for the render texture comes out flipped when sampled by UI Toolkit on platforms whose
+            // texture origin is the top (Direct3D, Metal, Vulkan, WebGPU).
+            float vTop = SystemInfo.graphicsUVStartsAtTop ? uv.yMin : uv.yMax;
+            float vBottom = SystemInfo.graphicsUVStartsAtTop ? uv.yMax : uv.yMin;
             mgc.AllocateTempMesh(4, 6, out NativeSlice<Vertex> v, out NativeSlice<ushort> idx);
-            s_Vertices[0] = new Vertex { position = new Vector3(q.xMin, q.yMin, Vertex.nearZ), tint = tint, uv = new Vector2(uv.xMin, uv.yMax) };
-            s_Vertices[1] = new Vertex { position = new Vector3(q.xMax, q.yMin, Vertex.nearZ), tint = tint, uv = new Vector2(uv.xMax, uv.yMax) };
-            s_Vertices[2] = new Vertex { position = new Vector3(q.xMax, q.yMax, Vertex.nearZ), tint = tint, uv = new Vector2(uv.xMax, uv.yMin) };
-            s_Vertices[3] = new Vertex { position = new Vector3(q.xMin, q.yMax, Vertex.nearZ), tint = tint, uv = new Vector2(uv.xMin, uv.yMin) };
+            s_Vertices[0] = new Vertex { position = new Vector3(q.xMin, q.yMin, Vertex.nearZ), tint = tint, uv = new Vector2(uv.xMin, vTop) };
+            s_Vertices[1] = new Vertex { position = new Vector3(q.xMax, q.yMin, Vertex.nearZ), tint = tint, uv = new Vector2(uv.xMax, vTop) };
+            s_Vertices[2] = new Vertex { position = new Vector3(q.xMax, q.yMax, Vertex.nearZ), tint = tint, uv = new Vector2(uv.xMax, vBottom) };
+            s_Vertices[3] = new Vertex { position = new Vector3(q.xMin, q.yMax, Vertex.nearZ), tint = tint, uv = new Vector2(uv.xMin, vBottom) };
             for (int i = 0; i < 4; i++) v[i] = s_Vertices[i];
             idx[0] = 0;
             idx[1] = 1;
