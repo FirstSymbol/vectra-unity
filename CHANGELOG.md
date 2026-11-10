@@ -4,6 +4,32 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-11-10
+
+### Added
+- **World shapes batch under URP and HDRP.** `Vectra/World URP` (with a 2D Renderer pass) and `Vectra/World HDRP` keep every property in `UnityPerMaterial` and the per-shape data in the vertices, so the SRP Batcher takes all `VectraRenderer` shapes (Unity's own check reports the old shader as incompatible because of `_Color`) that share a material in one batch. A shape no longer sets a `MaterialPropertyBlock`: a shape with a texture paint uses a material of its own per texture, shared by all shapes with that texture (`VectraMaterials.GetWorld(mode, texture)`). The Built-in pipeline keeps `Vectra/World`. Shapes (and `VectraSvgRenderer`) switch shader when the pipeline changes.
+- **Shader Graph (URP and HDRP).** `VectraShaderGraph.hlsl` (Custom Function code) and five Sub Graphs under *Vectra*: SDF Shape, Coverage, Outline, Pixel Size, Paint; the new *Shader Graph* sample has *Vectra Card*, an unlit transparent graph for both pipelines. `VectraSdf.hlsl` holds the distance functions without any resource declarations; `VectraCore.hlsl` includes it.
+- **Hairline strokes.** `StrokeLayer.widthMode = StrokeWidthMode.Pixels` keeps a stroke N device pixels wide at any scale or zoom, anti-aliased, in Canvas and in world space; the mesh follows 1% changes of the pixel size. Inspector row *Unit* on every stroke. Hit tests use the pixel width.
+- **Vector sprites.** `VectraSpriteBaker.Bake(...)` turns a shape or an SVG document into a `Sprite`: GPU-drawn texture at a chosen resolution, tight mesh, pivot, 9-slice border (optionally from the corner radii of a rectangle), mipmaps, colour bleed into transparent texels, room for shadows and glows. **Bake to Sprite Asset…** and **Bake to 9-Slice Sprite Asset…** on shapes (replace *Export as Sprite Asset…*), **Assets > Vectra > Bake SVG to Sprite**, and the SVG importer's *Sprite* mode gains 9-slice border, tight mesh and mipmaps.
+- **UI Toolkit support.** `VectraElement` and `VectraSvgElement` (new assembly `FirstSymbol.Vectra.UIToolkit`, namespace `FirstSymbol.Vectra.UIToolkit`) draw Vectra in runtime `UIDocument` panels and in editor windows. Both are `[UxmlElement]`s with attributes (`shape`, `sides`, `fill`, `stroke`, `stroke-width`, `corner-radius`, `shape-asset`, `style-asset`; `document`, `preserve-aspect`, `quality`, `generate-text`), so UI Builder lists them under Custom Controls (C#). USS sets the look: `--vectra-fill`, `--vectra-stroke`, `--vectra-stroke-width` and `--vectra-corner-radius` follow `:hover` and the other pseudo states. `VectraElement` takes the same `VectraShapeContent` as `VectraShape`, so primitives, paths, booleans, paints, strokes and every effect work, and `ContainsPoint` picks by outline.
+- **How it draws.** UI Toolkit's vertex has no room for Vectra's four float4 and `MeshGenerationContext` takes a texture, not a material, so an element builds the usual mesh, draws it with the usual UI material into a render texture and shows it as a premultiplied quad. Small layers share 2048 px pages (their quads batch into one draw call); layers over 512 px get a texture of their own. An element is redrawn only when its shape, size or screen density (by 25 %) changes; redrawing allocates no managed memory after warm-up, and a redrawn frame allocates no more than a plain UI Toolkit element.
+- **SVG in UI Toolkit.** `VectraSvgElement` keeps paint order (shapes after a text are a child element above it) and draws SVG text with UI Toolkit labels, tspan styling and `text-anchor` included.
+- **Sample "UI Toolkit"**: a UXML panel, USS with custom properties and hover colours, a gradient redrawn every frame, a star with effects built in code and an SVG element.
+- **Platforms page**: UI Toolkit checked in the editor (Built-in/Gamma, URP/Linear, Vectra and Lettera as folders under Assets/Plugins), a Windows IL2CPP player (Direct3D 12), WebGL 2 and WebGPU in Chromium: 12 of 12 player checks each. WebGL 2 has no render texture copy, so elements draw straight into their page.
+- New files in `package.json` `samples`: the "UI Toolkit" entry (the lead merges it with other samples).
+- Tests: 29 PlayMode (runtime panel into a render texture, pixel checks) and 10 EditMode (page allocator, UXML attributes, an editor window panel).
+
+### Fixed
+- On the FirstSymbol Hub's Vectra page in the hub's light theme the object, text and popup fields stayed dark; they follow the theme the hub applies.
+- A shape whose distance block changed size by a texel made a new atlas staging texture on every rebuild, so a moving boolean or effect shape allocated on each frame (up to 27 KB). The staging texture is kept and only grows.
+
+### Limits
+- No CPU gain that can be measured: 500 shapes cost 0.67 ms in `Camera.Render()` in a Windows IL2CPP URP player (median of 5), the 0.5.3 shader 0.65 ms and 0.78 ms in two sets of 5. The change is that the shapes now qualify for the SRP Batcher: their CPU cost no longer depends on a property block per shape, they can sit in one batch with other SRP Batcher objects of the same shader, and Shader Graph materials built on Vectra's functions batch the same way. Do not expect a frame-time gain at this size.
+- Shader Graph functions use screen-space derivatives: fragment stage only. The Sub Graphs and the sample were written as files and imported by Shader Graph 17.4; nobody has edited them in the Shader Graph window yet.
+- Unity builds the tight mesh of a baked sprite, so its outline is approximate; a baked sprite has no exact physics shape (`Sprite.OverridePhysicsShape` did not take effect in 6000.4.8), use `VectraRenderer`'s collider option instead.
+- HDRP draws world shapes unexposed (like HDRP's Unlit); no fog or volumetric fog on them.
+- A Vectra element in UI Toolkit is a bitmap at the density it was drawn for (a scale transform stretches it until the density drifts by 25 %); blend modes other than Normal, `VectraMask`, interaction states, the URP backdrop and Lettera-drawn text do not apply; SVG `<image>` is skipped; SVG text uses UI Toolkit labels in the panel's font (Lettera and TextMesh Pro have no UI Toolkit element) and the panel needs a theme style sheet for any font; a texture is at most 4096 px a side.
+
 ## [0.5.3] - 2026-11-09
 
 ### Fixed
