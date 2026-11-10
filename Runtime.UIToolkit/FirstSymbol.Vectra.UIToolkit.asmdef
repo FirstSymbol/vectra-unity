@@ -1,0 +1,26 @@
+{
+    "name": "FirstSymbol.Vectra.UIToolkit",
+    "rootNamespace": "FirstSymbol.Vectra.UIToolkit",
+    "references": [
+        "FirstSymbol.Vectra",
+        "Unity.Collections",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "VECTRA_UITK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.modules.uielements",
+            "expression": "1.0.0",
+            "define": "VECTRA_UITK"
+        }
+    ],
+    "noEngineReferences": false
+}

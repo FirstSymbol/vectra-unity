@@ -1,0 +1,32 @@
+{
+    "name": "FirstSymbol.Vectra.UIToolkit.Tests",
+    "rootNamespace": "FirstSymbol.Vectra.UIToolkit.Tests",
+    "references": [
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "FirstSymbol.Vectra",
+        "FirstSymbol.Vectra.UIToolkit",
+        "Unity.Collections",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "VECTRA_UITK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.modules.uielements",
+            "expression": "1.0.0",
+            "define": "VECTRA_UITK"
+        }
+    ],
+    "noEngineReferences": false
+}
