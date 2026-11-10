@@ -177,7 +177,7 @@ The main gaps are below; every SVG element, property and CSS feature is listed a
 - Of the filters, blur, drop shadow (including the offset + blur + merge chain), saturate and hueRotate are supported; the other primitives (`feTurbulence`, `feComposite`, `feBlend`, ...) are not.
 - No animation: SMIL (`<animate>`, `<animateTransform>`, `<set>`) and CSS `@keyframes` are ignored; the first frame is drawn. `<foreignObject>` and `<script>` are ignored.
 - No `mix-blend-mode`, `paint-order` or `@font-face`.
-- Text is one run per `<text>`: no per-glyph positions (`dx`, `dy`, `rotate`, `x` lists), `<textPath>`, `textLength` or `letter-spacing`.
+- Text is placed per `<tspan>` (absolute `x` / `y`, lists, `dx` / `dy`), with `letter-spacing`, underline and line-through in Lettera, TextMesh Pro and UI Toolkit (the legacy uGUI Text ignores spacing and decoration). Not supported: `rotate`, `<textPath>` (drawn straight), `textLength`, `word-spacing`; sprites and PNG draw no text.
 - `vector-effect` works for `non-scaling-stroke` only (Canvas, world space, UI Toolkit, baked sprites and PNG, and the SVG export; see the guide). `non-scaling-size`, `non-rotation` and `fixed-position` are ignored.
 - A group's `opacity` is applied to each child separately.
 - External images by URL are not loaded; only embedded data URIs work.

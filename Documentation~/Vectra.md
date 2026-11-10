@@ -300,9 +300,27 @@ The page shows which engines this project has and what Auto picks. A named engin
 back along the Auto order and the console says so once per document. Each SVG Image can override the project choice
 (**Text engine** in its inspector, or `image.TextEngine`). The engine is also carried into player builds.
 
-Text keeps its styling: a `<tspan>` with its own bold, italic, fill or size stays inside one text as markup (`<b>`,
-`<i>`, `<color>`, `<size>`) in every engine. Not drawn: per-`<tspan>` positions (`x`, `y`, `dx`, `dy`), `textPath`,
-`letter-spacing` and text decoration; a `<tspan>` with another `font-family` uses the font of the whole text.
+**Text layout.** Vectra places the text, the engine draws it. The parser cuts a `<text>` into pieces that start at an
+absolute `x` or `y` (a `<tspan x=".." y="..">` per line, as Figma exports text when "Outline text" is off; per-glyph lists
+`x="10 20 30"` make a piece per glyph, up to 512 pieces per `<text>`). Each piece is one text object at its own baseline
+position and `text-anchor`, so positions work with every engine. A relative `dy` / `dx` on the start of a piece is added to
+its position; `1.2em` follows the font size. White space follows `xml:space="preserve"` and `white-space: pre`
+(otherwise it collapses); a line break at the end of a piece draws nothing and moves nothing.
+
+Styling goes through the engine's markup. A `<tspan>` with its own bold, italic, fill or size stays inside one text
+(`<b>`, `<i>`, `<color>`, `<size>`); a `<tspan>` with another `font-family` uses the font of the whole text.
+
+| Style | Lettera | TextMesh Pro | UI Toolkit | Legacy uGUI Text |
+|---|---|---|---|---|
+| Position (`x`, `y`, lists, `dx`, `dy` at the start of a piece), `text-anchor` | Yes | Yes | Yes | Yes |
+| bold, italic, fill, size per `<tspan>` | Yes | Yes | Yes | Yes (size in whole pixels) |
+| `letter-spacing` (`em`, `px`, number) | Yes (`<tracking>`) | Yes (`<cspace>`) | Yes (`<cspace>`) | No |
+| `text-decoration` underline and line-through | Yes (`<u>`, `<s>`) | Yes | Yes | No |
+| `dx` / `dy` inside a line | No | Yes (`<space>`, `<voffset>`) | Yes | No |
+
+The underline sits where the engine puts it (the font's own metrics), a pixel or two from a browser's. Not drawn:
+`rotate`, `textLength`, `word-spacing`, `textPath` (drawn straight), `overline`. The sprite and PNG paths draw no text.
+A `y` without an `x` on a later piece continues from the start of the previous piece: Vectra does not measure glyphs.
 
 **Text in world space.** `VectraSvgRenderer` draws text through the same backends, with the engines' Canvas-free text:
 Lettera **World Text** (`LetteraWorldText`) or TextMesh Pro **3D** (`TextMeshPro`). The legacy uGUI `Text` only draws inside
@@ -370,8 +388,8 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | `<clipPath>` | Partial | The union of its shapes, groups and `<use>` (`clip-rule`, `clipPathUnits`, `transform`). A `<text>` inside is ignored (reported); text and images are not clipped by `clip-path`. |
 | `<mask>` | Partial | Applied as a geometric clip; the luminance is ignored (reported). |
 | `<marker>` | Supported | `marker-start`, `marker-mid`, `marker-end`, `marker`; `orient`, `markerUnits`, `refX`, `refY`, `viewBox`, `markerWidth`, `markerHeight`, `overflow`. Markers inside a marker are not drawn. |
-| `<text>` | Partial | One run placed at the first `x` / `y`, with `text-anchor`, `font-family`, `font-size`, `font-weight`, `font-style`, a solid `fill` and rotation from the transform. A list of `x` / `y` values, `dx`, `dy`, `rotate`, `textLength`, `lengthAdjust`, `letter-spacing`, `word-spacing`, `text-decoration`, `dominant-baseline`, `baseline-shift`, `writing-mode`, `direction` are ignored (reported); stroked text is not drawn and a gradient fill is drawn black. |
-| `<tspan>` | Partial | Own fill, font, weight and style per span; spans do not move the text (only the first `x` / `y` counts). |
+| `<text>` | Partial | Pieces at their own `x` / `y` (lists too), `dx`, `dy`, `text-anchor` per piece, `font-family`, `font-size`, `font-weight`, `font-style`, `letter-spacing`, `text-decoration` (underline, line-through), `xml:space="preserve"`, `white-space: pre`, a solid `fill` and rotation from the transform (see Text layout). `rotate`, `textLength`, `lengthAdjust`, `word-spacing`, `dominant-baseline`, `baseline-shift`, `writing-mode`, `direction` are ignored (reported); stroked text is not drawn and a gradient fill is drawn black. |
+| `<tspan>` | Partial | Own `x` / `y` / `dx` / `dy` (a new piece when `x` or `y` is set), fill, font, weight, style, `letter-spacing` and `text-decoration`; what an engine cannot style is in the table under Text layout. |
 | `<textPath>` | Partial | Drawn as ordinary straight text (reported). |
 | `<tref>` | Not supported | SVG 1.1, removed from SVG 2. Reported. |
 | `<altGlyph>` | Not supported | SVG 1.1. Reported. |
@@ -449,7 +467,8 @@ Properties, CSS and units (a row marked "silent" is ignored without a report):
 | `shape-rendering`, `text-rendering`, `color-rendering`, `image-rendering`, `color-interpolation`, `color-interpolation-filters` | Not supported | Rendering hints; ignored silently (everything is anti-aliased). |
 | `font-family`, `font-size`, `font-weight`, `font-style`, `text-anchor` | Supported | See the text engines and the font map. |
 | `font-variant`, `font-stretch`, `font` shorthand, `@font-face` | Not supported | Ignored; `font-variant`, `font-stretch` and `@font-face` are reported. |
-| `xml:space`, `<?xml-stylesheet?>` | Not supported | Whitespace is always collapsed; external style sheets are not loaded. Silent. |
+| `letter-spacing`, `text-decoration`, `xml:space`, `white-space` | Supported | On text; see Text layout for what each engine draws. |
+| External style sheets (`<?xml-stylesheet?>`) | Not supported | External style sheets are not loaded. Silent. |
 | Units | Partial | `px`, `%`, `pt`, `pc`, `mm`, `cm`, `in`, `em` / `rem` (16 px), `ex` (8 px). Other units (`vw`, `vh`, `vmin`, `ch`) are read as plain numbers. Silent. |
 | CSS selectors | Partial | Type, `*`, `.class`, `#id`, `[attr]`, `[attr=value]`, descendant and `>` child combinators, comma lists, specificity, `!important`, the `style` attribute. Pseudo-classes, pseudo-elements, `+`, `~` and `[a^=b]`-style operators never match; the rule is skipped and reported. |
 | CSS at-rules and functions | Partial | `@media` rules apply always, whatever the condition (reported); `@import`, `@font-face`, `@keyframes`, `@supports`, `@namespace`, `@charset` are skipped (reported). `var()` and `calc()` are not evaluated (reported); `inherit` works, `initial`, `unset` and `revert` do not (silent). |
