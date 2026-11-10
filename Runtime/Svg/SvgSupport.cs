@@ -53,8 +53,8 @@ namespace FirstSymbol.Vectra.Svg
             Add(SvgSupportLevel.Partial, "text tspan textPath");
             Add(SvgSupportLevel.NotSupported, "tref altGlyph altGlyphDef altGlyphItem glyphRef textArea");
             // Images and embedded content
-            Add(SvgSupportLevel.Partial, "image");
-            Add(SvgSupportLevel.NotSupported, "foreignObject video audio canvas iframe");
+            Add(SvgSupportLevel.Partial, "image foreignObject");
+            Add(SvgSupportLevel.NotSupported, "video audio canvas iframe");
             // Filters
             Add(SvgSupportLevel.Partial, "filter feGaussianBlur feOffset feFlood feMerge feMergeNode feDropShadow feColorMatrix");
             Add(SvgSupportLevel.NotSupported,

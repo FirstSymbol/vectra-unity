@@ -134,6 +134,10 @@ namespace FirstSymbol.Vectra.Svg
         public SvgAlign align = SvgAlign.XMidYMid;
         public bool slice;
         public List<SvgElementData> elements = new List<SvgElementData>();
+        /// <summary>Subtrees that are drawn on their own and composited (group opacity, masks, blend modes, background blur); see <see cref="SvgLayerData"/>.</summary>
+        public List<SvgLayerData> layers = new List<SvgLayerData>();
+        /// <summary>The content of the masks of <see cref="layers"/>; not drawn by itself.</summary>
+        public List<SvgElementData> maskElements = new List<SvgElementData>();
         /// <summary>Messages about unsupported features met during parsing.</summary>
         public List<string> warnings = new List<string>();
 
@@ -237,17 +241,18 @@ namespace FirstSymbol.Vectra.Svg
         /// <param name="pointScale">Device pixels in one SVG px of a non-scaling stroke: the Canvas scale factor or the UI Toolkit density; 1 in world space and for baked sprites.</param>
         public static void Build(VectraSvgDocument doc, VectraShapeRenderer renderer, Rect localRect, float localPixelSize,
             Color tint, bool world, VectraQuality quality, List<SvgOverride> overrides = null, SvgAlign? align = null,
-            bool? slice = null, int from = 0, int to = int.MaxValue, float pointScale = 1f)
+            bool? slice = null, int from = 0, int to = int.MaxValue, float pointScale = 1f, List<SvgElementData> source = null)
         {
             renderer.BeginBatch();
-            if (doc == null || doc.elements == null)
+            var list = source ?? doc?.elements;
+            if (doc == null || list == null)
             {
                 renderer.EndBatch();
                 return;
             }
 
             // Only the drawable elements in [from, to) are built; text and images are separate objects.
-            to = Mathf.Min(to, doc.elements.Count);
+            to = Mathf.Min(to, list.Count);
 
             var toLocal = doc.DocumentToLocal(localRect, align, slice);
             float scale = math.max(toLocal.UniformScale, 1e-6f);
@@ -258,7 +263,7 @@ namespace FirstSymbol.Vectra.Svg
 
             for (int i = Mathf.Max(from, 0); i < to; i++)
             {
-                var e = doc.elements[i];
+                var e = list[i];
                 if (e == null || e.isText || e.isImage || e.path == null || e.path.IsEmpty) continue;
                 bool hidden = false;
                 Color? fillOverride = null, strokeOverride = null;

@@ -37,9 +37,9 @@ namespace FirstSymbol.Vectra.Svg
         // Properties and attributes that change the picture and are not implemented; the import report names them.
         static readonly HashSet<string> s_Unsupported = new HashSet<string>
         {
-            "paint-order", "mix-blend-mode", "isolation", "letter-spacing", "word-spacing", "text-decoration", "dominant-baseline",
+            "paint-order", "isolation", "letter-spacing", "word-spacing", "text-decoration", "dominant-baseline",
             "alignment-baseline", "baseline-shift", "writing-mode", "direction", "unicode-bidi", "font-variant", "font-stretch",
-            "transform-origin", "transform-box", "backdrop-filter", "textLength", "lengthAdjust"
+            "transform-origin", "transform-box", "textLength", "lengthAdjust"
         };
 
         sealed class Context
@@ -56,6 +56,11 @@ namespace FirstSymbol.Vectra.Svg
             public bool stopped, styleReady;
             public readonly List<SvgNode> activeUse = new List<SvgNode>();
             public readonly HashSet<string> warned = new HashSet<string>();
+            /// <summary>Where elements go while a mask is being read (null: the document); see SvgParser.Layers.cs.</summary>
+            public List<SvgElementData> sink;
+            /// <summary>Opacity of the enclosing groups that text and images still need (paths get it through layers).</summary>
+            public float textExtra = 1f;
+            public List<SvgElementData> Elements => sink ?? doc.elements;
 
             public void Warn(string msg)
             {
@@ -87,6 +92,8 @@ namespace FirstSymbol.Vectra.Svg
         {
             options ??= new SvgParseOptions();
             doc.elements.Clear();
+            doc.layers.Clear();
+            doc.maskElements.Clear();
             doc.warnings.Clear();
             var xml = SvgXml.Parse(svg, options, doc.warnings);
             var root = FindFirst(xml, "svg");
@@ -301,12 +308,7 @@ namespace FirstSymbol.Vectra.Svg
             var elementClips = clips;
             var clipRef = Url(Style(n, "clip-path"));
             if (clipRef != null) elementClips = AddClip(clipRef, local, n, clips, ctx);
-            var maskRef = Url(Style(n, "mask"));
-            if (maskRef != null)
-            {
-                ctx.Warn("Masks are applied as geometric clips (luminance is ignored).");
-                elementClips = AddClip(maskRef, local, n, elementClips, ctx);
-            }
+            var scope = BeginLayer(n, local, opacity, ref op, ref elementClips, ctx);
 
             var elementEffects = effects;
             var filterRef = Url(Style(n, "filter"));
@@ -330,8 +332,6 @@ namespace FirstSymbol.Vectra.Svg
                 }
                 case "g":
                 case "a":
-                    if (n.name == "g" && n.children.Count > 1 && Number(Style(n, "opacity"), 1f) < 1f)
-                        ctx.Warn("Group opacity is applied to each child separately; overlapping children show through each other.");
                     foreach (var c in n.children) Render(c, local, op, elementClips, elementEffects, ctx);
                     break;
                 case "switch":
@@ -344,10 +344,10 @@ namespace FirstSymbol.Vectra.Svg
                     RenderUse(n, local, op, elementClips, elementEffects, ctx);
                     break;
                 case "text":
-                    RenderText(n, local, op, ctx);
+                    if (ctx.sink == null) RenderText(n, local, op * ctx.textExtra, ctx);
                     break;
                 case "image":
-                    RenderImage(n, local, op, ctx);
+                    if (ctx.sink == null) RenderImage(n, local, op * ctx.textExtra, ctx);
                     break;
                 default:
                     if (BuildShape(n, ctx))
@@ -362,6 +362,7 @@ namespace FirstSymbol.Vectra.Svg
             }
 
             ctx.depth--;
+            if (scope != null) EndLayer(scope, ctx);
         }
 
         static void RenderUse(SvgNode n, Affine2 local, float op, List<SvgPathData> clips, List<VectraEffect> effects, Context ctx)
@@ -665,7 +666,7 @@ namespace FirstSymbol.Vectra.Svg
             if (clips != null) e.clips.AddRange(clips);
             if (effects != null)
                 foreach (var fx in effects) e.effects.Add(fx.Clone());
-            ctx.doc.elements.Add(e);
+            ctx.Elements.Add(e);
         }
 
         // ---------------------------------------------------------------------------------------------------

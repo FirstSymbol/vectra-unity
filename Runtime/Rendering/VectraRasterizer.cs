@@ -13,10 +13,34 @@ namespace FirstSymbol.Vectra.Rendering
         public static Texture2D Render(VectraSvgDocument doc, int width, int height, VectraQuality quality = VectraQuality.High)
         {
             if (doc == null) return null;
-            using var renderer = new VectraShapeRenderer();
             var rect = new Rect(0, 0, width, height);
+            if (SvgLayers.HasLayers(doc)) return RenderLayered(doc, rect, width, height, quality);
+            using var renderer = new VectraShapeRenderer();
             VectraSvgBuilder.Build(doc, renderer, rect, 1f, Color.white, true, quality);
             return Render(renderer, rect, width, height);
+        }
+
+        // Documents with layers (group opacity, masks, blend modes, background blur) go through the compositor.
+        static Texture2D RenderLayered(VectraSvgDocument doc, Rect rect, int width, int height, VectraQuality quality)
+        {
+            width = Mathf.Clamp(width, 1, 8192);
+            height = Mathf.Clamp(height, 1, 8192);
+            var rt = SvgCompositor.Allocate(width, height);
+            try
+            {
+                using var compositor = new SvgCompositor();
+                compositor.Render(doc, 0, doc.elements.Count, -1, new SvgCompositeSettings
+                {
+                    localRect = rect, view = rect, width = width, height = height, localPixelSize = 1f,
+                    tint = Color.white, quality = quality, pointScale = 1f
+                }, rt);
+                return Read(rt, width, height);
+            }
+            finally
+            {
+                rt.Release();
+                Object.DestroyImmediate(rt);
+            }
         }
 
         public static Texture2D Render(VectraShapeContent content, Vector2 size, int width, int height)
@@ -56,13 +80,20 @@ namespace FirstSymbol.Vectra.Rendering
             Graphics.ExecuteCommandBuffer(cmd);
             cmd.Release();
 
+            var tex = Read(rt, width, height);
+            RenderTexture.ReleaseTemporary(rt);
+            Object.DestroyImmediate(mesh);
+            return tex;
+        }
+
+        // Reads a render texture of premultiplied colours into a Texture2D of straight alpha.
+        static Texture2D Read(RenderTexture rt, int width, int height)
+        {
             var prev = RenderTexture.active;
             RenderTexture.active = rt;
             var tex = new Texture2D(width, height, TextureFormat.RGBA32, false, false) { name = "Vectra Raster" };
             tex.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
             RenderTexture.active = prev;
-            RenderTexture.ReleaseTemporary(rt);
-            Object.DestroyImmediate(mesh);
 
             // The shaders output premultiplied alpha; textures are usually straight alpha.
             var px = tex.GetPixels32();
