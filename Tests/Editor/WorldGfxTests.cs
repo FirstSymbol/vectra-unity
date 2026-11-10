@@ -6,6 +6,7 @@ using FirstSymbol.Vectra.Svg;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 
 namespace FirstSymbol.Vectra.Editor.Tests
@@ -112,6 +113,14 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         [Test]
+        public void SharedCoreSplit_UiAndBackdropShadersStillCompile()
+        {
+            Assert.IsNull(CompileErrors(VectraMaterials.UIShader), "Vectra/UI");
+            var backdrop = Resources.Load<Shader>("VectraURP/Vectra-UI-Backdrop");
+            if (backdrop != null && HasUrp) Assert.IsNull(CompileErrors(backdrop), "Vectra/UI Backdrop");
+        }
+
+        [Test]
         public void WorldMaterials_AreSharedPerTextureAndMode()
         {
             var a = VectraMaterials.GetWorld(ShapeBlendMode.Normal);
@@ -168,6 +177,45 @@ namespace FirstSymbol.Vectra.Editor.Tests
             var t = asset.GetType();
             Assert.IsTrue((bool)t.GetField("isValid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).GetValue(asset), "the Sub Graph is valid");
             Assert.IsNotEmpty((string)t.GetField("functionName", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).GetValue(asset));
+        }
+
+        // ------------------------------------------------------------------------------------------------------
+        // Hub light theme
+        // ------------------------------------------------------------------------------------------------------
+
+        class ThemeProbeWindow : EditorWindow { }
+
+        [UnityEngine.TestTools.UnityTest]
+        public System.Collections.IEnumerator LightTheme_PaintsBuiltInFieldsLight_WhateverTheEditorSkin()
+        {
+            var window = ScriptableObject.CreateInstance<ThemeProbeWindow>();
+            try
+            {
+                window.Show();
+                var root = VxUI.Root();
+                var field = new UnityEditor.UIElements.ObjectField { objectType = typeof(Object) };
+                root.Add(field);
+                window.rootVisualElement.Add(root);
+                // What the hub does for its light theme (VectraHubProduct.ApplyTheme).
+                foreach (var r in window.rootVisualElement.Query<UnityEngine.UIElements.VisualElement>(className: "vx-root").ToList())
+                    r.EnableInClassList("vx--light", true);
+                yield return null;
+                yield return null;
+                var input = field.Q(className: "unity-object-field__input") ?? field.Q(className: "unity-base-field__input");
+                Assert.NotNull(input);
+                var bg = input.resolvedStyle.backgroundColor;
+                Assert.Greater(bg.r + bg.g + bg.b, 2.4f, "the field background is light in the light theme, got " + bg);
+                var label = field.Q(className: "unity-object-field-display__label");
+                if (label != null)
+                {
+                    var c = label.resolvedStyle.color;
+                    Assert.Less(c.r + c.g + c.b, 1.2f, "the field text is dark in the light theme, got " + c);
+                }
+            }
+            finally
+            {
+                window.Close();
+            }
         }
 
         // ------------------------------------------------------------------------------------------------------

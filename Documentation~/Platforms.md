@@ -61,6 +61,8 @@ On the web there are no threads, so the Burst jobs run as IL2CPP code on the mai
 | Built-in | Everything except the backdrop effects. The six other samples passed the checks in a Windows Mono player. |
 | URP | Everything. The backdrop effects (frosted glass and the 15 blend modes) need the **Vectra Backdrop Feature** in the URP renderer; with it the URP Backdrop sample drew correctly on Windows, WebGL 2 and WebGPU. |
 | HDRP | Shapes, SVG, masks, effects and world-space shapes draw: the six samples and the feature checks pass in a Windows IL2CPP player, and TextMesh Pro 3D text shows. **No backdrop effects** (they are URP only; the sample is left out). HDRP's exposure and tone mapping apply to world-space shapes as to any lit object in the scene, so a picture there is darker than in URP; Canvas shapes in an Overlay canvas are not touched by them. |
+| World shapes, URP (0.6) | `Vectra/World URP` is SRP Batcher compatible: Unity's own check reports the 0.5.3 shader as not (`_Color` outside the buffer) and the new one as compatible. 500 `VectraRenderer` shapes cost 0.67 ms of CPU in `Camera.Render()` in a Windows IL2CPP player (median of 5 runs); the 0.5.3 shader took 0.65 ms and 0.78 ms in two sets of 5 runs. **No gain you can measure at this size**: the 0.5.3 path was already cheap, and the difference is below the noise between sets. Hairline strokes, baked sprites and the Shader Graph sample (a rounded card) pass their tests in the editor. |
+| World shapes, HDRP (0.6) | `Vectra/World HDRP` is SRP Batcher compatible by Unity's check and draws in the editor tests (hairline strokes, the Shader Graph sample). Not timed, and no HDRP player was built for 0.6. |
 
 ## Numbers
 

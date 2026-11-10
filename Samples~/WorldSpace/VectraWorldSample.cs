@@ -31,7 +31,8 @@ namespace FirstSymbol.Vectra.Samples
                 var card = Renderer<RectangleShape>(m_Ring, "Card " + i, new Vector3(Mathf.Cos(a) * m_Radius, 0f, Mathf.Sin(a) * m_Radius), new Vector2(1.4f, 2f));
                 ((RectangleShape)card.Geometry).cornerRadii = Vector4.one * 0.18f;
                 card.Content.fills[0].paint = VectraPaint.Linear(Color.HSVToRGB(i / (float)m_Count, 0.6f, 1f), Color.HSVToRGB(i / (float)m_Count + 0.08f, 0.8f, 0.7f), 90f);
-                card.Content.strokes.Add(new StrokeLayer(Color.white, 0.04f) { alignment = StrokeAlignment.Inside });
+                // A hairline: 1.5 screen pixels wide whatever the distance of the card from the camera.
+                card.Content.strokes.Add(new StrokeLayer(Color.white, 1.5f) { alignment = StrokeAlignment.Inside, widthMode = StrokeWidthMode.Pixels });
                 card.Content.effects.Add(new InnerGlowEffect { size = 0.15f, color = new Color(1f, 1f, 1f, 0.35f) });
                 card.transform.rotation = Quaternion.LookRotation(card.transform.position);
                 var icon = Renderer<StarShape>(card.transform, "Icon", new Vector3(0f, 0f, -0.01f), new Vector2(0.8f, 0.8f));
