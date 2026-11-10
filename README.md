@@ -29,7 +29,7 @@ Package Manager → **+** → **Add package from git URL...**
 https://github.com/FirstSymbol/vectra-unity.git
 ```
 
-A specific version is installed through its tag: `https://github.com/FirstSymbol/vectra-unity.git#0.7.3`.
+A specific version is installed through its tag: `https://github.com/FirstSymbol/vectra-unity.git#0.7.4`.
 
 Vectra and Lettera work as packages or as plain folders under `Assets`: when Lettera is a folder, Vectra notices it and adds `VECTRA_LETTERA` to the scripting define symbols by itself (and takes it away when the folder goes). A symbol you set yourself is left alone. If you delete Lettera while the editor is closed, Unity opens with compile errors (or Safe Mode): remove `VECTRA_LETTERA` in **Project Settings > Player > Scripting Define Symbols**, or put the folder back and delete it from inside Unity.
 
@@ -174,7 +174,7 @@ The main gaps are below; every SVG element, property and CSS feature is listed a
 
 - A `<mask>` that is not made of plain opaque shapes is composited offscreen; `maskContentUnits="objectBoundingBox"` stays a geometric clip, and masks inside masks and text in masks are ignored.
 - Text inside a `<pattern>` is not drawn; other pattern content (images, shapes, gradients, nested patterns) is.
-- Of the filters, blur, drop shadow (including the offset + blur + merge chain), saturate and hueRotate are supported, and the chains Figma exports (drop and inner shadows, layer blur, noise) are recognised as a whole; other uses of `feTurbulence`, `feComposite`, `feBlend`, ... are reported and the element is drawn without them.
+- Of the filters, blur, drop shadow (including the offset + blur + merge chain), saturate and hueRotate are supported, and the chains Figma exports (drop and inner shadows with their blend modes, layer blur, noise) are recognised as a whole (a filter on a group is computed from the picture of the group); other uses of `feTurbulence`, `feComposite`, `feBlend`, ... are reported and the element is drawn without them.
 - No animation: SMIL (`<animate>`, `<animateTransform>`, `<set>`) and CSS `@keyframes` are ignored; the first frame is drawn. `<foreignObject>` (except Figma's background blur, read from the shape after it) and `<script>` are ignored.
 - No `paint-order` or `@font-face`. A blend mode (`mix-blend-mode`) blends with the SVG's own content below it, not with the scene behind the component.
 - Text is placed per `<tspan>` (absolute `x` / `y`, lists, `dx` / `dy`), with `letter-spacing`, underline and line-through in Lettera, TextMesh Pro and UI Toolkit (the legacy uGUI Text ignores spacing and decoration). Not supported: `rotate`, `<textPath>` (drawn straight), `textLength`, `word-spacing`; sprites and PNG draw no text.

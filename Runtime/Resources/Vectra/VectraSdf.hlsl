@@ -33,7 +33,9 @@ float Erf(float x)
 // px is the size of one screen pixel in local units; edges always get at least ~1px of anti-aliasing.
 float Coverage(float d, float sigma, float px)
 {
-    float s = max(sigma, px * 0.42);
+    // An edge without blur is a box-filtered pixel coverage: linear over one pixel, so an edge on a pixel boundary stays crisp.
+    if (sigma <= px * 0.42) return saturate(0.5 - d / max(px, 1e-12));
+    float s = sigma;
     float x = clamp(d / max(s * 1.41421356, 1e-12), -6.0, 6.0);
     return saturate(0.5 - 0.5 * Erf(x));
 }

@@ -324,15 +324,19 @@ namespace FirstSymbol.Vectra.Svg
             var elementClips = clips;
             var clipRef = Url(Style(n, "clip-path"));
             if (clipRef != null) elementClips = AddClip(clipRef, local, n, clips, ctx);
-            var scope = BeginLayer(n, local, opacity, ref op, ref elementClips, ctx);
-
             var elementEffects = effects;
             var filterRef = Url(Style(n, "filter"));
+            List<SvgFilterStep> steps = null;
             if (filterRef != null)
             {
                 elementEffects = new List<VectraEffect>(effects ?? new List<VectraEffect>());
-                AddFilter(filterRef, local, elementEffects, ctx);
+                if (CanDeferFilter(n, ctx)) steps = new List<SvgFilterStep>();
+                AddFilter(filterRef, local, elementEffects, steps, ctx);
+                if (steps != null && !HasFilterWork(steps)) steps = null;
             }
+
+            var scope = BeginLayer(n, local, opacity, ref op, ref elementClips, steps, ctx);
+            if (scope == null && steps != null) StepsToEffects(steps, elementEffects);
 
             ctx.depth++;
             switch (n.name)
@@ -962,13 +966,14 @@ namespace FirstSymbol.Vectra.Svg
             return result;
         }
 
-        static void AddFilter(string id, Affine2 ctm, List<VectraEffect> effects, Context ctx)
+        // With steps, shadows and blurs are listed for the layer compositor (see SvgFilterStep) instead of becoming native effects.
+        static void AddFilter(string id, Affine2 ctm, List<VectraEffect> effects, List<SvgFilterStep> steps, Context ctx)
         {
             if (!ctx.ids.TryGetValue(id, out var f) || f.name != "filter") return;
             float scale = ctm.UniformScale;
             if (IsRichFilter(f))
             {
-                AddRichFilter(f, scale, effects, ctx);
+                AddRichFilter(f, scale, effects, steps, ctx);
                 return;
             }
 
@@ -1000,6 +1005,16 @@ namespace FirstSymbol.Vectra.Svg
                         var c = ColorOf(Style(p, "flood-color", p.Attr("flood-color") ?? "black"), p);
                         c.a *= Number(Style(p, "flood-opacity", p.Attr("flood-opacity")), 1f);
                         var sd = Numbers(p.Attr("stdDeviation") ?? "2");
+                        if (steps != null)
+                        {
+                            steps.Add(new SvgFilterStep
+                            {
+                                kind = SvgFilterKind.DropShadow, color = c, dx = Number(p.Attr("dx"), 2f) * scale,
+                                dy = Number(p.Attr("dy"), 2f) * scale, sigma = (sd.Count > 0 ? sd[0] : 2f) * scale
+                            });
+                            break;
+                        }
+
                         effects.Add(new DropShadowEffect
                         {
                             color = c,
@@ -1026,17 +1041,26 @@ namespace FirstSymbol.Vectra.Svg
             if (offset || merge)
             {
                 if (flood.a >= 1f && flood.r == 0 && flood.g == 0 && flood.b == 0) flood.a = 0.5f;
-                effects.Add(new DropShadowEffect
-                {
-                    color = flood,
-                    offset = new Vector2(dx, dy) * scale,
-                    blur = Mathf.Max(blur, 0f) * 2f * scale
-                });
+                if (steps != null)
+                    steps.Add(new SvgFilterStep
+                    {
+                        kind = SvgFilterKind.DropShadow, color = flood, dx = dx * scale, dy = dy * scale, sigma = Mathf.Max(blur, 0f) * scale
+                    });
+                else
+                    effects.Add(new DropShadowEffect
+                    {
+                        color = flood,
+                        offset = new Vector2(dx, dy) * scale,
+                        blur = Mathf.Max(blur, 0f) * 2f * scale
+                    });
             }
             else if (blur > 0f)
             {
-                effects.Add(new LayerBlurEffect { blur = blur * 2f * scale });
+                if (steps != null) steps.Add(new SvgFilterStep { kind = SvgFilterKind.Blur, sigma = blur * scale });
+                else effects.Add(new LayerBlurEffect { blur = blur * 2f * scale });
             }
+
+            if (steps != null) EnsureSource(steps);
         }
 
         // ---------------------------------------------------------------------------------------------------

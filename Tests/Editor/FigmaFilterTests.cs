@@ -13,6 +13,9 @@ namespace FirstSymbol.Vectra.Editor.Tests
     {
         static readonly List<Object> Cleanup = new List<Object>();
 
+        // Figma blurs with 5/6 of the standard deviation its export writes (see SvgParser.FigmaBlurScale).
+        const float Scale = 5f / 6f;
+
         [TearDown]
         public void TearDown()
         {
@@ -60,7 +63,7 @@ namespace FirstSymbol.Vectra.Editor.Tests
             Assert.AreEqual(1, fx.Count);
             var d = (DropShadowEffect)fx[0];
             Assert.AreEqual(new Vector2(4f, 6f), d.offset);
-            Assert.AreEqual(10f, d.blur, 1e-4f); // stdDeviation 5 = Figma radius 10
+            Assert.AreEqual(10f * Scale, d.blur, 1e-4f); // stdDeviation 5 = Figma radius 10, drawn at 5/6 of it like Figma
             Assert.AreEqual(0f, d.spread);
             Assert.AreEqual(0.4f, d.color.a, 1e-4f);
             Assert.AreEqual(0f, d.color.r);
@@ -76,10 +79,10 @@ namespace FirstSymbol.Vectra.Editor.Tests
             var a = (DropShadowEffect)fx[0];
             var b = (DropShadowEffect)fx[1];
             Assert.AreEqual(new Vector2(0f, 2f), a.offset);
-            Assert.AreEqual(4f, a.blur, 1e-4f);
+            Assert.AreEqual(4f * Scale, a.blur, 1e-4f);
             Assert.AreEqual(0.25f, a.color.a, 1e-4f);
             Assert.AreEqual(new Vector2(8f, 12f), b.offset);
-            Assert.AreEqual(20f, b.blur, 1e-4f);
+            Assert.AreEqual(20f * Scale, b.blur, 1e-4f);
             Assert.AreEqual(6f, b.spread, 1e-4f);
             Assert.AreEqual(0.901961f, b.color.r, 1e-4f);
             Assert.AreEqual(0.5f, b.color.a, 1e-4f);
@@ -94,7 +97,7 @@ namespace FirstSymbol.Vectra.Editor.Tests
             Assert.AreEqual(1, fx.Count);
             var s = (InnerShadowEffect)fx[0];
             Assert.AreEqual(new Vector2(4f, 4f), s.offset);
-            Assert.AreEqual(8f, s.blur, 1e-4f);
+            Assert.AreEqual(8f * Scale, s.blur, 1e-4f);
             Assert.AreEqual(0f, s.choke);
             Assert.AreEqual(0.5f, s.color.a, 1e-4f);
             NoUnsupportedWarning(doc);
@@ -113,7 +116,7 @@ namespace FirstSymbol.Vectra.Editor.Tests
             Assert.AreEqual(1f, i1.color.r);
             Assert.AreEqual(0.8f, i1.color.a, 1e-4f);
             Assert.AreEqual(2f, i2.choke, 1e-4f);
-            Assert.AreEqual(10f, i2.blur, 1e-4f);
+            Assert.AreEqual(10f * Scale, i2.blur, 1e-4f);
             NoUnsupportedWarning(doc);
         }
 
@@ -123,7 +126,7 @@ namespace FirstSymbol.Vectra.Editor.Tests
             var doc = Load("05_layer_blur");
             var fx = Shape(doc).effects;
             Assert.AreEqual(1, fx.Count);
-            Assert.AreEqual(6f, ((LayerBlurEffect)fx[0]).blur, 1e-4f);
+            Assert.AreEqual(6f * Scale, ((LayerBlurEffect)fx[0]).blur, 1e-4f);
             NoUnsupportedWarning(doc);
         }
 
@@ -192,21 +195,6 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         [Test]
-        public void ShadowBlendMode_IsReported_AndTheShadowStillDrawn()
-        {
-            var svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><filter id='f'>" +
-                      "<feColorMatrix in='SourceAlpha' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0' result='hardAlpha'/>" +
-                      "<feOffset dy='4'/><feGaussianBlur stdDeviation='2'/>" +
-                      "<feColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/>" +
-                      "<feBlend mode='multiply' in2='BackgroundImageFix' result='e1'/>" +
-                      "<feBlend mode='normal' in='SourceGraphic' in2='e1' result='shape'/></filter></defs>" +
-                      "<rect width='50' height='50' fill='red' filter='url(#f)'/></svg>";
-            var doc = ParseText(svg);
-            Assert.AreEqual(1, doc.elements[0].effects.Count(e => e is DropShadowEffect));
-            Assert.IsTrue(doc.warnings.Any(w => w.Contains("multiply")), string.Join(" | ", doc.warnings));
-        }
-
-        [Test]
         public void ShadowOffset_PointsDownTheDocument_OnTheCanvasToo()
         {
             var doc = Load("01_drop_shadow");
@@ -237,18 +225,6 @@ namespace FirstSymbol.Vectra.Editor.Tests
                 Assert.AreEqual(1f, e.stroke.paint.opacity, 1e-4f);
                 Assert.IsFalse(doc.warnings.Any(w => w.Contains("foreignObject")), string.Join(" | ", doc.warnings));
             }
-        }
-
-        [Test]
-        public void ShadowBlend_ScreenIsMappedToAdditive_MultiplyIsReported()
-        {
-            var screen = Load("45_inner_shadow_blend_screen");
-            var ins = (InnerShadowEffect)Shape(screen).effects[0];
-            Assert.AreEqual(LayerBlend.Additive, ins.blend);
-            Assert.IsFalse(screen.warnings.Any(w => w.Contains("blend mode")), string.Join(" | ", screen.warnings));
-            var mul = Load("42_shadow_blend_multiply");
-            Assert.AreEqual(LayerBlend.Normal, ((DropShadowEffect)Shape(mul).effects[0]).blend);
-            Assert.IsTrue(mul.warnings.Any(w => w.Contains("multiply")));
         }
 
         [Test]

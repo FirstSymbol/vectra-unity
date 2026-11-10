@@ -18,6 +18,23 @@ namespace FirstSymbol.Vectra.Svg
             public List<SvgElementData> maskContent;
             public float blur;
             public float prevTextExtra;
+            /// <summary>The element's filter (shadows, blur) as compositor steps, or null.</summary>
+            public List<SvgFilterStep> filter;
+        }
+
+        /// <summary>
+        /// A filter on an element is computed from the picture of everything the element draws, so it needs a layer; inside masks and
+        /// pattern tiles, and past the layer limits, it stays a native effect of each shape.
+        /// </summary>
+        static bool CanDeferFilter(SvgNode n, Context ctx) =>
+            n.name != "foreignObject" && ctx.sink == null && ctx.patterns.capture == 0 &&
+            ctx.layerDepth < MaxLayerDepth && ctx.doc.layers.Count < MaxLayers;
+
+        static bool HasFilterWork(List<SvgFilterStep> steps)
+        {
+            foreach (var s in steps)
+                if (s.kind != SvgFilterKind.Source) return true;
+            return false;
         }
 
         const float OpaqueEps = 1e-3f;
@@ -30,7 +47,8 @@ namespace FirstSymbol.Vectra.Svg
         /// opacity is taken out of <paramref name="op"/> (see <see cref="EndLayer"/>), and a mask that is a plain white shape is
         /// turned into a geometric clip (cheap and exact).
         /// </summary>
-        static LayerScope BeginLayer(SvgNode n, Affine2 local, float parentOpacity, ref float op, ref List<SvgPathData> clips, Context ctx)
+        static LayerScope BeginLayer(SvgNode n, Affine2 local, float parentOpacity, ref float op, ref List<SvgPathData> clips,
+            List<SvgFilterStep> filter, Context ctx)
         {
             // The content of a foreignObject is not drawn; Figma's background blur is read from the shape that follows it.
             if (n.name == "foreignObject") return null;
@@ -58,7 +76,7 @@ namespace FirstSymbol.Vectra.Svg
                 return null;
             }
 
-            float blur = Number(n.Attr("data-figma-bg-blur-radius"), 0f) * 0.5f;
+            float blur = Number(n.Attr("data-figma-bg-blur-radius"), 0f) * 0.5f * FigmaBlurScale;
             var kind = SvgMaskKind.None;
             List<SvgElementData> maskContent = null;
             if (maskRef != null && !ReadMask(maskRef, n, local, ctx, out kind, out maskContent))
@@ -69,7 +87,7 @@ namespace FirstSymbol.Vectra.Svg
 
             if (kind != SvgMaskKind.None) blur = 0f;
             bool tentative = own < 1f - OpaqueEps;
-            if (!tentative && kind == SvgMaskKind.None && blend == SvgBlendMode.Normal && blur <= 0f) return null;
+            if (!tentative && kind == SvgMaskKind.None && blend == SvgBlendMode.Normal && blur <= 0f && filter == null) return null;
             op = parentOpacity;
             var scope = new LayerScope
             {
@@ -80,6 +98,7 @@ namespace FirstSymbol.Vectra.Svg
                 mask = kind,
                 maskContent = maskContent,
                 blur = blur,
+                filter = filter,
                 prevTextExtra = ctx.textExtra
             };
             ctx.textExtra *= scope.own;
@@ -116,7 +135,18 @@ namespace FirstSymbol.Vectra.Svg
             }
 
             if (paths == 0) return;
-            bool forced = s.mask != SvgMaskKind.None || s.blend != SvgBlendMode.Normal || s.blur > 0f;
+            if (s.filter != null)
+            {
+                // One simple shape keeps its native, resolution-free effects.
+                if (paths == 1 && s.mask == SvgMaskKind.None && s.blend == SvgBlendMode.Normal && s.blur <= 0f && s.own >= 1f &&
+                    doc.layers.Count == s.layerStart && CanDrawNatively(s.filter, doc.elements[first]))
+                {
+                    AddNativeEffects(s.filter, doc.elements[first]);
+                    return;
+                }
+            }
+
+            bool forced = s.mask != SvgMaskKind.None || s.blend != SvgBlendMode.Normal || s.blur > 0f || s.filter != null;
             if (!forced)
             {
                 // One path with a fill or a stroke (not both) cannot overlap itself: the opacity goes into its paint.
@@ -127,7 +157,7 @@ namespace FirstSymbol.Vectra.Svg
                 }
             }
 
-            var layer = new SvgLayerData { from = s.start, to = end, opacity = s.own, blend = s.blend, mask = s.mask, blurSigma = s.blur };
+            var layer = new SvgLayerData { from = s.start, to = end, opacity = s.own, blend = s.blend, mask = s.mask, blurSigma = s.blur, filter = s.filter };
             if (s.mask != SvgMaskKind.None && s.maskContent != null)
             {
                 layer.maskFrom = doc.maskElements.Count;

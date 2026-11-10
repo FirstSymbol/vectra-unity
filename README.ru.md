@@ -29,7 +29,7 @@ Package Manager → **+** → **Add package from git URL...**
 https://github.com/FirstSymbol/vectra-unity.git
 ```
 
-Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.7.3`.
+Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.7.4`.
 
 Vectra и Lettera работают и как пакеты, и как обычные папки в `Assets`: когда Lettera лежит папкой, Vectra замечает её и сам добавляет `VECTRA_LETTERA` в символы компиляции (и убирает, когда папка исчезает). Символ, который вы поставили сами, остаётся как есть. Если удалить Lettera при закрытом редакторе, Unity откроется с ошибками компиляции (или в Safe Mode): уберите `VECTRA_LETTERA` в **Project Settings > Player > Scripting Define Symbols** или верните папку и удалите её изнутри Unity.
 
@@ -174,7 +174,7 @@ VectraSvg.Expand(svgImage);   // отдельный VectraShape на кажды�
 
 - `<mask>` применяется как геометрический клип, яркость маски не учитывается.
 - Текст внутри `<pattern>` не рисуется; остальное содержимое паттерна (картинки, фигуры, градиенты, вложенные паттерны) рисуется.
-- Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate, а цепочки, которые экспортирует Figma (внешние и внутренние тени, размытие слоя, шум), распознаются целиком; остальные применения `feTurbulence`, `feComposite`, `feBlend` ... попадают в отчёт, элемент рисуется без них.
+- Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate, а цепочки, которые экспортирует Figma (внешние и внутренние тени с режимами наложения, размытие слоя, шум), распознаются целиком (фильтр на группе считается по картинке группы); остальные применения `feTurbulence`, `feComposite`, `feBlend` ... попадают в отчёт, элемент рисуется без них.
 - Анимации нет: SMIL (`<animate>`, `<animateTransform>`, `<set>`) и CSS `@keyframes` игнорируются, рисуется первый кадр. `<foreignObject>` и `<script>` игнорируются.
 - Нет `mix-blend-mode`, `paint-order` и `@font-face`.
 - Текст размещается по `<tspan>` (абсолютные `x` / `y`, списки, `dx` / `dy`), с `letter-spacing`, подчёркиванием и зачёркиванием в Lettera, TextMesh Pro и UI Toolkit (legacy uGUI Text игнорирует разрядку и подчёркивание). Не поддерживаются: `rotate`, `<textPath>` (рисуется прямо), `textLength`, `word-spacing`; спрайты и PNG текст не рисуют.

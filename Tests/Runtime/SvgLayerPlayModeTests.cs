@@ -195,6 +195,59 @@ namespace FirstSymbol.Vectra.Tests
             AssertTopLeft(Capture(), "world");
         }
 
+        // ---- filters on groups ----
+
+        static string ShadowFilter(string mode, string rgba)
+        {
+            var c = rgba.Split(' ');
+            return "<defs><filter id='f' x='0' y='0' width='160' height='160' filterUnits='userSpaceOnUse' color-interpolation-filters='sRGB'>" +
+                   "<feFlood flood-opacity='0' result='BackgroundImageFix'/>" +
+                   "<feColorMatrix in='SourceAlpha' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0' result='hardAlpha'/>" +
+                   "<feOffset dx='0' dy='8'/><feGaussianBlur stdDeviation='6'/>" +
+                   "<feColorMatrix type='matrix' values='0 0 0 0 " + c[0] + " 0 0 0 0 " + c[1] + " 0 0 0 0 " + c[2] + " 0 0 0 " + c[3] + " 0'/>" +
+                   "<feBlend mode='" + mode + "' in2='BackgroundImageFix' result='e1'/>" +
+                   "<feBlend mode='normal' in='SourceGraphic' in2='e1' result='shape'/></filter></defs>";
+        }
+
+        const string CircleAndSquare = "<circle cx='55' cy='75' r='30' fill='#E63946'/><rect x='75' y='45' width='60' height='60' fill='#2A9D8F'/>";
+
+        static void AssertGroupShadow(Shot s, string path)
+        {
+            AssertNear(s, 73, 75, 230, 57, 70, 6, path + " circle two units from the square: the square casts nothing on it");
+            var below = s[110, 108];
+            Assert.That(below.g, Is.InRange(90, 200), path + " below the square: the soft shadow, " + below);
+            var beside = s[95, 108];
+            Assert.AreEqual(below.g, beside.g, 14, path + " the same shadow under the whole square");
+            AssertNear(s, 110, 36, 255, 255, 255, 3, path + " above the square: no shadow (it falls down)");
+            AssertNear(s, 150, 150, 255, 255, 255, 2, path + " far corner");
+        }
+
+        [UnityTest]
+        public IEnumerator ShadowOnAGroup_IsOneSoftShadowOfTheWholeGroup_OnEveryPath()
+        {
+            string svg = Svg(ShadowFilter("normal", "0 0 0 0.45") + "<g filter='url(#f)'>" + CircleAndSquare + "</g>");
+            yield return OnBothPaths(svg, (path, s) => AssertGroupShadow(s, path));
+            Object.DestroyImmediate(m_LastCanvas);
+            World(svg);
+            yield return Settle();
+            AssertGroupShadow(Capture(), "world");
+        }
+
+        [UnityTest]
+        public IEnumerator MultiplyShadow_MultipliesWithTheBackdrop_OnEveryPath()
+        {
+            const string body = "<rect width='160' height='160' fill='#E9C46A'/><g filter='url(#f)'><rect x='40' y='40' width='80' height='80' rx='12' fill='#fff'/></g>";
+            string multiply = Svg(ShadowFilter("multiply", "0.9 0.2 0.3 0.8") + body);
+            int normalBlue = Raster(Svg(ShadowFilter("normal", "0.9 0.2 0.3 0.8") + body))[80, 124].b;
+            yield return OnBothPaths(multiply, (path, s) =>
+            {
+                var c = s[80, 124];
+                Assert.Less(c.b, normalBlue - 10, $"{path}: multiplied blue {c.b}, normal blue {normalBlue}");
+                AssertNear(s, 80, 80, 255, 255, 255, 2, path + " the shape itself");
+                AssertNear(s, 10, 10, 233, 196, 106, 2, path + " the backdrop is unchanged away from the shadow");
+            });
+        }
+
         [UnityTest]
         public IEnumerator ShapeOpacity_WithFillAndStroke_CompositesFillAndStrokeAsOne()
         {

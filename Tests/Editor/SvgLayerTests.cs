@@ -238,7 +238,7 @@ namespace FirstSymbol.Vectra.Editor.Tests
                             "<rect data-figma-bg-blur-radius='12' x='20' y='20' width='60' height='60' rx='8' fill='#fff' fill-opacity='0.3'/>");
             Assert.AreEqual(1, doc.layers.Count);
             var l = doc.layers[0];
-            Assert.AreEqual(6f, l.blurSigma, 1e-4f, "Figma's radius is twice the standard deviation");
+            Assert.AreEqual(6f * 5f / 6f, l.blurSigma, 1e-4f, "Figma's radius is twice the standard deviation, and Figma draws 5/6 of it");
             Assert.AreEqual(SvgMaskKind.Alpha, l.mask);
             Assert.AreEqual(1, l.maskTo - l.maskFrom);
             Assert.AreEqual(1, l.from);

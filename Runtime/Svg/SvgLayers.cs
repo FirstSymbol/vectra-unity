@@ -56,7 +56,54 @@ namespace FirstSymbol.Vectra.Svg
         public float blurSigma;
 
         /// <summary>The layer reads what was drawn below it (blend modes other than normal, background blur).</summary>
-        public bool NeedsBackdrop => blend != SvgBlendMode.Normal || blurSigma > 0f;
+        public bool NeedsBackdrop => blend != SvgBlendMode.Normal || blurSigma > 0f || FilterNeedsBackdrop;
+
+        /// <summary>
+        /// The filter of the layer (Figma shadow chains, layer blur) in paint order; computed from the picture of the layer's subtree. Null
+        /// for layers without one.
+        /// </summary>
+        public List<SvgFilterStep> filter;
+
+        /// <summary>A drop shadow of the filter blends with the backdrop (the content drawn below the layer) in a mode other than normal.</summary>
+        public bool FilterNeedsBackdrop
+        {
+            get
+            {
+                if (filter == null) return false;
+                for (int i = 0; i < filter.Count; i++)
+                    if (filter[i].kind == SvgFilterKind.DropShadow && filter[i].blend != SvgBlendMode.Normal) return true;
+                return false;
+            }
+        }
+    }
+
+    public enum SvgFilterKind
+    {
+        /// <summary>The picture of the layer itself (SourceGraphic) goes over what the steps before it made.</summary>
+        Source,
+        /// <summary>A drop shadow from the alpha of the layer picture: spread, offset, blur, colour; drawn below the Source step.</summary>
+        DropShadow,
+        /// <summary>An inner shadow from the alpha of the layer picture: choke, offset, blur, colour; blended over what the steps before it made.</summary>
+        InnerShadow,
+        /// <summary>A Gaussian blur of everything made so far.</summary>
+        Blur
+    }
+
+    /// <summary>
+    /// One step of a filter that is applied to the picture of a layer. Lengths are in document units (already scaled by the element's
+    /// transform), the offset points down the page, <see cref="sigma"/> is the standard deviation of the Gaussian.
+    /// </summary>
+    [Serializable]
+    public class SvgFilterStep
+    {
+        public SvgFilterKind kind;
+        /// <summary>Straight colour with its alpha, as the SVG writes it (sRGB values).</summary>
+        public UnityEngine.Color color = new UnityEngine.Color(0f, 0f, 0f, 0.25f);
+        public float dx, dy, sigma, spread, choke;
+        /// <summary>
+        /// How a shadow is composited: a drop shadow against the backdrop below the layer, an inner shadow against the layer's own picture.
+        /// </summary>
+        public SvgBlendMode blend;
     }
 
     /// <summary>Reads the layer tree of a document and maps CSS blend-mode names.</summary>

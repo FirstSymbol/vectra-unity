@@ -73,6 +73,17 @@ namespace FirstSymbol.Vectra.Svg
             float scale = toLocal.UniformScale;
             var used = new HashSet<string>();
             var text = image.ResolveTextBackend();
+            // Expanded objects have no layers: the shadows and blurs of a filtered group become native effects of each of its shapes.
+            List<VectraEffect>[] groupEffects = null;
+            if (doc.layers != null)
+                foreach (var layer in doc.layers)
+                {
+                    if (layer == null || layer.filter == null || layer.filter.Count == 0) continue;
+                    groupEffects ??= new List<VectraEffect>[doc.elements.Count];
+                    for (int k = Mathf.Max(layer.from, 0); k < Mathf.Min(layer.to, groupEffects.Length); k++)
+                        SvgParser.StepsToEffects(layer.filter, groupEffects[k] ??= new List<VectraEffect>());
+                }
+
             for (int i = 0; i < doc.elements.Count; i++)
             {
                 var e = doc.elements[i];
@@ -80,7 +91,7 @@ namespace FirstSymbol.Vectra.Svg
                 string name = UniqueName(string.IsNullOrEmpty(e.id) ? e.tag + " " + i : e.id, used);
                 if (e.isText) ExpandText(text.backend, e, root, rect, toLocal, scale, name, image);
                 else if (e.isImage) ExpandImage(e, root, rect, toLocal, name, image.color);
-                else if (e.path != null && !e.path.IsEmpty) ExpandPath(e, root, rect, toLocal, scale, name, image.color);
+                else if (e.path != null && !e.path.IsEmpty) ExpandPath(e, root, rect, toLocal, scale, name, image.color, groupEffects?[i]);
             }
 
             return root;
@@ -105,7 +116,8 @@ namespace FirstSymbol.Vectra.Svg
             return rt;
         }
 
-        static void ExpandPath(SvgElementData e, Transform root, Rect rootRect, Affine2 toLocal, float scale, string name, Color tint)
+        static void ExpandPath(SvgElementData e, Transform root, Rect rootRect, Affine2 toLocal, float scale, string name, Color tint,
+            List<VectraEffect> inherited = null)
         {
             var bb = e.path.ControlBounds();
             if (!bb.IsValid) return;
@@ -191,6 +203,9 @@ namespace FirstSymbol.Vectra.Svg
             if (e.effects != null)
                 foreach (var fx in e.effects)
                     if (fx != null) c.effects.Add(ScaleEffect(fx.Clone(), scale));
+            if (inherited != null)
+                foreach (var fx in inherited)
+                    c.effects.Add(ScaleEffect(fx.Clone(), scale));
 
             shape.SetShapeDirty();
         }

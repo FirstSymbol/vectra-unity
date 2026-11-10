@@ -8,6 +8,13 @@ namespace FirstSymbol.Vectra.Svg
     // reported and left out, so the element itself is always drawn.
     public static partial class SvgParser
     {
+        /// <summary>
+        /// Figma draws a blur with a Gaussian of 5/6 of the standard deviation its SVG export writes (radius / 2): fitting its own PNG renders of
+        /// shadows, inner shadows and layer blurs against exact Gaussians of the exported value gives the least error at 0.83 every time
+        /// (mean error 0.06-0.13 levels against 0.43-0.76 at 1.0). Chrome, which follows the SVG, blurs 20% wider than Figma does.
+        /// </summary>
+        const float FigmaBlurScale = 5f / 6f;
+
         sealed class FigmaShadow
         {
             public bool active, inner, haveColor;
@@ -38,7 +45,12 @@ namespace FirstSymbol.Vectra.Svg
             return false;
         }
 
-        static void AddRichFilter(SvgNode f, float scale, List<VectraEffect> effects, Context ctx)
+        /// <summary>
+        /// With <paramref name="steps"/> the shadows and the blur of the filter are not turned into native effects: they are listed as
+        /// steps for the layer compositor, which computes them from the picture of the whole subtree (everything else still goes to
+        /// <paramref name="effects"/>).
+        /// </summary>
+        static void AddRichFilter(SvgNode f, float scale, List<VectraEffect> effects, List<SvgFilterStep> steps, Context ctx)
         {
             var sh = new FigmaShadow();
             var noise = new FigmaNoise();
@@ -106,9 +118,14 @@ namespace FirstSymbol.Vectra.Svg
                     case "feGaussianBlur":
                     {
                         var sd = Numbers(p.Attr("stdDeviation") ?? "0");
-                        float s = sd.Count > 0 ? sd[0] : 0f;
+                        float s = (sd.Count > 0 ? sd[0] : 0f) * FigmaBlurScale;
                         if (sh.active) sh.blur = s;
-                        else if (s > 0f) effects.Add(new LayerBlurEffect { blur = s * 2f * scale });
+                        else if (s > 0f)
+                        {
+                            if (steps != null) steps.Add(new SvgFilterStep { kind = SvgFilterKind.Blur, sigma = s * scale });
+                            else effects.Add(new LayerBlurEffect { blur = s * 2f * scale });
+                        }
+
                         break;
                     }
                     case "feComposite":
@@ -123,8 +140,28 @@ namespace FirstSymbol.Vectra.Svg
                     }
                     case "feBlend":
                     {
-                        if (!sh.active) break; // the shape itself (in="SourceGraphic") or the empty background
+                        if (!sh.active)
+                        {
+                            // The shape itself (in="SourceGraphic") or the empty background.
+                            if (steps != null && inAttr == "SourceGraphic") steps.Add(new SvgFilterStep { kind = SvgFilterKind.Source });
+                            break;
+                        }
+
                         string mode = p.Attr("mode", "normal");
+                        if (steps != null)
+                        {
+                            // Figma writes in2="BackgroundImageFix" (an empty flood), which in strict SVG makes any mode a no-op; Figma itself
+                            // blends the shadow with what is below the layer, so the mode goes to the compositor as it is.
+                            steps.Add(new SvgFilterStep
+                            {
+                                kind = sh.inner ? SvgFilterKind.InnerShadow : SvgFilterKind.DropShadow,
+                                color = sh.color, dx = sh.dx * scale, dy = sh.dy * scale, sigma = sh.blur * scale,
+                                spread = sh.spread * scale, choke = sh.choke * scale, blend = SvgLayers.ParseBlend(mode)
+                            });
+                            sh = new FigmaShadow();
+                            break;
+                        }
+
                         // Vectra layers blend normally or additively; screen is the nearest of the CSS modes to additive.
                         var blend = LayerBlend.Normal;
                         if (mode == "screen" || mode == "plus-lighter") blend = LayerBlend.Additive;
@@ -178,6 +215,72 @@ namespace FirstSymbol.Vectra.Svg
 
             FlushNoise(noise, scale, effects);
             if (sh.active) ctx.Warn("SVG: a shadow in a filter has no closing feBlend and is ignored.");
+            if (steps != null) EnsureSource(steps);
+        }
+
+        /// <summary>A chain without the SourceGraphic blend still draws the shape: it goes before the first inner shadow or blur, else last.</summary>
+        static void EnsureSource(List<SvgFilterStep> steps)
+        {
+            if (steps.Count == 0) return;
+            int at = steps.Count;
+            for (int i = 0; i < steps.Count; i++)
+            {
+                if (steps[i].kind == SvgFilterKind.Source) return;
+                if (steps[i].kind != SvgFilterKind.DropShadow && at == steps.Count) at = i;
+            }
+
+            steps.Insert(at, new SvgFilterStep { kind = SvgFilterKind.Source });
+        }
+
+        // What native, resolution-free effects can draw for a single shape. Everything else needs the layer compositor.
+        static bool CanDrawNatively(List<SvgFilterStep> steps, SvgElementData e)
+        {
+            if (e.hasFill && e.hasStroke) return false; // the shadow of fill and stroke together is the union, not the fill's
+            foreach (var s in steps)
+            {
+                switch (s.kind)
+                {
+                    case SvgFilterKind.DropShadow:
+                        if (s.blend != SvgBlendMode.Normal) return false;
+                        break;
+                    case SvgFilterKind.InnerShadow:
+                        // Screen over a solid fill is not identical to the additive native effect (the native blur is an approximation near corners).
+                        if (s.blend != SvgBlendMode.Normal) return false;
+                        break;
+                }
+            }
+
+            return true;
+        }
+
+        static void AddNativeEffects(List<SvgFilterStep> steps, SvgElementData e)
+        {
+            foreach (var s in steps)
+            {
+                switch (s.kind)
+                {
+                    case SvgFilterKind.DropShadow:
+                        e.effects.Add(new DropShadowEffect
+                        {
+                            color = s.color, offset = new Vector2(s.dx, s.dy), blur = s.sigma * 2f, spread = s.spread
+                        });
+                        break;
+                    case SvgFilterKind.InnerShadow:
+                        e.effects.Add(new InnerShadowEffect { color = s.color, offset = new Vector2(s.dx, s.dy), blur = s.sigma * 2f, choke = s.choke });
+                        break;
+                    case SvgFilterKind.Blur:
+                        e.effects.Add(new LayerBlurEffect { blur = s.sigma * 2f });
+                        break;
+                }
+            }
+        }
+
+        /// <summary>The steps drawn as native effects of every shape of a subtree, the way a filter was handled before layers (best effort).</summary>
+        internal static void StepsToEffects(List<SvgFilterStep> steps, List<VectraEffect> effects)
+        {
+            var probe = new SvgElementData();
+            AddNativeEffects(steps.FindAll(s => s.kind != SvgFilterKind.InnerShadow || s.blend == SvgBlendMode.Normal), probe);
+            effects.AddRange(probe.effects);
         }
 
         // Share of the area where a discrete alpha table lets the noise through. fractalNoise luminance is roughly normal around

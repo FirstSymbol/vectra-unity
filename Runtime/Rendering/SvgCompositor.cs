@@ -36,7 +36,7 @@ namespace FirstSymbol.Vectra.Rendering
     /// </summary>
     public sealed class SvgCompositor : IDisposable
     {
-        const int PassOver = 0, PassBlend = 1, PassMask = 2, PassBlur = 3, PassDecode = 4;
+        const int PassOver = 0, PassBlend = 1, PassMask = 2, PassBlur = 3, PassDecode = 4, PassAlphaBlur = 5, PassMorph = 6, PassTint = 7, PassDivide = 8, PassInner = 9, PassMasked = 10;
         const int MaxBlurTaps = 40;
 
         static Shader s_Shader;
@@ -47,6 +47,9 @@ namespace FirstSymbol.Vectra.Rendering
         static readonly int s_Blur = Shader.PropertyToID("_Blur");
         static readonly int s_BackTex = Shader.PropertyToID("_BackTex");
         static readonly int s_Linear = Shader.PropertyToID("_Linear");
+        static readonly int s_Offset = Shader.PropertyToID("_Offset");
+        static readonly int s_Morph = Shader.PropertyToID("_Morph");
+        static readonly int s_Color = Shader.PropertyToID("_Color");
 
         readonly VectraShapeRenderer m_Renderer = new VectraShapeRenderer();
         readonly CommandBuffer m_Cmd = new CommandBuffer { name = "Vectra Composite" };
@@ -222,6 +225,10 @@ namespace FirstSymbol.Vectra.Rendering
             var content = RenderTexture.GetTemporary(m_Desc);
             Clear(content);
             RenderRange(layer.from, layer.to, index, content);
+            // Drop shadows that blend with the backdrop in a mode other than normal are drawn into the target before the layer.
+            List<RenderTexture> behind = null;
+            List<SvgBlendMode> behindModes = null;
+            if (layer.filter != null && layer.filter.Count > 0) content = ApplyFilter(layer.filter, content, ref behind, ref behindModes);
             bool blur = layer.blurSigma > 0f;
             if (blur) DrawBackdropBlur(layer, target);
             else if (layer.mask != SvgMaskKind.None)
@@ -232,27 +239,178 @@ namespace FirstSymbol.Vectra.Rendering
                     Clear(mask);
                     DrawRun(layer.maskFrom, layer.maskTo, m_Doc.maskElements, mask);
                     ApplyMask(mask, content, layer.mask);
+                    if (behind != null)
+                        foreach (var s in behind) ApplyMask(mask, s, layer.mask);
                     RenderTexture.ReleaseTemporary(mask);
                 }
-                else Clear(content); // an empty mask hides everything
+                else
+                {
+                    Clear(content); // an empty mask hides everything
+                    if (behind != null)
+                        foreach (var s in behind) Clear(s);
+                }
             }
 
+            float opacity = Mathf.Clamp01(layer.opacity);
+            if (behind != null)
+            {
+                for (int i = 0; i < behind.Count; i++)
+                {
+                    CompositeInto(behind[i], target, behindModes[i], opacity);
+                    RenderTexture.ReleaseTemporary(behind[i]);
+                }
+            }
+
+            CompositeInto(content, target, layer.blend, opacity);
+            RenderTexture.ReleaseTemporary(content);
+        }
+
+        // Draws a layer texture into the target with a blend mode and an opacity.
+        void CompositeInto(RenderTexture source, RenderTexture target, SvgBlendMode mode, float opacity)
+        {
             var mat = Mat;
-            mat.SetFloat(s_Opacity, Mathf.Clamp01(layer.opacity));
+            mat.SetFloat(s_Opacity, opacity);
             // In a Linear project every translucent edge or opacity inside a layer is mixed on sRGB values (as Figma does), which needs the backdrop pass.
-            if (layer.blend == SvgBlendMode.Normal && !VectraColorSpace.Linear) Graphics.Blit(content, target, mat, PassOver);
+            if (mode == SvgBlendMode.Normal && !VectraColorSpace.Linear) Graphics.Blit(source, target, mat, PassOver);
             else
             {
                 var back = RenderTexture.GetTemporary(m_Desc);
                 Graphics.Blit(target, back);
                 mat.SetTexture(s_BackTex, back);
-                mat.SetFloat(s_Mode, (float)layer.blend);
-                Graphics.Blit(content, target, mat, PassBlend);
+                mat.SetFloat(s_Mode, (float)mode);
+                Graphics.Blit(source, target, mat, PassBlend);
                 mat.SetTexture(s_BackTex, null);
                 RenderTexture.ReleaseTemporary(back);
             }
+        }
 
+        // The filter of a layer, in the order the SVG chain has it, computed from the picture of the layer. Returns the filtered picture
+        // (the content texture is released); drop shadows with a blend mode go to behind/modes (textures owned by the caller).
+        RenderTexture ApplyFilter(List<SvgFilterStep> steps, RenderTexture content, ref List<RenderTexture> behind, ref List<SvgBlendMode> modes)
+        {
+            var toLocal = m_Doc.DocumentToLocal(m_S.localRect, m_S.align, m_S.slice);
+            float scale = toLocal.UniformScale;
+            float px = m_S.view.width > 0f ? m_S.width / m_S.view.width * scale : scale; // document units to texture pixels
+            var acc = RenderTexture.GetTemporary(m_Desc);
+            Clear(acc);
+            bool sourced = false;
+            for (int i = 0; i < steps.Count; i++)
+            {
+                var st = steps[i];
+                switch (st.kind)
+                {
+                    case SvgFilterKind.Source:
+                        CompositeInto(content, acc, SvgBlendMode.Normal, 1f);
+                        sourced = true;
+                        break;
+                    case SvgFilterKind.DropShadow:
+                    {
+                        var shadow = MakeShadow(content, st, px, scale, false);
+                        if (st.blend == SvgBlendMode.Normal)
+                        {
+                            CompositeInto(shadow, acc, SvgBlendMode.Normal, 1f);
+                            RenderTexture.ReleaseTemporary(shadow);
+                        }
+                        else
+                        {
+                            (behind ??= new List<RenderTexture>()).Add(shadow);
+                            (modes ??= new List<SvgBlendMode>()).Add(st.blend);
+                        }
+
+                        break;
+                    }
+                    case SvgFilterKind.InnerShadow:
+                    {
+                        if (!sourced)
+                        {
+                            CompositeInto(content, acc, SvgBlendMode.Normal, 1f);
+                            sourced = true;
+                        }
+
+                        var inner = MakeShadow(content, st, px, scale, true);
+                        CompositeInto(inner, acc, st.blend, 1f);
+                        RenderTexture.ReleaseTemporary(inner);
+                        break;
+                    }
+                    case SvgFilterKind.Blur:
+                    {
+                        var blurred = Blur(acc, st.sigma * px);
+                        RenderTexture.ReleaseTemporary(acc);
+                        acc = blurred;
+                        break;
+                    }
+                }
+            }
+
+            if (!sourced) CompositeInto(content, acc, SvgBlendMode.Normal, 1f);
             RenderTexture.ReleaseTemporary(content);
+            return acc;
+        }
+
+        // A drop shadow (spread, offset, blur of the alpha of the picture) or an inner shadow (the picture's alpha minus the blurred, shifted,
+        // choked alpha), painted with the step's colour. Premultiplied, same size as the picture.
+        RenderTexture MakeShadow(RenderTexture picture, SvgFilterStep st, float pxPerUnit, float localPerUnit, bool inner)
+        {
+            var mat = Mat;
+            float radius = inner ? st.choke : st.spread;
+            var alpha = picture;
+            RenderTexture morphed = null;
+            if (radius * pxPerUnit > 0.01f)
+            {
+                radius = Mathf.Min(radius * pxPerUnit, 96f);
+                var tmp = RenderTexture.GetTemporary(m_Desc);
+                morphed = RenderTexture.GetTemporary(m_Desc);
+                tmp.filterMode = morphed.filterMode = FilterMode.Point;
+                mat.SetVector(s_Morph, new Vector4(1f / picture.width, 0f, radius, inner ? 0f : 1f));
+                Graphics.Blit(picture, tmp, mat, PassMorph);
+                mat.SetVector(s_Morph, new Vector4(0f, 1f / picture.height, radius, inner ? 0f : 1f));
+                Graphics.Blit(tmp, morphed, mat, PassMorph);
+                RenderTexture.ReleaseTemporary(tmp);
+                alpha = morphed;
+            }
+
+            // Document y points down, texture y up.
+            var offset = new Vector2(st.dx * localPerUnit / Mathf.Max(m_S.view.width, 1e-6f), -st.dy * localPerUnit / Mathf.Max(m_S.view.height, 1e-6f));
+            var blurred = BlurAlpha(alpha, st.sigma * pxPerUnit, offset);
+            if (morphed != null) RenderTexture.ReleaseTemporary(morphed);
+            var result = RenderTexture.GetTemporary(m_Desc);
+            mat.SetVector(s_Color, new Vector4(st.color.r, st.color.g, st.color.b, st.color.a)); // raw values: a Color property would be converted
+            if (inner)
+            {
+                mat.SetTexture(s_BackTex, blurred);
+                Graphics.Blit(picture, result, mat, PassInner);
+                mat.SetTexture(s_BackTex, null);
+            }
+            else Graphics.Blit(blurred, result, mat, PassTint);
+
+            RenderTexture.ReleaseTemporary(blurred);
+            return result;
+        }
+
+        // Gaussian blur of the alpha channel with the picture shifted by offset (in uv). Wide blurs run on a smaller copy; the result stays small
+        // (bilinear) and is scaled up by the pass that reads it.
+        RenderTexture BlurAlpha(RenderTexture src, float sigmaPixels, Vector2 offset)
+        {
+            int d = 1;
+            while (sigmaPixels / d > 12f && d < 16) d *= 2;
+            int w = Mathf.Max(1, src.width / d), h = Mathf.Max(1, src.height / d);
+            float sigma = Mathf.Max(sigmaPixels / d, 0.05f);
+            int taps = sigmaPixels / d < 0.2f ? 0 : Mathf.Clamp(Mathf.CeilToInt(sigma * 3f), 1, MaxBlurTaps);
+            var small = new RenderTextureDescriptor(w, h, RenderTextureFormat.ARGB32, 0) { sRGB = m_Desc.sRGB, msaaSamples = 1 };
+            var a = RenderTexture.GetTemporary(small);
+            var b = RenderTexture.GetTemporary(small);
+            a.filterMode = b.filterMode = FilterMode.Bilinear;
+            Graphics.Blit(src, a);
+            var mat = Mat;
+            mat.SetVector(s_Blur, new Vector4(1f / w, 0f, sigma, taps));
+            mat.SetVector(s_Offset, new Vector4(offset.x, 0f, 0f, 0f));
+            Graphics.Blit(a, b, mat, PassAlphaBlur);
+            mat.SetVector(s_Blur, new Vector4(0f, 1f / h, sigma, taps));
+            mat.SetVector(s_Offset, new Vector4(0f, offset.y, 0f, 0f));
+            Graphics.Blit(b, a, mat, PassAlphaBlur);
+            mat.SetVector(s_Offset, Vector4.zero);
+            RenderTexture.ReleaseTemporary(b);
+            return a;
         }
 
         // The blurred content below, limited to the silhouette of the layer, is drawn into the target before the layer itself.
@@ -262,17 +420,27 @@ namespace FirstSymbol.Vectra.Rendering
             var toLocal = m_Doc.DocumentToLocal(m_S.localRect, m_S.align, m_S.slice);
             float pixelsPerLocal = m_S.view.width > 0f ? m_S.width / m_S.view.width : 1f;
             float sigma = layer.blurSigma * toLocal.UniformScale * pixelsPerLocal;
-            var blurred = Blur(target, sigma);
-            if (layer.maskTo > layer.maskFrom)
-            {
-                var mask = RenderTexture.GetTemporary(m_Desc);
-                Clear(mask);
-                DrawRun(layer.maskFrom, layer.maskTo, m_Doc.maskElements, mask);
-                ApplyMask(mask, blurred, SvgMaskKind.Alpha);
-                RenderTexture.ReleaseTemporary(mask);
-            }
-
+            var mask = RenderTexture.GetTemporary(m_Desc);
+            Clear(mask);
+            DrawRun(layer.maskFrom, layer.maskTo, m_Doc.maskElements, mask);
+            // Figma blurs only what lies inside the shape: the weights of the samples outside it are left out and the rest renormalised
+            // (a plain blur of the whole backdrop pulls the colours of the neighbouring stripes in at the edges).
             var mat = Mat;
+            var inside = RenderTexture.GetTemporary(m_Desc);
+            mat.SetTexture(s_BackTex, mask);
+            Graphics.Blit(target, inside, mat, PassMasked);
+            var sum = Blur(inside, sigma);
+            var weight = Blur(mask, sigma);
+            RenderTexture.ReleaseTemporary(inside);
+            mat.SetTexture(s_BackTex, weight);
+            var blurred = RenderTexture.GetTemporary(m_Desc);
+            Graphics.Blit(sum, blurred, mat, PassDivide);
+            mat.SetTexture(s_BackTex, null);
+            RenderTexture.ReleaseTemporary(sum);
+            RenderTexture.ReleaseTemporary(weight);
+            ApplyMask(mask, blurred, SvgMaskKind.Alpha);
+            RenderTexture.ReleaseTemporary(mask);
+
             mat.SetFloat(s_Opacity, 1f);
             Graphics.Blit(blurred, target, mat, PassOver);
             RenderTexture.ReleaseTemporary(blurred);

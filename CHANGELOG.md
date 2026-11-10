@@ -4,6 +4,21 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.4] - 2026-11-11
+
+SVG shadows, blurs and edges now match Figma's own renders. A second, stricter comparison with Figma's PNG exports (share of pixels off by more than 8 levels after a 1 px blur, at most max(1 %, Chrome's own value + 1 %); the old rule was more than 32 levels, under 2 %) flagged 12 of the 42 test frames in 0.7.3 on the rasterizer (10 on a Canvas); now 41 of 42 pass it on both, in Gamma and in Linear projects (the 42nd is the noise texture; live text on the rasterizer path keeps failing the old rule, as before).
+
+### Fixed
+- A filter on a `<g>`, `<svg>` or `<use>` with several shapes, or on a shape with both fill and stroke, was applied to each shape on its own: the square's shadow fell on the circle beside it and the shadow looked hard where they met. The shadows (drop shadow with spread, inner shadow with choke) and the layer blur are now computed from the picture of the whole subtree, in the order of the filter chain: one soft shadow from the combined silhouette, as in Figma and Chrome. A single shape with only a fill or a stroke keeps its native, resolution-free effects. Texts are separate objects and do not cast a shadow; noise stays per shape. *Expand into objects* gives each shape of such a group its own effects, as before.
+- The blend mode of a Figma shadow (`feBlend mode="multiply"` and the other CSS modes) was dropped ("drawn as normal"): Figma writes `in2="BackgroundImageFix"`, an empty flood, so strict SVG (and Chrome) draw a normal shadow, but Figma blends the shadow with what is below it. A drop shadow with a mode now blends with the backdrop and an inner shadow with the picture of its shape, through the layer compositor (all 16 modes). The inner shadow with `screen` no longer takes the approximate native route (it differed from Figma's render by up to 36 levels). The import report names a shadow blend mode only inside masks and pattern tiles, where it is still drawn as normal.
+- Blur radius: Figma draws every blur (shadows, inner shadows, layer blur, background blur) with a Gaussian of 5/6 of the standard deviation its SVG export writes, so shadows and blurs were about 20 % too wide (Chrome has the same difference). Fitting exact Gaussians to Figma's PNGs gives the least error at 0.83 for all of them (mean error 0.06-0.13 levels against 0.43-0.76 at 1.0). Chains written by Figma and `data-figma-bg-blur-radius` use the factor; `feDropShadow` and plain blurs of other generators are drawn as written.
+- Edges that lie on a pixel boundary (rectangles on whole units at 2x, stripes, masks, strokes) had a soft 1.1 px edge (10 % and 88 % on the two pixels of the edge, against 0 and 100 % in Figma and Chrome) because the coverage of an unblurred edge was a Gaussian of 0.42 px. It is now the box coverage of one pixel (linear over one pixel): crisp on a boundary, the same at half a pixel. This was the one cause of the diamond gradient, blend mode, alpha and vector mask, per-side stroke and stroke gradient frames being off by more than 8 levels along their edges.
+- Figma's background blur mixed in the colours outside the glass (the stripes next to it) at its edges: the blur now takes only what is inside the shape and renormalises (the frame went from 8.3 % to 0.2 % of pixels off by more than 8; Chrome: 5.7 %).
+
+### Changed
+- `SvgLayerData.filter` (`SvgFilterStep`, `SvgFilterKind`) holds the filter of a layer; `SvgLayerData.NeedsBackdrop` is also true for a drop shadow with a blend mode. The Vectra SVG importer version is 5: imported SVG assets are imported again once (their layers carry the filters).
+- The composite shader has new passes (blur and morphology of the alpha channel, shadow colour, inner shadow, background blur of what is inside a shape); documents without these features cost nothing more per frame. The edge coverage change is in the shared SDF shader, so it applies to every Vectra shape (native shapes and SVG), not only to SVG.
+
 ## [0.7.3] - 2026-11-11
 
 ### Fixed

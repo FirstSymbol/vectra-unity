@@ -13,7 +13,7 @@ namespace FirstSymbol.Vectra.Editor
     /// Unity's built-in SVG importer; select it in the importer dropdown or enable it project-wide in
     /// Project Settings > FirstSymbol > Vectra.
     /// </summary>
-    [ScriptedImporter(4, new string[0], new[] { "svg" })]
+    [ScriptedImporter(5, new string[0], new[] { "svg" })]
     public class VectraSvgImporter : ScriptedImporter
     {
         public enum OutputMode
