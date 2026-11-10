@@ -34,7 +34,7 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             const string path = Dir + "/t.uxml";
             File.WriteAllText(path,
                 "<ui:UXML xmlns:ui=\"UnityEngine.UIElements\" xmlns:vf=\"FirstSymbol.Vectra.UIToolkit\">" +
-                "<vf:VectraElement name=\"a\" shape=\"Star\" sides=\"7\" fill=\"#ffcc00\" stroke=\"#112233\" stroke-width=\"3\" corner-radius=\"2\" />" +
+                "<vf:VectraElement name=\"a\" shape=\"Star\" sides=\"7\" fill=\"#ffcc00\" stroke=\"#112233\" stroke-width=\"3\" corner-radius=\"2\" quality=\"Low\" />" +
                 "<vf:VectraSvgElement name=\"b\" preserve-aspect=\"false\" quality=\"Medium\" generate-text=\"false\" />" +
                 "</ui:UXML>");
             AssetDatabase.ImportAsset(path);
@@ -49,6 +49,7 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             Assert.AreEqual(7, a.Sides);
             Assert.AreEqual(3f, a.StrokeWidth);
             Assert.AreEqual(2f, a.CornerRadius);
+            Assert.AreEqual(Rendering.VectraQuality.Low, a.Quality);
             Assert.AreEqual(1f, a.Fill.a);
             Assert.AreEqual(0xff / 255f, a.Fill.r, 1e-3f);
             Assert.AreEqual(0x11 / 255f, a.Stroke.r, 1e-3f);

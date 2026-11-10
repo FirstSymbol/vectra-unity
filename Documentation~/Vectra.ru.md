@@ -116,7 +116,7 @@ shape.SetShapeDirty();
 </ui:UXML>
 ```
 
-Атрибуты `VectraElement`: `shape` (Rectangle, Ellipse, Triangle, Polygon, Star, Heart, Squircle, Custom), `sides`, `fill`, `stroke`, `stroke-width`, `corner-radius`, `shape-asset` и `style-asset` (общая геометрия и внешний вид). Атрибуты `VectraSvgElement`: `document`, `preserve-aspect`, `quality`, `generate-text`. Размер задают обычные `width` и `height`; без них элемент 100 на 100 пунктов.
+Атрибуты `VectraElement`: `shape` (Rectangle, Ellipse, Triangle, Polygon, Star, Heart, Squircle, Custom), `sides`, `fill`, `stroke`, `stroke-width`, `corner-radius`, `quality`, `shape-asset` и `style-asset` (общая геометрия и внешний вид). Атрибуты `VectraSvgElement`: `document`, `preserve-aspect`, `quality`, `generate-text`. Размер задают обычные `width` и `height`; без них элемент 100 на 100 пунктов.
 
 Свойства USS переопределяют атрибуты и меняются вместе с `:hover`, `:active` и другими псевдосостояниями:
 

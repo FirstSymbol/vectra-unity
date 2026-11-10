@@ -266,6 +266,19 @@ namespace FirstSymbol.Vectra.UIToolkit
             }
         }
 
+        /// <summary>Tessellation and distance-field quality of paths (analytic shapes ignore it).</summary>
+        [UxmlAttribute("quality")]
+        public VectraQuality Quality
+        {
+            get => m_Content.quality;
+            set
+            {
+                if (m_Content.quality == value) return;
+                m_Content.quality = value;
+                SetShapeDirty();
+            }
+        }
+
         [UxmlAttribute("fill")]
         public Color Fill
         {
