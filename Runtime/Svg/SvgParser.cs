@@ -172,6 +172,7 @@ namespace FirstSymbol.Vectra.Svg
                 string name = c.name;
                 // Elements of other namespaces are editor data (sodipodi:, inkscape:, rdf:): skipped quietly.
                 if (string.IsNullOrEmpty(name) || name[0] == '#' || (c.prefix != null && c.prefix != "svg")) continue;
+                if (c.Attr("data-figma-skip-parse") == "true") continue;
                 var level = SvgSupport.Level(name);
                 if (level == null)
                 {
@@ -288,6 +289,7 @@ namespace FirstSymbol.Vectra.Svg
 
             if (!Spend(ctx)) return;
             if (Style(n, "display") == "none") return;
+            if (n.Attr("data-figma-skip-parse") == "true") return; // Figma's CSS/rect fallback of a gradient it also writes natively
             switch (n.name)
             {
                 case "defs": case "clipPath": case "mask": case "linearGradient": case "radialGradient":
@@ -611,9 +613,9 @@ namespace FirstSymbol.Vectra.Svg
             var inverse = ctm.Inverse();
             string fill = Style(n, "fill", "black");
             bool isLine = n.name == "line" || n.name == "polyline";
-            if (!isLine && fill != "none")
+            if (!isLine && (fill != "none" || n.Attr("data-figma-gradient-fill") != null))
             {
-                var paint = ResolvePaint(fill, n, bbox, inverse, ctx);
+                var paint = FigmaGradientPaint(n.Attr("data-figma-gradient-fill"), inverse) ?? (fill != "none" ? ResolvePaint(fill, n, bbox, inverse, ctx) : null);
                 if (paint != null)
                 {
                     paint.opacity *= Mathf.Clamp01(Number(Style(n, "fill-opacity"), 1f) * opacity);
@@ -623,9 +625,9 @@ namespace FirstSymbol.Vectra.Svg
             }
 
             string stroke = Style(n, "stroke", "none");
-            if (stroke != "none")
+            if (stroke != "none" || n.Attr("data-figma-gradient-stroke") != null)
             {
-                var paint = ResolvePaint(stroke, n, bbox, inverse, ctx);
+                var paint = FigmaGradientPaint(n.Attr("data-figma-gradient-stroke"), inverse) ?? (stroke != "none" ? ResolvePaint(stroke, n, bbox, inverse, ctx) : null);
                 if (paint != null)
                 {
                     // Non-scaling: the width and the dashes are screen units (pixel mode), whatever transforms apply.
@@ -938,6 +940,12 @@ namespace FirstSymbol.Vectra.Svg
         {
             if (!ctx.ids.TryGetValue(id, out var f) || f.name != "filter") return;
             float scale = ctm.UniformScale;
+            if (IsRichFilter(f))
+            {
+                AddRichFilter(f, scale, effects, ctx);
+                return;
+            }
+
             float dx = 0, dy = 0, blur = -1;
             Color flood = new Color(0, 0, 0, 1);
             bool merge = false, offset = false;

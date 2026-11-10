@@ -1308,8 +1308,11 @@ namespace FirstSymbol.Vectra.Rendering
                 }
                 case GrainEffect gr:
                 {
-                    var rp = SolidPaint(Color.white, LayerBlend.Normal);
-                    var lp = new float2(gr.amount, gr.size);
+                    var rp = SolidPaint(gr.monotone ? gr.color : Color.white, LayerBlend.Normal);
+                    // Monotone: a negative y carries -(16 * size + density), see LAYER_GRAIN in VectraCore.hlsl.
+                    var lp = gr.monotone
+                        ? new float2(1f, -(math.max(math.round(gr.size * 16f), 1f) + math.min(math.saturate(gr.density), 0.999f)))
+                        : new float2(gr.amount, gr.size);
                     if (analytic) EmitAnalytic(LayerKind.Grain, rp, lp, 0f, float2.zero, false, false);
                     else EmitSdf(LayerKind.Grain, rp, lp, float2.zero, false, false);
                     break;

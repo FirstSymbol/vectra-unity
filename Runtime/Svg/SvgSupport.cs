@@ -56,10 +56,12 @@ namespace FirstSymbol.Vectra.Svg
             Add(SvgSupportLevel.Partial, "image");
             Add(SvgSupportLevel.NotSupported, "foreignObject video audio canvas iframe");
             // Filters
-            Add(SvgSupportLevel.Partial, "filter feGaussianBlur feOffset feFlood feMerge feMergeNode feDropShadow feColorMatrix");
+            Add(SvgSupportLevel.Partial,
+                "filter feGaussianBlur feOffset feFlood feMerge feMergeNode feDropShadow feColorMatrix feBlend feComposite " +
+                "feMorphology feTurbulence feComponentTransfer feFuncA");
             Add(SvgSupportLevel.NotSupported,
-                "feBlend feComponentTransfer feComposite feConvolveMatrix feDiffuseLighting feDisplacementMap feImage feMorphology " +
-                "feSpecularLighting feTile feTurbulence feFuncR feFuncG feFuncB feFuncA feDistantLight fePointLight feSpotLight");
+                "feConvolveMatrix feDiffuseLighting feDisplacementMap feImage " +
+                "feSpecularLighting feTile feFuncR feFuncG feFuncB feDistantLight fePointLight feSpotLight");
             // Animation: the first frame (the attribute values as written) is drawn
             Add(SvgSupportLevel.NotSupported, "animate animateColor animateMotion animateTransform set mpath discard");
             // SVG 1.1 fonts, colour profiles, cursors, scripting hooks

@@ -380,34 +380,34 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | `<glyphRef>` | Not supported | SVG 1.1. Reported. |
 | `<textArea>` | Not supported | SVG Tiny 1.2 flowed text. Reported. |
 | `<image>` | Partial | Embedded `data:` URIs (PNG, JPG) as an axis-aligned rectangle with opacity; external URLs are not loaded (reported); `preserveAspectRatio` is ignored (reported). |
-| `<foreignObject>` | Not supported | HTML and other XML inside is not drawn. Reported. |
+| `<foreignObject>` | Not supported | HTML and other XML inside is not drawn. Reported. Figma's gradient fallbacks (`data-figma-skip-parse="true"` groups) are skipped silently: the angular and diamond gradients are built from `data-figma-gradient-fill` / `-stroke` instead. |
 | `<video>` | Not supported | Reported. |
 | `<audio>` | Not supported | Reported. |
 | `<canvas>` | Not supported | Reported. |
 | `<iframe>` | Not supported | Reported. |
-| `<filter>` | Partial | Only through `filter="url(#id)"` (CSS filter functions such as `blur()` are reported). Filter regions, `in`, `in2` and `result` are not followed: the primitives of a filter are read as one effect, as listed below. |
-| `<feGaussianBlur>` | Partial | The first `stdDeviation` value; becomes a layer blur, or the blur of a drop shadow when an offset or a merge is present. |
+| `<filter>` | Partial | Only through `filter="url(#id)"` (CSS filter functions such as `blur()` are reported). Filter regions, `in`, `in2` and `result` are not followed: the primitives of a filter are read as one effect, as listed below. The chains Figma exports are recognised as a whole (drop shadows with spread, inner shadows with choke, layer blur, noise; several shadows stack in order); a primitive that cannot be placed is reported and left out, the element itself is always drawn. |
+| `<feGaussianBlur>` | Partial | The first `stdDeviation` value; becomes a layer blur, or the blur of a shadow (Figma's chains) or of a drop shadow when an offset or a merge is present. |
 | `<feOffset>` | Partial | `dx`, `dy` become the offset of a drop shadow. |
 | `<feFlood>` | Partial | `flood-color` and `flood-opacity` become the colour of the drop shadow. |
 | `<feMerge>` | Partial | Marks the offset / blur chain as a drop shadow; the merge order is not followed. |
 | `<feMergeNode>` | Partial | Not read on its own; `feMerge` is taken as a whole. |
 | `<feDropShadow>` | Partial | `dx`, `dy`, `stdDeviation`, `flood-color`, `flood-opacity`. |
-| `<feColorMatrix>` | Partial | `type="saturate"` and `type="hueRotate"`; `matrix` and `luminanceToAlpha` are reported. |
-| `<feBlend>` | Not supported | Reported. |
-| `<feComponentTransfer>` | Not supported | Reported. |
-| `<feComposite>` | Not supported | Reported. |
+| `<feColorMatrix>` | Partial | `type="saturate"` and `type="hueRotate"`; in a Figma shadow chain `type="matrix"` gives the shadow colour and opacity (last row) and `luminanceToAlpha` belongs to the noise; any other matrix is reported. |
+| `<feBlend>` | Partial | Closes a Figma shadow; `mode="normal"` only, other modes are reported and drawn as normal. |
+| `<feComponentTransfer>` | Partial | Only inside Figma's noise chain: the `feFuncA` table sets the noise density. |
+| `<feComposite>` | Partial | `operator="arithmetic"` with `k2=-1 k3=1` marks a Figma inner shadow, `operator="in"` is part of the noise chain; other operators are reported. |
 | `<feConvolveMatrix>` | Not supported | Reported. |
 | `<feDiffuseLighting>` | Not supported | Reported. |
 | `<feDisplacementMap>` | Not supported | Reported. |
 | `<feImage>` | Not supported | Reported. |
-| `<feMorphology>` | Not supported | Reported. |
+| `<feMorphology>` | Partial | In a Figma shadow chain: `dilate` is the spread of a drop shadow, `erode` the choke of an inner shadow; elsewhere reported. |
 | `<feSpecularLighting>` | Not supported | Reported. |
 | `<feTile>` | Not supported | Reported. |
-| `<feTurbulence>` | Not supported | Reported. |
+| `<feTurbulence>` | Partial | Only as Figma's noise effect: becomes a monotone grain (colour, density and size from the chain; an approximation, not the same pattern). |
 | `<feFuncR>` | Not supported | Reported. |
 | `<feFuncG>` | Not supported | Reported. |
 | `<feFuncB>` | Not supported | Reported. |
-| `<feFuncA>` | Not supported | Reported. |
+| `<feFuncA>` | Partial | `type="discrete"` table of Figma's noise chain (density); not read elsewhere. |
 | `<feDistantLight>` | Not supported | Reported. |
 | `<fePointLight>` | Not supported | Reported. |
 | `<feSpotLight>` | Not supported | Reported. |

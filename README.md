@@ -174,7 +174,7 @@ The main gaps are below; every SVG element, property and CSS feature is listed a
 
 - `<mask>` is applied as a geometric clip; the mask's luminance is ignored.
 - Pattern fills are replaced by the colour of the pattern's first shape.
-- Of the filters, blur, drop shadow (including the offset + blur + merge chain), saturate and hueRotate are supported; the other primitives (`feTurbulence`, `feComposite`, `feBlend`, ...) are not.
+- Of the filters, blur, drop shadow (including the offset + blur + merge chain), saturate and hueRotate are supported, and the chains Figma exports (drop and inner shadows, layer blur, noise) are recognised as a whole; other uses of `feTurbulence`, `feComposite`, `feBlend`, ... are reported and the element is drawn without them.
 - No animation: SMIL (`<animate>`, `<animateTransform>`, `<set>`) and CSS `@keyframes` are ignored; the first frame is drawn. `<foreignObject>` and `<script>` are ignored.
 - No `mix-blend-mode`, `paint-order` or `@font-face`.
 - Text is one run per `<text>`: no per-glyph positions (`dx`, `dy`, `rotate`, `x` lists), `<textPath>`, `textLength` or `letter-spacing`.

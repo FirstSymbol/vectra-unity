@@ -200,9 +200,18 @@ namespace FirstSymbol.Vectra.Svg
             switch (fx)
             {
                 case DropShadowEffect d:
-                    d.offset *= s;
+                    // Document offsets point down the page; the child's local space is y-up.
+                    d.offset = new Vector2(d.offset.x, -d.offset.y) * s;
                     d.blur *= s;
                     d.spread *= s;
+                    break;
+                case GrainEffect gr:
+                    if (gr.monotone) gr.size *= s;
+                    break;
+                case InnerShadowEffect ins:
+                    ins.offset = new Vector2(ins.offset.x, -ins.offset.y) * s;
+                    ins.blur *= s;
+                    ins.choke *= s;
                     break;
                 case LayerBlurEffect lb:
                     lb.blur *= s;

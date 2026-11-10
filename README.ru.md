@@ -174,7 +174,7 @@ VectraSvg.Expand(svgImage);   // отдельный VectraShape на кажды�
 
 - `<mask>` применяется как геометрический клип, яркость маски не учитывается.
 - Паттерн-заливки заменяются цветом первой фигуры паттерна.
-- Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate; остальные примитивы (`feTurbulence`, `feComposite`, `feBlend` ...) нет.
+- Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate, а цепочки, которые экспортирует Figma (внешние и внутренние тени, размытие слоя, шум), распознаются целиком; остальные применения `feTurbulence`, `feComposite`, `feBlend` ... попадают в отчёт, элемент рисуется без них.
 - Анимации нет: SMIL (`<animate>`, `<animateTransform>`, `<set>`) и CSS `@keyframes` игнорируются, рисуется первый кадр. `<foreignObject>` и `<script>` игнорируются.
 - Нет `mix-blend-mode`, `paint-order` и `@font-face`.
 - Текст — один фрагмент на `<text>`: нет позиций по глифам (`dx`, `dy`, `rotate`, списки `x`), `<textPath>`, `textLength` и `letter-spacing`.

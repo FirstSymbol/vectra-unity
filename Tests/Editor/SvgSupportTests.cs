@@ -87,7 +87,7 @@ namespace FirstSymbol.Vectra.Editor.Tests
         [Test]
         public void EveryUnsupportedElement_IsReportedInsideOtherContainersToo()
         {
-            foreach (var name in new[] { "animate", "set", "feTurbulence", "foreignObject", "script" })
+            foreach (var name in new[] { "animate", "set", "feConvolveMatrix", "foreignObject", "script" })
             {
                 var w = Warnings(Wrap("<defs><filter id=\"f\"><" + name + "/></filter></defs><g><rect width=\"5\" height=\"5\"><" + name + "/></rect></g>"));
                 Assert.IsTrue(w.Any(x => x.Contains("<" + name + ">")), name + ": " + string.Join(" | ", w));
