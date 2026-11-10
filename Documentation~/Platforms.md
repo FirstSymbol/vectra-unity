@@ -54,6 +54,27 @@ On the web there are no threads, so the Burst jobs run as IL2CPP code on the mai
 | macOS, IL2CPP | No: the editor has no macOS IL2CPP module | No | No |
 | Linux x64, IL2CPP | Yes | No | No |
 
+## UI Toolkit
+
+`VectraElement` and `VectraSvgElement` (new in 0.6) were checked on 6000.4.8f1 in the editor and in players. A player script puts a runtime panel into a render texture, reads it back asynchronously and counts pixels:
+
+1. **Orientation**: a plain UI Toolkit element tells which way the readback is turned, then a triangle must point up (a symmetric shape would hide a flipped picture).
+2. **Fill, translucency, gradient, anti-aliased edge, drop shadow outside the layout box**: translucency is compared with a plain element of the same colour, because "half transparent" is 188, not 128, in a Linear project.
+3. **SVG**: shapes, and white text drawn by UI Toolkit labels.
+4. **Twelve small shapes**: they share one page, every one shows.
+5. **One large element**: it gets a texture of its own.
+
+| | Built | Run | Seen by a person |
+|---|---|---|---|
+| The editor, Built-in, Gamma: PlayMode panel into a render texture, EditMode (allocator, UXML, an editor window captured with the editor's own capture) | — | Yes: 29 PlayMode and 10 EditMode tests | No |
+| The editor, URP, Linear | — | Yes: the same 29 and 10 | No |
+| The editor with Vectra and Lettera as folders under `Assets/Plugins` | — | Yes: the same 29 and 10 | No |
+| Player, x64, Direct3D 12, IL2CPP, URP, Linear | Yes | Yes: 12 of 12 checks | No |
+| WebGL 2 in Chromium (headless, real GPU), URP, Linear | Yes | Yes: 12 of 12 checks | No |
+| WebGPU in Chromium, URP, Linear | Yes | Yes: 12 of 12 checks | No |
+
+Not run: Android, iOS, macOS, Linux, the Built-in and HDRP players, world-space UI Toolkit panels, a real mouse hover. WebGL 2 cannot copy between render textures (`SystemInfo.copyTextureSupport` is `None`); the element draws straight into its page for that reason, and the first web round, which copied, drew nothing there. One rebuild and redraw of a 64-point ellipse took 0.021 ms on Windows, 0.16 ms in WebGL 2 and 0.48 ms in WebGPU (200 calls, one run).
+
 ## Render pipelines
 
 | | What Vectra gets |
