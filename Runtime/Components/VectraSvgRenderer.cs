@@ -242,7 +242,9 @@ namespace FirstSymbol.Vectra
         float PixelSize()
         {
             var s = transform.lossyScale;
-            return VectraRenderer.EstimatePixelSize(Camera.main, transform.position, math.max(math.abs(s.x), math.abs(s.y)));
+            float px = VectraRenderer.EstimatePixelSize(Camera.main, transform.position, math.max(math.abs(s.x), math.abs(s.y)));
+            // Pictures (composited parts) follow the editor's Scene views too, unless a stroke is measured in Game view pixels.
+            return m_Document != null && m_Document.HasPixelStrokes ? px : VectraScreenDensity.WithExtraCameras(transform, px);
         }
 
         VectraWorldShaderKind m_ShaderKind;
@@ -265,14 +267,26 @@ namespace FirstSymbol.Vectra
                 m_Dirty = m_StructureDirty = m_TextDirty = true;
             }
 
-            float px = PixelSize();
+            float px = m_BuiltPixelSize;
+            // Pictures follow the density on screen; small steps are rebuilt at most ten times a second so that zooming does not rebuild every frame.
+            px = PixelSize();
+            if (m_HasComposites && !m_Dirty && m_BuiltPixelSize > 0f && !(m_Document != null && m_Document.HasPixelStrokes))
+            {
+                float ratio = px / m_BuiltPixelSize;
+                bool step = ratio > 1.25f || ratio < 0.8f;
+                if (!step && Time.unscaledTime < m_NextDensityCheck) px = m_BuiltPixelSize; // a small step waits (zooming)
+                else if (Mathf.Abs(ratio - 1f) > 0.04f) m_NextDensityCheck = Time.unscaledTime + 0.1f;
+            }
+
             if (!m_Dirty && m_BuiltPixelSize > 0f && (px > m_BuiltPixelSize * Band || px < m_BuiltPixelSize / Band)) m_Dirty = true;
             if (!m_Dirty) return;
             Rebuild(px);
         }
 
         // Non-scaling strokes follow the screen scale closely; other pixel-size dependencies only need a rough match.
-        float Band => m_Document != null && m_Document.HasPixelStrokes ? 1.01f : 1.5f;
+        float Band => m_Document != null && m_Document.HasPixelStrokes ? 1.01f : m_HasComposites ? 1.04f : 1.5f;
+        bool m_HasComposites;
+        float m_NextDensityCheck;
 
         void Rebuild() => Rebuild(PixelSize());
 
@@ -282,6 +296,8 @@ namespace FirstSymbol.Vectra
             m_BuiltPixelSize = px;
             m_BuiltVersion = m_Document != null ? m_Document.contentVersion : 0;
             int signature = SvgDrawOrder.Split(m_Document, m_GenerateText, false, m_Items, Gamma);
+            m_HasComposites = false;
+            foreach (var it in m_Items) m_HasComposites |= it.composite;
             if (signature != m_BuiltSignature)
             {
                 m_BuiltSignature = signature;

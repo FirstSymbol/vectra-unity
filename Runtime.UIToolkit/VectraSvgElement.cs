@@ -217,7 +217,7 @@ namespace FirstSymbol.Vectra.UIToolkit
 
             if (!(built > 0f)) return;
             float now = VectraUitk.Density(this);
-            if (now > built * 1.25f || now < built * 0.8f || !alive) SetDirty();
+            if (now > built * 1.05f || now < built * 0.93f || !alive) SetDirty();
         }
 
         void ClearGenerated()

@@ -29,7 +29,7 @@ Package Manager → **+** → **Add package from git URL...**
 https://github.com/FirstSymbol/vectra-unity.git
 ```
 
-A specific version is installed through its tag: `https://github.com/FirstSymbol/vectra-unity.git#0.7.1`.
+A specific version is installed through its tag: `https://github.com/FirstSymbol/vectra-unity.git#0.7.2`.
 
 Vectra and Lettera work as packages or as plain folders under `Assets`: when Lettera is a folder, Vectra notices it and adds `VECTRA_LETTERA` to the scripting define symbols by itself (and takes it away when the folder goes). A symbol you set yourself is left alone. If you delete Lettera while the editor is closed, Unity opens with compile errors (or Safe Mode): remove `VECTRA_LETTERA` in **Project Settings > Player > Scripting Define Symbols**, or put the folder back and delete it from inside Unity.
 

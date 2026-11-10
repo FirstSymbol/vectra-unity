@@ -4,6 +4,11 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] - 2026-11-11
+
+### Fixed
+- SVG pictures (composited layers, and whole documents in Linear projects with SVG colour blending set to sRGB) were blurry whenever something magnified them that the Canvas scale factor did not know about: a Scene view zoomed in on a Canvas, a Screen Space - Camera canvas seen by another camera. The picture density now follows the pixels on screen: the Game view's Canvas scale factor or camera, and the editor's Scene views (the closest camera wins; `VectraScreenDensity`). World-space pictures also follow the Scene views. A picture is drawn again when the density changes by more than 3 % (4 % in world space, 5 % in UI Toolkit), looked at ten times a second, so zooming does not redraw every frame; idle frames cost nothing and allocate nothing. Documents with non-scaling strokes keep the Game view density, because their stroke width is measured in its pixels. Pictures are still capped at 4096 px a side (2048 in world space).
+
 ## [0.7.1] - 2026-11-11
 
 SVG documents look like Figma and browsers in Linear colour space projects. With 0.7.0 only 28 of the 42 Figma frames matched in Linear (translucent shapes, shadows, gradients and group opacity were paler); with 0.7.1 the same 39 of 42 match as in Gamma, on the rasterizer and on a Canvas.

@@ -330,6 +330,121 @@ namespace FirstSymbol.Vectra.Tests
             yield return OnBothPaths(Svg(svg), (path, s) => AssertNear(s, 80, 80, 128, 128, 128, 5, path + " middle of a black to white gradient"));
         }
 
+        // ---- picture density follows the screen ----
+
+        const string HalfGray = "<g opacity='0.5'><rect width='80' height='160' fill='#000'/><rect width='80' height='100' fill='#000'/></g>";
+
+        // A canvas in world space, 160 units wide, 10 world units on screen at orthographic size 5 (160 px).
+        VectraSvgImage WorldCanvasImage(string svg)
+        {
+            var canvasGo = new GameObject("Layer world canvas", typeof(Canvas));
+            m_Owned.Add(canvasGo);
+            var canvas = canvasGo.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = m_Camera;
+            var crt = (RectTransform)canvasGo.transform;
+            crt.sizeDelta = new Vector2(160f, 160f);
+            crt.localScale = Vector3.one * 0.0625f;
+            var go = new GameObject("svg", typeof(RectTransform));
+            go.transform.SetParent(canvasGo.transform, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            var image = go.AddComponent<VectraSvgImage>();
+            image.raycastTarget = false;
+            image.Document = Parse(svg);
+            return image;
+        }
+
+        static IEnumerator SettleLong()
+        {
+            // The picture density is looked at ten times a second.
+            yield return new WaitForSecondsRealtime(0.35f);
+            for (int i = 0; i < 4; i++) yield return null;
+        }
+
+        // Pixels on the middle row that are neither the dark half nor the white half: the width of the edge at x = 80.
+        static int EdgePixels(Shot s)
+        {
+            int n = 0;
+            for (int x = 0; x < Size; x++)
+            {
+                int r = s[x, 40].r;
+                if (r > 140 && r < 245) n++;
+            }
+
+            return n;
+        }
+
+        [UnityTest]
+        public IEnumerator WorldCanvas_PictureGetsSharperAsTheCameraComesCloser()
+        {
+            var image = WorldCanvasImage(Svg(HalfGray));
+            yield return Settle();
+            var composite = image.GetComponentInChildren<VectraSvgComposite>();
+            Assert.IsNotNull(composite);
+            Assert.AreEqual(160, composite.Texture.width, 2, "one picture pixel per screen pixel");
+            Assert.LessOrEqual(EdgePixels(Capture()), 2, "sharp edge at 1x");
+
+            m_Camera.orthographicSize = 1.25f; // four times closer: the edge at x = 80 stays in the middle
+            yield return SettleLong();
+            Assert.AreEqual(640, composite.Texture.width, 8, "four times the screen pixels");
+            Assert.LessOrEqual(EdgePixels(Capture()), 2, "sharp edge at 4x");
+
+            m_Camera.orthographicSize = 10f; // two times further: no need for more pixels than are seen
+            yield return SettleLong();
+            Assert.AreEqual(80, composite.Texture.width, 2);
+            Assert.LessOrEqual(EdgePixels(Capture()), 2, "sharp edge at 0.5x");
+        }
+
+        [UnityTest]
+        public IEnumerator ScreenSpaceCanvas_PictureFollowsAnExtraCamera_LikeASceneView()
+        {
+            var image = CanvasImage(Svg(HalfGray));
+            yield return Settle();
+            var composite = image.GetComponentInChildren<VectraSvgComposite>();
+            Assert.AreEqual(160, composite.Texture.width, 2);
+
+            // A second camera that shows the canvas four times larger, as a Scene view zoomed in would.
+            var go = new GameObject("Scene view stand-in", typeof(Camera));
+            m_Owned.Add(go);
+            var extra = go.GetComponent<Camera>();
+            extra.enabled = false;
+            extra.orthographic = true;
+            extra.orthographicSize = m_Camera.orthographicSize / 4f;
+            extra.transform.SetPositionAndRotation(m_Camera.transform.position, m_Camera.transform.rotation);
+            extra.targetTexture = m_Target;
+            var savedCount = VectraScreenDensity.ExtraCameraCount;
+            var savedGet = VectraScreenDensity.ExtraCamera;
+            VectraScreenDensity.ExtraCameraCount = () => 1;
+            VectraScreenDensity.ExtraCamera = _ => extra;
+            try
+            {
+                yield return SettleLong();
+                Assert.AreEqual(640, composite.Texture.width, 8, "the picture has the density of the closest camera");
+                VectraScreenDensity.ExtraCameraCount = () => 0;
+                yield return SettleLong();
+                Assert.AreEqual(160, composite.Texture.width, 2, "and goes back when that camera is gone");
+            }
+            finally
+            {
+                VectraScreenDensity.ExtraCameraCount = savedCount;
+                VectraScreenDensity.ExtraCamera = savedGet;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator IdleFrames_DoNotRedrawThePicture()
+        {
+            var image = WorldCanvasImage(Svg(HalfGray));
+            yield return SettleLong();
+            int steps = SvgCompositor.StepsRendered;
+            for (int i = 0; i < 30; i++) yield return null;
+            yield return SettleLong();
+            Assert.AreEqual(steps, SvgCompositor.StepsRendered);
+        }
+
         // ---- masks ----
 
         [UnityTest]

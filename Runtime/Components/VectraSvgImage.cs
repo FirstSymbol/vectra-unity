@@ -233,6 +233,7 @@ namespace FirstSymbol.Vectra
 
         float m_BuiltPixelSize;
         float m_CompositePixelSize;
+        float m_NextPictureCheck;
         int m_BuiltVersion;
 
         /// <summary>Device pixels in one SVG px of a non-scaling stroke: the scale factor of the screen-space Canvas (one reference point).</summary>
@@ -256,6 +257,29 @@ namespace FirstSymbol.Vectra
             var rs = root.transform.lossyScale;
             float ppu = root.scaleFactor * local / math.max(math.max(math.abs(rs.x), math.abs(rs.y)), 1e-6f);
             return ppu > 1e-6f ? 1f / ppu : 1f;
+        }
+
+        /// <summary>
+        /// Size of a screen pixel for the pictures (composited parts): what the camera of a Screen Space - Camera or World Space canvas
+        /// shows, which includes zoom, and what the editor's Scene views show. A document with non-scaling strokes keeps the plain value,
+        /// because its stroke width is measured in screen pixels of the Game view.
+        /// </summary>
+        float PictureSize()
+        {
+            float px = PixelSize();
+            if (m_Document != null && m_Document.HasPixelStrokes) return px;
+            var c = canvas;
+            if (c != null)
+            {
+                var root = c.rootCanvas;
+                if (root.renderMode == RenderMode.ScreenSpaceCamera && root.worldCamera != null)
+                {
+                    float seen = VectraScreenDensity.LocalPerPixel(transform, root.worldCamera);
+                    if (seen < float.PositiveInfinity) px = seen;
+                }
+            }
+
+            return VectraScreenDensity.WithExtraCameras(transform, px);
         }
 
         protected override void OnPopulateMesh(VertexHelper vh) => vh.Clear();
@@ -332,7 +356,19 @@ namespace FirstSymbol.Vectra
                 LayoutChildren();
             }
 
-            if (m_CompositePixelSize > 0f && Mathf.Abs(PixelSize() - m_CompositePixelSize) > m_CompositePixelSize * 0.02f) m_LayersDirty = true;
+            // The pictures follow the density on screen (zoom, Scene view). A big step is drawn at once; small steps at most ten times a second,
+            // so that zooming does not redraw every frame.
+            if (m_CompositePixelSize > 0f)
+            {
+                float ratio = PictureSize() / m_CompositePixelSize;
+                bool step = ratio > 1.25f || ratio < 0.8f || (m_Document != null && m_Document.HasPixelStrokes);
+                if ((step || Time.unscaledTime >= m_NextPictureCheck) && Mathf.Abs(ratio - 1f) > 0.03f)
+                {
+                    m_NextPictureCheck = Time.unscaledTime + 0.1f;
+                    m_LayersDirty = true;
+                }
+            }
+
             if (m_LayersDirty)
             {
                 m_LayersDirty = false;
@@ -482,7 +518,7 @@ namespace FirstSymbol.Vectra
         {
             if (m_Document == null) return false;
             var rect = rectTransform.rect;
-            float px = PixelSize();
+            float px = PictureSize();
             var align = m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None;
             int k = System.HashCode.Combine(System.HashCode.Combine(rect.width, rect.height, px, (int)m_Quality, m_PreserveAspect, from, to), m_Document.contentVersion, Gamma, PointScale());
             foreach (var o in m_Overrides)
