@@ -100,11 +100,9 @@ namespace FirstSymbol.Vectra.Tests
         public void TheBackends_RegisterThemselvesAtStartup()
         {
             Assert.IsTrue(VectraTextBackends.IsRegistered(VectraTextEngine.Legacy));
-#if VECTRA_TEST_LETTERA
-            Assert.IsTrue(VectraTextBackends.IsRegistered(VectraTextEngine.Lettera));
-#else
-            Assert.IsFalse(VectraTextBackends.IsRegistered(VectraTextEngine.Lettera));
-#endif
+            // Lettera as a folder under Assets has no package for the test define: ask whether its assembly is loaded.
+            bool letteraLoaded = System.Array.Exists(System.AppDomain.CurrentDomain.GetAssemblies(), x => x.GetName().Name == "FirstSymbol.Lettera");
+            Assert.AreEqual(letteraLoaded, VectraTextBackends.IsRegistered(VectraTextEngine.Lettera));
 #if VECTRA_NO_TMP
             Assert.IsFalse(VectraTextBackends.IsRegistered(VectraTextEngine.TextMeshPro));
 #else
