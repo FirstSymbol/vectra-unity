@@ -152,13 +152,32 @@ namespace FirstSymbol.Vectra
         protected override void OnEnable()
         {
             base.OnEnable();
-            var c = canvas;
-            if (c != null)
-                c.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 |
-                                              AdditionalCanvasShaderChannels.TexCoord2 |
-                                              AdditionalCanvasShaderChannels.TexCoord3;
+            EnsureChannels();
             VectraAtlases.Register(this);
             m_ChildrenDirty = true;
+        }
+
+        // A component added before it is parented under a Canvas (new GameObject + SetParent) has no canvas in OnEnable.
+        protected override void OnCanvasHierarchyChanged()
+        {
+            base.OnCanvasHierarchyChanged();
+            EnsureChannels();
+        }
+
+        protected override void OnTransformParentChanged()
+        {
+            base.OnTransformParentChanged();
+            EnsureChannels();
+        }
+
+        void EnsureChannels()
+        {
+            var c = canvas;
+            if (c == null) return;
+            const AdditionalCanvasShaderChannels needed = AdditionalCanvasShaderChannels.TexCoord1 |
+                                                          AdditionalCanvasShaderChannels.TexCoord2 |
+                                                          AdditionalCanvasShaderChannels.TexCoord3;
+            if ((c.additionalShaderChannels & needed) != needed) c.additionalShaderChannels |= needed;
         }
 
         protected override void OnDisable()
