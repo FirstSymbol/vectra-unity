@@ -77,6 +77,13 @@ namespace FirstSymbol.Vectra.Svg
         /// <summary>Font size in document units (already scaled like <see cref="SvgElementData.fontSize"/>).</summary>
         public float fontSize = 16f;
         public string fontFamily;
+        /// <summary>Extra advance after every glyph (CSS letter-spacing), in document units.</summary>
+        public float letterSpacing;
+        public bool underline, lineThrough;
+        /// <summary>Horizontal gap before this run (SVG dx in the middle of a line), in document units.</summary>
+        public float dx;
+        /// <summary>Baseline shift of this run, downwards, in document units (the running sum of SVG dy in the line).</summary>
+        public float dy;
     }
 
     /// <summary>One drawable SVG element with its resolved style.</summary>

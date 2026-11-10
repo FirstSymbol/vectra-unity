@@ -1,0 +1,8 @@
+<svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="160" height="160" fill="white"/>
+<text fill="#1D3557" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" letter-spacing="0em"><tspan x="44.9219" y="25.3182"> </tspan><tspan x="74.3594" y="25.3182"> word,&#10;</tspan></text>
+<text fill="#1D3557" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" font-weight="bold" letter-spacing="0em"><tspan x="10" y="25.3182">Bold</tspan></text>
+<text fill="#E63946" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" letter-spacing="0em"><tspan x="49.4219" y="25.3182">red</tspan></text>
+<text fill="#1D3557" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" letter-spacing="3px"><tspan x="10" y="44.3182">spaced </tspan><tspan x="10" y="63.3182">letters&#10;</tspan></text>
+<text fill="#1D3557" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" letter-spacing="0em" text-decoration="underline"><tspan x="10" y="82.3182">underlined</tspan></text>
+</svg>
