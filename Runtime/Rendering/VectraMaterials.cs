@@ -121,9 +121,14 @@ namespace FirstSymbol.Vectra.Rendering
         /// The world material for a blend mode and an optional paint texture. Shapes that share it also share an SRP Batcher
         /// batch; nothing is set per renderer.
         /// </summary>
-        public static Material GetWorld(ShapeBlendMode mode, Texture paintTexture)
+        public static Material GetWorld(ShapeBlendMode mode, Texture paintTexture) => GetWorld(mode, paintTexture, CurrentWorldKind);
+
+        /// <summary>
+        /// The world material of a given shader family. Drawing with a command buffer outside the pipeline (the rasterizer) needs the
+        /// Built-in family: URP and HDRP take their matrices from the camera they render, not from the command buffer.
+        /// </summary>
+        public static Material GetWorld(ShapeBlendMode mode, Texture paintTexture, VectraWorldShaderKind kind)
         {
-            var kind = CurrentWorldKind;
             if (paintTexture == null || paintTexture == Texture2D.whiteTexture)
                 return Get(s_World[(int)kind], WorldShaderFor(kind), mode, "Vectra World " + kind);
             var shader = WorldShaderFor(kind);

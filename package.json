@@ -59,6 +59,11 @@
       "displayName": "URP Backdrop",
       "description": "Frosted glass and advanced blend modes over moving UI (needs the Vectra Backdrop Feature on the URP renderer).",
       "path": "Samples~/UrpBackdrop"
+    },
+    {
+      "displayName": "Shader Graph",
+      "description": "Vectra Card: a Shader Graph (URP and HDRP) that uses Vectra's distance field, anti-aliasing, hairline outline and paint through Custom Function nodes.",
+      "path": "Samples~/ShaderGraph"
     }
   ]
 }

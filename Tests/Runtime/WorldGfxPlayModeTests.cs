@@ -160,6 +160,17 @@ namespace FirstSymbol.Vectra.Tests
             Assert.LessOrEqual(now[2], legacy[2], "set-pass calls");
         }
 
+        Texture2D Capture()
+        {
+            m_Camera.Render();
+            var prev = RenderTexture.active;
+            RenderTexture.active = m_Target;
+            var tex = new Texture2D(512, 512, TextureFormat.RGBA32, false);
+            tex.ReadPixels(new Rect(0, 0, 512, 512), 0, 0);
+            RenderTexture.active = prev;
+            return tex;
+        }
+
 #if UNITY_EDITOR
         [UnityTest]
         public IEnumerator ShaderGraphSample_DrawsARoundedCard()
@@ -189,19 +200,22 @@ namespace FirstSymbol.Vectra.Tests
                 quad.transform.localScale = new Vector3(8f, 8f, 1f);
                 var material = new Material(shader);
                 m_Owned.Add(material);
+                // A material made in code has no HDRP keywords until it is validated (surface type, blend mode).
+                var utils = System.Type.GetType("UnityEditor.Rendering.HighDefinition.HDShaderUtils, Unity.RenderPipelines.HighDefinition.Editor");
+                utils?.GetMethod("ResetMaterialKeywords", new[] { typeof(Material) })?.Invoke(null, new object[] { material });
                 quad.GetComponent<MeshRenderer>().sharedMaterial = material;
+                // HDRP clears to a sky, not to the background colour: compare with the empty frame.
+                quad.SetActive(false);
                 yield return null;
-                m_Camera.Render();
-                var prev = RenderTexture.active;
-                RenderTexture.active = m_Target;
-                var tex = new Texture2D(512, 512, TextureFormat.RGBA32, false);
-                tex.ReadPixels(new Rect(0, 0, 512, 512), 0, 0);
-                RenderTexture.active = prev;
-                var centre = tex.GetPixel(256, 256);
-                var corner = tex.GetPixel(256 - 200, 256 + 200);
-                Object.Destroy(tex);
-                Assert.Greater(centre.maxColorComponent, 0.2f, "the card is painted in the middle");
-                Assert.Less(corner.maxColorComponent, 0.05f, "outside the rounded corner stays clear");
+                var empty = Capture();
+                quad.SetActive(true);
+                yield return null;
+                var drawn = Capture();
+                float Diff(Color a, Color b) => Mathf.Abs(a.r - b.r) + Mathf.Abs(a.g - b.g) + Mathf.Abs(a.b - b.b);
+                Assert.Greater(Diff(drawn.GetPixel(256, 256), empty.GetPixel(256, 256)), 0.3f, "the card is painted in the middle");
+                Assert.Less(Diff(drawn.GetPixel(56, 456), empty.GetPixel(56, 456)), 0.05f, "outside the rounded corner stays clear");
+                Object.Destroy(drawn);
+                Object.Destroy(empty);
             }
             finally
             {
@@ -209,6 +223,64 @@ namespace FirstSymbol.Vectra.Tests
             }
         }
 #endif
+
+        [UnityTest]
+        public IEnumerator HairlineStroke_InACanvasKeepsItsWidthWhenTheCanvasScales()
+        {
+            var canvasGo = new GameObject("Vectra Hairline Canvas", typeof(Canvas), typeof(UnityEngine.UI.CanvasScaler));
+            m_Owned.Add(canvasGo);
+            var canvas = canvasGo.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = m_Camera;
+            canvas.planeDistance = 5f;
+            var scaler = canvasGo.GetComponent<UnityEngine.UI.CanvasScaler>();
+            scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ConstantPixelSize;
+            scaler.scaleFactor = 1f;
+
+            var go = new GameObject("Frame", typeof(RectTransform), typeof(CanvasRenderer), typeof(VectraShape));
+            go.transform.SetParent(canvasGo.transform, false);
+            ((RectTransform)go.transform).sizeDelta = new Vector2(100f, 100f);
+            var shape = go.GetComponent<VectraShape>();
+            var rectangle = shape.SetGeometry<RectangleShape>();
+            rectangle.cornerRadii = Vector4.zero;
+            shape.Fills.Clear();
+            shape.Strokes.Clear();
+            shape.Strokes.Add(new StrokeLayer(Color.white, 2f) { widthMode = StrokeWidthMode.Pixels });
+            shape.SetShapeDirty();
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+            float one = TopEdgeThickness();
+
+            scaler.scaleFactor = 3f;
+            yield return null;
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+            float three = TopEdgeThickness();
+            Assert.Greater(one, 1.2f, "pixels across the stroke at scale 1");
+            Assert.AreEqual(one, three, 0.5f, "a hairline does not grow with the canvas scale");
+
+            float TopEdgeThickness()
+            {
+                m_Camera.Render();
+                var prev = RenderTexture.active;
+                RenderTexture.active = m_Target;
+                var tex = new Texture2D(512, 512, TextureFormat.RGBA32, false);
+                tex.ReadPixels(new Rect(0, 0, 512, 512), 0, 0);
+                RenderTexture.active = prev;
+                float sum = 0f;
+                bool started = false;
+                for (int y = 511; y >= 256; y--)
+                {
+                    float v = tex.GetPixel(256, y).r;
+                    if (v > 0.02f) { started = true; sum += v; }
+                    else if (started) break;
+                }
+
+                Object.Destroy(tex);
+                return sum;
+            }
+        }
 
         [UnityTest]
         public IEnumerator HairlineStroke_KeepsItsWidthWhenTheCameraZoomsOut()

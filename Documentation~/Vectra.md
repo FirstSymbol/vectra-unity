@@ -372,8 +372,8 @@ background. The *URP Backdrop* sample is set up this way. Backdrop shapes use th
   Ctrl/Cmd+click deletes), polyline points, corner radii (Shift: one corner), arc angles, gradient handles and the drop
   shadow offset. Its overlay switches the selected point between Corner, Smooth and Symmetric, snaps to a grid and
   toggles handle groups.
-- **Context menu:** Copy / Paste Vectra Style (also between VectraStyle assets), Export as PNG / SVG / Sprite Asset,
-  Expand to Hierarchy (SVG Image).
+- **Context menu:** Copy / Paste Vectra Style (also between VectraStyle assets), Export as PNG / SVG, Bake to Sprite Asset / 9-Slice
+  Sprite Asset, Expand to Hierarchy (SVG Image).
 - **Windows:** Window → Vectra → Atlas Debugger (atlas textures, usage, regions, reset) and SVG Import Report.
 - **Project Settings → Vectra:** SVG importer, default quality, distance atlas size, default font map.
 

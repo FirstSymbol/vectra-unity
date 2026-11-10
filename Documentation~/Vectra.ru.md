@@ -407,7 +407,7 @@ Backdrop-фигуры используют собственный материа
 
 **Контекстное меню:**
 - Copy / Paste Vectra Style, в том числе между ассетами VectraStyle;
-- Export as PNG / SVG / Sprite Asset;
+- Export as PNG / SVG, Bake to Sprite Asset / 9-Slice Sprite Asset;
 - Expand to Hierarchy (для SVG Image).
 
 **Окна:**

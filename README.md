@@ -9,7 +9,8 @@ Vector shapes for the **uGUI Canvas** and **world space**. Includes:
 - shadows, glows, bevels and other effects;
 - masks, palettes with themes, animation and interaction states;
 - shapes traced from sprites and a shared shape library;
-- SVG import and export, with text, markers and paint order.
+- SVG import and export, with text, markers and paint order;
+- SRP Batcher world shaders for URP and HDRP, Shader Graph nodes, hairline strokes and baking to sprites.
 
 Everything is drawn with one shared material, so shapes batch. Geometry is computed by Burst and rebuilding does not allocate managed memory.
 
@@ -44,7 +45,8 @@ Vectra and Lettera work as packages or as plain folders under `Assets`: when Let
   - Boolean Operations;
   - Animation;
   - World Space;
-  - URP Backdrop.
+  - URP Backdrop;
+  - Shader Graph.
 
 ## Components
 
@@ -154,7 +156,7 @@ Utilities:
   - gradient handles and the shadow offset.
 
   The tool's overlay switches the point mode, turns on grid snapping and the handles.
-- **Context menu:** Copy/Paste Vectra Style, Export as PNG / SVG / Sprite Asset, Expand to Hierarchy (SVG Image).
+- **Context menu:** Copy/Paste Vectra Style, Export as PNG / SVG, Bake to Sprite Asset / 9-Slice Sprite Asset, Expand to Hierarchy (SVG Image).
 - **Windows:** Window → Vectra → Atlas Debugger and SVG Import Report.
 - **CLI for scripts and AI agents** (with `com.unity.pipeline` installed): `unity command vectra help | types | list | get | create | set | add | remove | mask | states | palette | theme | svg_parse | export_png …`.
   - Input and output are JSON, edits are undoable.

@@ -9,7 +9,8 @@
 - тени, свечение, bevel и другие эффекты;
 - маски, палитры с темами, анимацию и состояния взаимодействия;
 - фигуры из спрайтов и общую библиотеку фигур;
-- импорт и экспорт SVG, с текстом, маркерами и порядком рисования.
+- импорт и экспорт SVG, с текстом, маркерами и порядком рисования;
+- шейдеры мира с SRP Batcher для URP и HDRP, узлы Shader Graph, hairline-обводки и запекание в спрайты.
 
 Всё рисуется одним общим материалом: фигуры батчатся. Геометрия считается на Burst без GC-аллокаций при пересборке.
 
@@ -44,7 +45,8 @@ Vectra и Lettera работают и как пакеты, и как обычн�
   - Boolean Operations;
   - Animation;
   - World Space;
-  - URP Backdrop.
+  - URP Backdrop;
+  - Shader Graph.
 
 ## Компоненты
 
@@ -154,7 +156,7 @@ VectraSvg.Expand(svgImage);   // отдельный VectraShape на кажды�
   - ручки градиента и смещение тени.
 
   Оверлей инструмента переключает режим точки, включает привязку к сетке и ручки.
-- **Контекстное меню:** Copy/Paste Vectra Style, Export as PNG / SVG / Sprite Asset, Expand to Hierarchy (SVG Image).
+- **Контекстное меню:** Copy/Paste Vectra Style, Export as PNG / SVG, Bake to Sprite Asset / 9-Slice Sprite Asset, Expand to Hierarchy (SVG Image).
 - **Окна:** Window → Vectra → Atlas Debugger и SVG Import Report.
 - **CLI для скриптов и AI-агентов** (при установленном `com.unity.pipeline`): `unity command vectra help | types | list | get | create | set | add | remove | mask | states | palette | theme | svg_parse | export_png …`.
   - Вход и выход — JSON, правки отменяются через Undo.
