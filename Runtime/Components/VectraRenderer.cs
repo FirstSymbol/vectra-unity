@@ -33,6 +33,7 @@ namespace FirstSymbol.Vectra
         MeshFilter m_MeshFilter;
         bool m_Dirty = true;
         float m_BuiltPixelSize;
+        VectraWorldShaderKind m_ShaderKind;
 
         static readonly List<VectraRenderer> s_StyleUsers = new List<VectraRenderer>();
         static bool s_StyleHooked;
@@ -179,6 +180,7 @@ namespace FirstSymbol.Vectra
         void ApplyRendererSettings()
         {
             if (m_MeshRenderer == null) return;
+            m_ShaderKind = VectraMaterials.CurrentWorldKind;
             m_MeshRenderer.sharedMaterial = VectraMaterials.GetWorld(m_Content.blendMode, m_Renderer?.mainTexture);
             m_MeshRenderer.sortingOrder = m_SortingOrder;
             if (!string.IsNullOrEmpty(m_SortingLayer)) m_MeshRenderer.sortingLayerName = m_SortingLayer;
@@ -188,6 +190,8 @@ namespace FirstSymbol.Vectra
 
         void LateUpdate()
         {
+            // The render pipeline can change while the shape lives (quality levels, editor): switch to its shader.
+            if (m_ShaderKind != VectraMaterials.CurrentWorldKind) ApplyRendererSettings();
             if (!m_Dirty && m_PixelSize <= 0f)
             {
                 float px = CurrentPixelSize();

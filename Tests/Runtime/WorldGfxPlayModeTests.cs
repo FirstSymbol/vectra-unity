@@ -37,9 +37,39 @@ namespace FirstSymbol.Vectra.Tests
             m_Camera.targetTexture = m_Target;
         }
 
+        RenderPipelineAsset m_PreviousPipeline;
+        bool m_PipelineChanged;
+
+        /// <summary>
+        /// The test projects keep the Built-in pipeline by default even when URP or HDRP is installed: use the installed one for this test
+        /// (URP first), and put the old setting back afterwards.
+        /// </summary>
+        IEnumerator UseInstalledPipeline()
+        {
+            if (GraphicsSettings.currentRenderPipeline != null) yield break;
+            RenderPipelineAsset asset = null;
+            var urp = System.Type.GetType("UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset, Unity.RenderPipelines.Universal.Runtime");
+            var hdrp = System.Type.GetType("UnityEngine.Rendering.HighDefinition.HDRenderPipelineAsset, Unity.RenderPipelines.HighDefinition.Runtime");
+            if (urp != null)
+            {
+                var create = urp.GetMethods().First(m => m.Name == "Create" && m.GetParameters().Length == 1 && m.IsStatic);
+                asset = (RenderPipelineAsset)create.Invoke(null, new object[] { null });
+            }
+            else if (hdrp != null) asset = (RenderPipelineAsset)ScriptableObject.CreateInstance(hdrp);
+
+            if (asset == null) yield break;
+            m_Owned.Add(asset);
+            m_PreviousPipeline = GraphicsSettings.defaultRenderPipeline;
+            m_PipelineChanged = true;
+            GraphicsSettings.defaultRenderPipeline = asset;
+            yield return null;
+        }
+
         [TearDown]
         public void TearDown()
         {
+            if (m_PipelineChanged) GraphicsSettings.defaultRenderPipeline = m_PreviousPipeline;
+            m_PipelineChanged = false;
             VectraMaterials.ForcedWorldKind = null;
             foreach (var o in m_Owned)
                 if (o != null) Object.Destroy(o);
@@ -83,7 +113,12 @@ namespace FirstSymbol.Vectra.Tests
                 for (int f = 0; f < 4; f++) yield return null;
                 m_Camera.Render();
                 yield return null;
-                done(Sample(recorders));
+                var v = Sample(recorders);
+#if UNITY_EDITOR
+                // The editor's own statistics count SRP Batcher batches; the profiler counters above do not in every version.
+                v = v.Concat(new long[] { UnityEditor.UnityStats.drawCalls, UnityEditor.UnityStats.setPassCalls }).ToArray();
+#endif
+                done(v);
             }
             finally
             {
@@ -108,8 +143,9 @@ namespace FirstSymbol.Vectra.Tests
         }
 
         [UnityTest]
-        public IEnumerator FiveHundredShapes_UrpOrHdrp_BatchBetterThanTheBuiltInShader()
+        public IEnumerator FiveHundredShapes_UrpOrHdrp_CostNoMoreThanTheBuiltInShader()
         {
+            yield return UseInstalledPipeline();
             var kind = VectraMaterials.CurrentWorldKind;
             if (kind == VectraWorldShaderKind.BuiltIn) Assert.Ignore("The Built-in pipeline has no SRP Batcher.");
             long[] now = null, legacy = null;
@@ -118,15 +154,66 @@ namespace FirstSymbol.Vectra.Tests
                 if (o is GameObject g && g.GetComponent<VectraRenderer>() != null) Object.Destroy(g);
             yield return null;
             yield return Measure(VectraWorldShaderKind.BuiltIn, v => legacy = v);
-            Debug.Log($"Vectra world batching, 500 shapes ({kind}): [batches, draw calls, set-pass calls] new shader {string.Join("/", now)}, Built-in shader {string.Join("/", legacy)}");
+            Debug.Log($"Vectra world batching, 500 shapes ({kind}): [profiler batches, draw calls, set-pass calls; editor stats draw calls, set-pass calls] new shader {string.Join("/", now)}, Built-in shader {string.Join("/", legacy)}");
             if (now.All(v => v == 0)) Assert.Ignore("Render statistics are not available in this player.");
             // The SRP Batcher counts a batch per run of draws with one shader variant; the CG shader cannot join one.
             Assert.LessOrEqual(now[2], legacy[2], "set-pass calls");
         }
 
+#if UNITY_EDITOR
+        [UnityTest]
+        public IEnumerator ShaderGraphSample_DrawsARoundedCard()
+        {
+            yield return UseInstalledPipeline();
+            if (VectraMaterials.CurrentWorldKind == VectraWorldShaderKind.BuiltIn) Assert.Ignore("Shader Graph needs URP or HDRP in this project.");
+            var info = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(VectraRenderer).Assembly);
+            if (info == null) Assert.Ignore("Vectra is a folder under Assets in this project: the sample is read from the package folder.");
+            const string dir = "Assets/VectraSgTest";
+            UnityEditor.AssetDatabase.DeleteAsset(dir);
+            UnityEditor.AssetDatabase.CreateFolder("Assets", "VectraSgTest");
+            string target = dir + "/Vectra Card.shadergraph";
+            System.IO.File.Copy(System.IO.Path.Combine(info.resolvedPath, "Samples~", "ShaderGraph", "Vectra Card.shadergraph"), target);
+            UnityEditor.AssetDatabase.ImportAsset(target, UnityEditor.ImportAssetOptions.ForceSynchronousImport);
+            try
+            {
+                var shader = UnityEditor.AssetDatabase.LoadAssetAtPath<Shader>(target);
+                Assert.NotNull(shader, "the sample graph imports as a shader");
+                var errors = new List<string>();
+                foreach (var m in UnityEditor.ShaderUtil.GetShaderMessages(shader))
+                    if (m.severity == UnityEditor.Rendering.ShaderCompilerMessageSeverity.Error) errors.Add(m.message + " (" + m.file + ":" + m.line + ")");
+                Assert.IsEmpty(errors, "shader errors: " + string.Join("; ", errors));
+
+                var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                m_Owned.Add(quad);
+                Object.Destroy(quad.GetComponent<Collider>());
+                quad.transform.localScale = new Vector3(8f, 8f, 1f);
+                var material = new Material(shader);
+                m_Owned.Add(material);
+                quad.GetComponent<MeshRenderer>().sharedMaterial = material;
+                yield return null;
+                m_Camera.Render();
+                var prev = RenderTexture.active;
+                RenderTexture.active = m_Target;
+                var tex = new Texture2D(512, 512, TextureFormat.RGBA32, false);
+                tex.ReadPixels(new Rect(0, 0, 512, 512), 0, 0);
+                RenderTexture.active = prev;
+                var centre = tex.GetPixel(256, 256);
+                var corner = tex.GetPixel(256 - 200, 256 + 200);
+                Object.Destroy(tex);
+                Assert.Greater(centre.maxColorComponent, 0.2f, "the card is painted in the middle");
+                Assert.Less(corner.maxColorComponent, 0.05f, "outside the rounded corner stays clear");
+            }
+            finally
+            {
+                UnityEditor.AssetDatabase.DeleteAsset(dir);
+            }
+        }
+#endif
+
         [UnityTest]
         public IEnumerator HairlineStroke_KeepsItsWidthWhenTheCameraZoomsOut()
         {
+            yield return UseInstalledPipeline();
             var go = new GameObject("Vectra Hairline", typeof(MeshFilter), typeof(MeshRenderer), typeof(VectraRenderer));
             m_Owned.Add(go);
             var r = go.GetComponent<VectraRenderer>();

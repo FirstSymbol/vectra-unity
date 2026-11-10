@@ -46,6 +46,10 @@ namespace FirstSymbol.Vectra.Rendering
         static readonly List<(Texture, int)> s_Stale = new List<(Texture, int)>();
         static readonly int s_MainTexId = Shader.PropertyToID("_MainTex");
 
+        static RenderPipelineAsset s_KindPipeline;
+        static VectraWorldShaderKind s_Kind;
+        static bool s_KindKnown;
+
         /// <summary>Test hook: use this world shader family whatever the render pipeline is.</summary>
         internal static VectraWorldShaderKind? ForcedWorldKind;
 
@@ -56,13 +60,21 @@ namespace FirstSymbol.Vectra.Rendering
             {
                 if (ForcedWorldKind.HasValue) return ForcedWorldKind.Value;
                 var rp = GraphicsSettings.currentRenderPipeline;
-                if (rp == null) return VectraWorldShaderKind.BuiltIn;
-                string n = rp.GetType().Name;
-                if (n.IndexOf("Universal", System.StringComparison.Ordinal) >= 0 && WorldShaderFor(VectraWorldShaderKind.Urp) != null)
-                    return VectraWorldShaderKind.Urp;
-                if (n.IndexOf("HDRender", System.StringComparison.Ordinal) >= 0 && WorldShaderFor(VectraWorldShaderKind.Hdrp) != null)
-                    return VectraWorldShaderKind.Hdrp;
-                return VectraWorldShaderKind.BuiltIn;
+                if (s_KindKnown && ReferenceEquals(rp, s_KindPipeline)) return s_Kind;
+                var kind = VectraWorldShaderKind.BuiltIn;
+                if (rp != null)
+                {
+                    string n = rp.GetType().Name;
+                    if (n.IndexOf("Universal", System.StringComparison.Ordinal) >= 0 && WorldShaderFor(VectraWorldShaderKind.Urp) != null)
+                        kind = VectraWorldShaderKind.Urp;
+                    else if (n.IndexOf("HDRender", System.StringComparison.Ordinal) >= 0 && WorldShaderFor(VectraWorldShaderKind.Hdrp) != null)
+                        kind = VectraWorldShaderKind.Hdrp;
+                }
+
+                s_KindPipeline = rp;
+                s_Kind = kind;
+                s_KindKnown = true;
+                return kind;
             }
         }
 

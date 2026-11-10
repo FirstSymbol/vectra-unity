@@ -24,12 +24,14 @@ a few other shapes still builds a small point array).
 7. [Masks](#masks)
 8. [Boolean operations](#boolean-operations)
 9. [SVG](#svg)
-10. [Animation](#animation)
-11. [URP backdrop](#urp-backdrop)
-12. [Editor tools](#editor-tools)
-13. [Command line](#command-line)
-14. [Performance](#performance)
-15. [Troubleshooting](#troubleshooting)
+10. [World space and Shader Graph](#world-space-and-shader-graph)
+11. [Vector sprites](#vector-sprites)
+12. [Animation](#animation)
+13. [URP backdrop](#urp-backdrop)
+14. [Editor tools](#editor-tools)
+15. [Command line](#command-line)
+16. [Performance](#performance)
+17. [Troubleshooting](#troubleshooting)
 
 ## Installation
 
@@ -120,6 +122,16 @@ stripes, checker, dots, grid, noise, freeform gradient, and **contour gradient**
 
 **Strokes:** any number per shape; centre / inside / outside; caps and joins with miter limit; dashes (absolute or
 relative lengths, offset); trim path; width profile (`AnimationCurve`); drawn behind or above the fill.
+
+**Hairlines.** A stroke's **Unit** is Local (the width follows the scale of the shape) or **Pixels**: the stroke stays N
+device pixels wide at any scale or zoom, anti-aliased, in a Canvas and in world space. The mesh follows the pixel size
+(a change of 1% rebuilds it), so a camera zoom or a Canvas Scaler change keeps the line crisp.
+
+```csharp
+shape.SetStroke(Color.white, 1f, StrokeAlignment.Center);
+shape.Strokes[0].widthMode = StrokeWidthMode.Pixels;   // 1 pixel at any zoom
+shape.SetShapeDirty();
+```
 
 **Palettes.** A `VectraPalette` (Assets → Create → Vectra → Palette) holds named colours with one value per theme.
 Pick a name in the **Palette** row of a paint (fills, strokes, pattern colours). Add a **Vectra Theme** component to
@@ -269,6 +281,51 @@ restyles its target for that copy only; the target keeps its own style where it 
 characters per file. A file that hits one keeps what was read so far and gets a warning starting with "SVG limit
 reached". `SvgParser.Parse(text, new SvgParseOptions { ... })` changes the budgets.
 
+## World space and Shader Graph
+
+`VectraRenderer` draws a shape with a `MeshRenderer`. The shader follows the render pipeline: **Vectra/World URP** (URP, with
+a pass for the 2D Renderer too), **Vectra/World HDRP**, and **Vectra/World** for the Built-in pipeline (and for any other
+pipeline). The URP and HDRP shaders keep every property in `UnityPerMaterial` and the per-shape data in the vertices, so the
+**SRP Batcher** takes all shapes that share a material in one batch; a shape sets no `MaterialPropertyBlock`. A shape with a
+texture paint gets a material of its own per texture, shared by every shape that uses that texture. Check a shader in the
+inspector (SRP Batcher: compatible) or with `Window → Analysis → Frame Debugger`.
+
+**Shader Graph (URP and HDRP).** Build materials of your own with Vectra's distance fields, anti-aliasing and paints. The
+package ships Custom Function code (`Runtime/ShaderGraph/VectraShaderGraph.hlsl`) and five Sub Graphs under
+*Create Node → Vectra*:
+
+| Sub Graph | What it does |
+|---|---|
+| Vectra SDF Shape | Signed distance of a rectangle, ellipse, star, polygon, cross, rhombus, squircle or capsule |
+| Vectra Coverage | Anti-aliased opacity of a distance (Vectra's own edge filter), with a softness |
+| Vectra Outline | Outline opacity: centre, inside or outside; width in units or in **screen pixels** (hairline) |
+| Vectra Pixel Size | Size of a screen pixel in the units of a distance |
+| Vectra Paint | Solid, linear, radial, angular, diamond, stripes, checker, dots, grid and noise paints from a UV |
+
+They use screen-space derivatives, so they work in the fragment stage only. Import the **Shader Graph** sample for *Vectra Card*, an
+unlit transparent graph (URP and HDRP targets) that makes a rounded card with a gradient and a 2-pixel hairline outline
+from these functions.
+
+## Vector sprites
+
+Bake a shape or an SVG into a `Sprite` for `SpriteRenderer` or a uGUI `Image`: the texture is drawn by the GPU with the same
+shaders as on screen, the mesh hugs the opaque pixels (tight), the pivot is set, and a frame can get a 9-slice border taken
+from its corner radii. Transparent texels keep the colour of their neighbours, so filtering shows no dark fringe.
+
+```csharp
+var options = VectraSpriteOptions.Default;
+options.resolution = 256;          // longest side in pixels
+options.pixelsPerUnit = 100f;      // 0 = as large in units as the shape
+options.autoBorder = true;         // 9-slice border from the corner radii of a rectangle
+Sprite sprite = VectraSpriteBaker.Bake(shape, options);   // VectraShape, VectraRenderer, VectraSvgDocument or content + size
+```
+
+Edit mode: right-click a Vectra shape → **Bake to Sprite Asset…** or **Bake to 9-Slice Sprite Asset…** (a PNG with the sprite
+import settings), or select `.svg` files → **Assets → Vectra → Bake SVG to Sprite**. An SVG can also be imported as a Sprite
+directly: the **Vectra Svg Importer** set to *Sprite* has the pivot, 9-slice border, tight mesh and mipmap options. The
+sprite grows to include shadows and glows (`includeOverflow`). Unity builds the tight mesh, so its outline is approximate; for an exact collider use the
+**Generate Collider** option of `VectraRenderer` or `VectraOutline.GetOutline`.
+
 ## Animation
 
 **Tweens** (no dependencies; stop automatically when the target is destroyed):
@@ -352,6 +409,7 @@ unity command vectra expand_svg --target "SVG Image"
 - Keep shapes analytic when possible; path shapes with effects bake a distance field (Quality controls its size).
 - Shapes rebuild only when changed. Animated parameters rebuild every frame without managed allocations.
 - Texture paints, backdrop shapes and soft-masked children use separate materials (they batch among themselves).
+- World shapes under URP and HDRP use SRP Batcher compatible shaders: hundreds of shapes cost one batch per material, not one draw each.
 - The SDF atlas size limit is in Project Settings and reaches player builds (the build adds a small settings asset to the Preloaded Assets and removes it afterwards); the Atlas Debugger shows usage. A change uploads only the changed blocks of the atlas, not the whole texture.
 - The gradient atlas (256 texels wide, up to 4096 rows, 8 MiB of half floats at most) shares rows between paints with the same colours and stops. Rows are compared by content, so two paints can never end up on one row. A row nobody uses any more stays baked; the least recently used ones are dropped when the atlas is full. If 4095 different gradients are alive at once, the rest draw white and the console warns once.
 - What has been built and run on which platform: [Platforms](Platforms.md).

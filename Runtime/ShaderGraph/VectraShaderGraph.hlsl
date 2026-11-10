@@ -23,6 +23,17 @@ float VectraSgNoise(float2 p)
     return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
 }
 
+// Position of a point of the 0..1 square UV in shape space: centred on the origin, Size units across.
+void VectraCentered_float(float2 UV, float2 Size, out float2 Position)
+{
+    Position = (UV - 0.5) * Size;
+}
+
+void VectraCentered_half(half2 UV, half2 Size, out half2 Position)
+{
+    Position = (UV - 0.5) * Size;
+}
+
 // Signed distance (negative inside) of a shape centred on the origin, in the units of Position.
 // Shape: 0 rectangle, 1 ellipse, 2 star, 3 regular polygon, 4 cross, 5 rhombus, 6 squircle, 7 capsule.
 // Size: full width and height. Roundness: corner radius (rectangle) or corner rounding (star, polygon, cross).
@@ -144,6 +155,25 @@ void VectraPaint_half(half2 UV, half Kind, half4 ColorA, half4 ColorB, half Angl
     float4 c;
     VectraPaint_float(UV, Kind, ColorA, ColorB, Angle, Scale, c);
     Color = c;
+}
+
+// Puts an outline over a fill: both opacities are coverage values (for example from VectraCoverage and VectraOutline).
+// Color is not premultiplied; Alpha is the combined opacity.
+void VectraComposeOutline_float(float4 Fill, float FillAlpha, float4 OutlineColor, float OutlineAlpha, out float3 Color, out float Alpha)
+{
+    float fa = Fill.a * FillAlpha;
+    float oa = OutlineColor.a * OutlineAlpha;
+    Alpha = oa + fa * (1.0 - oa);
+    Color = Alpha > 1e-5 ? (OutlineColor.rgb * oa + Fill.rgb * fa * (1.0 - oa)) / Alpha : Fill.rgb;
+}
+
+void VectraComposeOutline_half(half4 Fill, half FillAlpha, half4 OutlineColor, half OutlineAlpha, out half3 Color, out half Alpha)
+{
+    float3 c;
+    float a;
+    VectraComposeOutline_float(Fill, FillAlpha, OutlineColor, OutlineAlpha, c, a);
+    Color = c;
+    Alpha = a;
 }
 
 #endif

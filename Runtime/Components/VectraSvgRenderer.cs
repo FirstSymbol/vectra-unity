@@ -224,8 +224,20 @@ namespace FirstSymbol.Vectra
             return VectraRenderer.EstimatePixelSize(Camera.main, transform.position, math.max(math.abs(s.x), math.abs(s.y)));
         }
 
+        VectraWorldShaderKind m_ShaderKind;
+
         void LateUpdate()
         {
+            // The render pipeline can change while the document is shown: give the meshes the shader of the pipeline in use.
+            var kind = VectraMaterials.CurrentWorldKind;
+            if (kind != m_ShaderKind)
+            {
+                m_ShaderKind = kind;
+                if (TryGetComponent(out MeshRenderer main)) main.sharedMaterial = VectraMaterials.GetWorld();
+                foreach (var l in m_Layers)
+                    if (l.go != null && l.go.TryGetComponent(out MeshRenderer lr)) lr.sharedMaterial = VectraMaterials.GetWorld();
+            }
+
             float px = PixelSize();
             if (!m_Dirty && m_BuiltPixelSize > 0f && (px > m_BuiltPixelSize * 1.5f || px < m_BuiltPixelSize / 1.5f)) m_Dirty = true;
             if (!m_Dirty) return;
@@ -261,6 +273,7 @@ namespace FirstSymbol.Vectra
             m_Renderer.buffer.Upload(m_Mesh);
             GetComponent<MeshFilter>().sharedMesh = m_Mesh;
             var mr = GetComponent<MeshRenderer>();
+            m_ShaderKind = VectraMaterials.CurrentWorldKind;
             mr.sharedMaterial = VectraMaterials.GetWorld();
             mr.sortingOrder = m_SortingOrder;
 

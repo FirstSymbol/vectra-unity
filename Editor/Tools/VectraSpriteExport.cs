@@ -67,7 +67,6 @@ namespace FirstSymbol.Vectra.Editor
             o.pixelsPerUnit = 0f;
             o.generateMipmaps = true;
             o.autoBorder = nineSlice;
-            o.physicsShape = false;
             return o;
         }
 

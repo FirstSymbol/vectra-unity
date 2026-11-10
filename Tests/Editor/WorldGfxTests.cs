@@ -150,6 +150,26 @@ namespace FirstSymbol.Vectra.Editor.Tests
             }
         }
 
+        [TestCase("Vectra SDF Shape", 5, 1)]
+        [TestCase("Vectra Coverage", 2, 1)]
+        [TestCase("Vectra Outline", 4, 1)]
+        [TestCase("Vectra Pixel Size", 1, 1)]
+        [TestCase("Vectra Paint", 6, 1)]
+        public void ShaderGraphSubGraphs_Import(string name, int inputs, int outputs)
+        {
+            var info = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(VectraRenderer).Assembly);
+            if (info == null) Assert.Ignore("Vectra is a folder under Assets in this project.");
+            if (Type.GetType("UnityEditor.ShaderGraph.SubGraphAsset, Unity.ShaderGraph.Editor") == null) Assert.Ignore("Shader Graph is not installed in this project.");
+            string path = info.assetPath + "/Runtime/ShaderGraph/" + name + ".shadersubgraph";
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            var asset = AssetDatabase.LoadMainAssetAtPath(path);
+            Assert.NotNull(asset, path);
+            Assert.AreEqual("SubGraphAsset", asset.GetType().Name, "imported as a Sub Graph, not as a plain asset");
+            var t = asset.GetType();
+            Assert.IsTrue((bool)t.GetField("isValid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).GetValue(asset), "the Sub Graph is valid");
+            Assert.IsNotEmpty((string)t.GetField("functionName", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).GetValue(asset));
+        }
+
         // ------------------------------------------------------------------------------------------------------
         // Hairline strokes
         // ------------------------------------------------------------------------------------------------------
@@ -442,28 +462,23 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         [Test]
-        public void Sprite_MipmapsAndPhysicsShape()
+        public void Sprite_BuildsMipmapsOnRequest()
         {
             var o = VectraSpriteOptions.Default;
             o.resolution = 64;
             o.generateMipmaps = true;
-            o.physicsShape = true;
             var s = VectraSpriteBaker.Bake(Disc(Color.white), new Vector2(1f, 1f), o);
+            o.generateMipmaps = false;
+            var flat = VectraSpriteBaker.Bake(Disc(Color.white), new Vector2(1f, 1f), o);
             try
             {
                 Assert.Greater(s.texture.mipmapCount, 1);
-                Assert.Greater(VectraOutline.GetOutline(new EllipseShape(), new ShapeFrame { rect = new Rect(-0.5f, -0.5f, 1f, 1f), pixelSize = 1f / 64f }).Count, 0, "outline");
-                Assert.AreEqual(1, s.GetPhysicsShapeCount());
-                var pts = new List<Vector2>();
-                s.GetPhysicsShape(0, pts);
-                Assert.GreaterOrEqual(pts.Count, 4, "Unity simplifies sprite physics shapes");
-                float maxR = 0f;
-                foreach (var p in pts) maxR = Mathf.Max(maxR, p.magnitude);
-                Assert.AreEqual(0.5f * 64f / 100f, maxR, 0.04f, "outline radius in sprite units");
+                Assert.AreEqual(1, flat.texture.mipmapCount);
             }
             finally
             {
                 Destroy(s);
+                Destroy(flat);
             }
         }
 

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using FirstSymbol.Vectra.Svg;
 using Unity.Mathematics;
 using UnityEngine;
@@ -22,8 +21,6 @@ namespace FirstSymbol.Vectra.Rendering
         public bool autoBorder;
         /// <summary>Unity cuts a mesh that hugs the opaque pixels (saves fill rate); off gives a plain quad.</summary>
         public bool tightMesh;
-        /// <summary>Creates the physics shape of the sprite from the exact outline of the shape.</summary>
-        public bool physicsShape;
         public bool generateMipmaps;
         /// <summary>Grows the sprite to include shadows, glows and outside strokes. Off keeps exactly the shape rectangle.</summary>
         public bool includeOverflow;
@@ -60,11 +57,7 @@ namespace FirstSymbol.Vectra.Rendering
             float px = math.max(size.x, size.y) / options.resolution;
             using var renderer = new VectraShapeRenderer();
             renderer.Build(content.ToInput(new ShapeFrame { rect = rect, pixelSize = px }, Color.white, true));
-            var geometry = content.ActiveGeometry;
-            var sprite = Finish(renderer, rect, px, options, size, geometry as RectangleShape);
-            if (sprite != null && options.physicsShape && geometry != null)
-                AddPhysicsShape(sprite, geometry, rect, px, options);
-            return sprite;
+            return Finish(renderer, rect, px, options, size, content.ActiveGeometry as RectangleShape);
         }
 
         public static Sprite Bake(VectraShape shape, VectraSpriteOptions options)
@@ -176,7 +169,7 @@ namespace FirstSymbol.Vectra.Rendering
             var pivot = new Vector2((padL + o.pivot.x * w) / tw, (padB + o.pivot.y * h) / th);
             float ppu = o.pixelsPerUnit > 0f ? o.pixelsPerUnit : Mathf.Max(w / Mathf.Max(size.x, 1e-4f), 1e-4f);
             var type = o.tightMesh && border == Vector4.zero ? SpriteMeshType.Tight : SpriteMeshType.FullRect;
-            var sprite = Sprite.Create(tex, new Rect(0, 0, tw, th), pivot, ppu, 0, type, border, o.physicsShape);
+            var sprite = Sprite.Create(tex, new Rect(0, 0, tw, th), pivot, ppu, 0, type, border, false);
             sprite.name = "Vectra Sprite";
             return sprite;
         }
@@ -237,24 +230,6 @@ namespace FirstSymbol.Vectra.Rendering
 
                 Array.Copy(next, px, px.Length);
             }
-        }
-
-        static void AddPhysicsShape(Sprite sprite, VectraShapeGeometry geometry, Rect rect, float px, VectraSpriteOptions o)
-        {
-            var outline = VectraOutline.GetOutline(geometry, new ShapeFrame { rect = rect, pixelSize = px });
-            if (outline.Count == 0) return;
-            // Sprite physics shapes are in world units relative to the pivot.
-            var pivotLocal = new Vector2(rect.xMin + o.pivot.x * rect.width, rect.yMin + o.pivot.y * rect.height);
-            float ppu = sprite.pixelsPerUnit;
-            var shapes = new List<Vector2[]>(outline.Count);
-            foreach (var contour in outline)
-            {
-                var pts = new Vector2[contour.Length];
-                for (int i = 0; i < pts.Length; i++) pts[i] = (contour[i] - pivotLocal) / px / ppu;
-                shapes.Add(pts);
-            }
-
-            sprite.OverridePhysicsShape(shapes);
         }
     }
 }
