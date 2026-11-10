@@ -86,6 +86,33 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             }
         }
 
+
+        // The editor's own window capture (an internal utility, found by name): bool CaptureEditorWindow(EditorWindow, RenderTexture).
+        static Texture2D Capture(EditorWindow w)
+        {
+            var m = typeof(EditorWindow).Assembly.GetType("UnityEditorInternal.InternalEditorUtility")?.GetMethod("CaptureEditorWindow",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            if (m == null || m.GetParameters().Length != 2) return null;
+            int width = Mathf.Max(1, (int)w.position.width), height = Mathf.Max(1, (int)w.position.height);
+            var rt = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            var previous = RenderTexture.active;
+            try
+            {
+                if (!(m.Invoke(null, new object[] { w, rt }) is bool ok) || !ok) return null;
+                RenderTexture.active = rt;
+                var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+                tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                tex.Apply();
+                return tex;
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                rt.Release();
+                Object.DestroyImmediate(rt);
+            }
+        }
+
         [UnityTest]
         public IEnumerator DrawsInAnEditorWindowPanel()
         {
@@ -98,17 +125,33 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
                 yield return null;
             }
 
+            Texture2D shot = null;
             try
             {
                 Assert.IsNotNull(w.shape);
                 Assert.GreaterOrEqual(w.shape.RasterCount, 1, "the editor panel ran the scheduled rasterization");
                 Assert.IsNotNull(w.shape.SurfaceTexture);
                 Assert.GreaterOrEqual(w.shape.SurfaceSize.x, 60);
+                // Let the window repaint with the picture, then look at its pixels.
+                for (int i = 0; i < 6; i++)
+                {
+                    w.Repaint();
+                    yield return null;
+                }
+
+                shot = Capture(w);
             }
             finally
             {
                 w.Close();
             }
+
+            if (shot == null) Assert.Inconclusive("The editor could not capture the window here; the rasterization itself was checked above.");
+            int red = 0;
+            foreach (var c in shot.GetPixels32())
+                if (c.r > 200 && c.g < 60 && c.b < 60) red++;
+            Object.DestroyImmediate(shot);
+            Assert.Greater(red, 2500, "the 60 x 60 red element shows in the editor window (red pixels: " + red + ")");
         }
     }
 }
