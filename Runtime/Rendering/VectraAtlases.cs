@@ -502,7 +502,14 @@ namespace FirstSymbol.Vectra.Rendering
             s_Dirty = true;
         }
 
+        static readonly Unity.Profiling.ProfilerMarker s_FlushMarker = new Unity.Profiling.ProfilerMarker("Vectra.GradientAtlas.Flush");
+
         internal static void Flush()
+        {
+            using (s_FlushMarker.Auto()) FlushCore();
+        }
+
+        static void FlushCore()
         {
             if (s_Texture == null)
             {
@@ -864,7 +871,14 @@ namespace FirstSymbol.Vectra.Rendering
             else s_DirtyRects.Add(r);
         }
 
+        static readonly Unity.Profiling.ProfilerMarker s_FlushMarker = new Unity.Profiling.ProfilerMarker("Vectra.SdfAtlas.Flush");
+
         internal static void Flush()
+        {
+            using (s_FlushMarker.Auto()) FlushCore();
+        }
+
+        static void FlushCore()
         {
             if (!s_Data.IsCreated) return;
             if (s_Texture == null) CreateTexture();

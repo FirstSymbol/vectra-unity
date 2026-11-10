@@ -197,7 +197,14 @@ namespace FirstSymbol.Vectra.Rendering
         /// Uploads the buffer to <paramref name="mesh"/> using the standard vertex channels (position, colour,
         /// uv0-uv3) so that uGUI canvas batching reads it exactly like any other UI mesh.
         /// </summary>
+        static readonly Unity.Profiling.ProfilerMarker s_UploadMarker = new Unity.Profiling.ProfilerMarker("Vectra.MeshUpload");
+
         public void Upload(Mesh mesh)
+        {
+            using (s_UploadMarker.Auto()) UploadCore(mesh);
+        }
+
+        void UploadCore(Mesh mesh)
         {
             if (mesh == null) return;
             int vc = vertices.Length;

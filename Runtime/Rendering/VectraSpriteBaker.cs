@@ -48,7 +48,14 @@ namespace FirstSymbol.Vectra.Rendering
     public static class VectraSpriteBaker
     {
         /// <summary>Bakes a shape. <paramref name="size"/> is the size of the shape rectangle in local units.</summary>
+        static readonly Unity.Profiling.ProfilerMarker s_BakeMarker = new Unity.Profiling.ProfilerMarker("Vectra.SpriteBaker.Bake");
+
         public static Sprite Bake(VectraShapeContent content, Vector2 size, VectraSpriteOptions options)
+        {
+            using (s_BakeMarker.Auto()) return BakeShape(content, size, options);
+        }
+
+        static Sprite BakeShape(VectraShapeContent content, Vector2 size, VectraSpriteOptions options)
         {
             if (content == null || size.x <= 0f || size.y <= 0f) return null;
             options = Normalize(options);
@@ -75,6 +82,11 @@ namespace FirstSymbol.Vectra.Rendering
 
         /// <summary>Bakes an SVG document at its aspect ratio; the shape rectangle is the view box.</summary>
         public static Sprite Bake(VectraSvgDocument doc, VectraSpriteOptions options)
+        {
+            using (s_BakeMarker.Auto()) return BakeDocument(doc, options);
+        }
+
+        static Sprite BakeDocument(VectraSvgDocument doc, VectraSpriteOptions options)
         {
             if (doc == null || doc.elements == null) return null;
             options = Normalize(options);

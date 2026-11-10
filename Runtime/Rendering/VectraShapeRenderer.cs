@@ -4,6 +4,7 @@ using System.Diagnostics;
 using FirstSymbol.Vectra.Geometry;
 using Unity.Collections;
 using Unity.Mathematics;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace FirstSymbol.Vectra.Rendering
@@ -138,7 +139,18 @@ namespace FirstSymbol.Vectra.Rendering
             for (int i = 0; i < m_StrokeKeys.Count; i++) m_StrokeKeys[i] = 0;
         }
 
+        static readonly ProfilerMarker s_BuildMarker = new ProfilerMarker("Vectra.Build");
+        static readonly ProfilerMarker s_PathMarker = new ProfilerMarker("Vectra.BuildPath+Flatten");
+        static readonly ProfilerMarker s_TessellateMarker = new ProfilerMarker("Vectra.Tessellate");
+        static readonly ProfilerMarker s_SdfMarker = new ProfilerMarker("Vectra.BakeSdf");
+        static readonly ProfilerMarker s_StrokeMarker = new ProfilerMarker("Vectra.Stroke");
+
         public void Build(in VectraBuildInput input)
+        {
+            using (s_BuildMarker.Auto()) BuildCore(input);
+        }
+
+        void BuildCore(in VectraBuildInput input)
         {
             long startTicks = Stopwatch.GetTimestamp();
             if (!m_Batch)
@@ -501,8 +513,11 @@ namespace FirstSymbol.Vectra.Rendering
             m_Path.Clear();
             m_Poly.Clear();
             m_Builder.Reset(m_Path, Affine2.Identity);
-            geometry.BuildPath(m_Frame, m_Builder);
-            VectraGeometry.Flatten(m_Path, Affine2.Identity, tol, 0, false, ref m_Poly);
+            using (s_PathMarker.Auto())
+            {
+                geometry.BuildPath(m_Frame, m_Builder);
+                VectraGeometry.Flatten(m_Path, Affine2.Identity, tol, 0, false, ref m_Poly);
+            }
         }
 
         void EnsureFillTraps(VectraShapeGeometry geometry, in VectraBuildInput input, FillAmountEffect fillAmount)
@@ -526,7 +541,7 @@ namespace FirstSymbol.Vectra.Rendering
             bool hasAmount = fillAmount != null && fillAmount.amount < 1f;
             if (!hasClip && !hasAmount)
             {
-                VectraGeometry.Tessellate(m_Poly, geometry.FillRule, ref m_Fill);
+                using (s_TessellateMarker.Auto()) VectraGeometry.Tessellate(m_Poly, geometry.FillRule, ref m_Fill);
                 return;
             }
 
@@ -550,7 +565,7 @@ namespace FirstSymbol.Vectra.Rendering
 
             var used = new NativeArray<Operand>(opCount, Allocator.TempJob);
             NativeArray<Operand>.Copy(ops, used, opCount);
-            VectraGeometry.Tessellate(all, used, ref m_Fill);
+            using (s_TessellateMarker.Auto()) VectraGeometry.Tessellate(all, used, ref m_Fill);
             used.Dispose();
             ops.Dispose();
             all.Dispose();
@@ -639,8 +654,9 @@ namespace FirstSymbol.Vectra.Rendering
             m_SdfBounds = region;
             m_SdfTexel = texel;
             m_SdfRange = range;
-            VectraGeometry.BakeSdf(m_Fill.AsArray(), region, w, hgt, range, VectraSdfAtlas.Data, VectraSdfAtlas.Size,
-                m_Sdf.rect.x, m_Sdf.rect.y);
+            using (s_SdfMarker.Auto())
+                VectraGeometry.BakeSdf(m_Fill.AsArray(), region, w, hgt, range, VectraSdfAtlas.Data, VectraSdfAtlas.Size,
+                    m_Sdf.rect.x, m_Sdf.rect.y);
             VectraSdfAtlas.MarkDirty(m_Sdf.rect);
         }
 
@@ -807,11 +823,14 @@ namespace FirstSymbol.Vectra.Rendering
 
             int clipMode = s.alignment == StrokeAlignment.Inside ? 1 : s.alignment == StrokeAlignment.Outside ? 2 : 0;
             if (clipMode != 0 && !geometry.IsClosed) clipMode = 0;
-            if (clipMode == 0 && m_ExternalClip.HasValue)
-                VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, m_ExternalClip.Value, m_ExternalClipRule, 1, ref traps);
-            else
-                VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, default, geometry.FillRule, clipMode, ref traps,
-                    clipMode != 0);
+            using (s_StrokeMarker.Auto())
+            {
+                if (clipMode == 0 && m_ExternalClip.HasValue)
+                    VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, m_ExternalClip.Value, m_ExternalClipRule, 1, ref traps);
+                else
+                    VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, default, geometry.FillRule, clipMode, ref traps,
+                        clipMode != 0);
+            }
             dash.Dispose();
             profile.Dispose();
             m_StrokeTraps[index] = traps;

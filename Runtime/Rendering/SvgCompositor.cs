@@ -188,7 +188,14 @@ namespace FirstSymbol.Vectra.Rendering
         /// Draws the elements [from, to) of <paramref name="doc"/> into <paramref name="target"/> (cleared first). Layers whose
         /// parent is <paramref name="parent"/> inside that range are composited; pass -1 for the top level.
         /// </summary>
+        static readonly Unity.Profiling.ProfilerMarker s_RenderMarker = new Unity.Profiling.ProfilerMarker("Vectra.SvgCompositor.Render");
+
         public void Render(VectraSvgDocument doc, int from, int to, int parent, in SvgCompositeSettings settings, RenderTexture target)
+        {
+            using (s_RenderMarker.Auto()) RenderCore(doc, from, to, parent, settings, target);
+        }
+
+        void RenderCore(VectraSvgDocument doc, int from, int to, int parent, in SvgCompositeSettings settings, RenderTexture target)
         {
             if (doc == null || target == null || Mat == null) return;
             m_Doc = doc;

@@ -304,7 +304,14 @@ namespace FirstSymbol.Vectra
 
         protected override void OnPopulateMesh(VertexHelper vh) => vh.Clear();
 
+        static readonly Unity.Profiling.ProfilerMarker s_UpdateMarker = new Unity.Profiling.ProfilerMarker("Vectra.VectraShape.UpdateGeometry");
+
         protected override void UpdateGeometry()
+        {
+            using (s_UpdateMarker.Auto()) UpdateGeometryCore();
+        }
+
+        void UpdateGeometryCore()
         {
             if (m_Renderer == null) m_Renderer = new VectraShapeRenderer();
             if (m_Mesh == null)

@@ -275,7 +275,15 @@ namespace FirstSymbol.Vectra
 
         protected override void OnPopulateMesh(VertexHelper vh) => vh.Clear();
 
+        static readonly Unity.Profiling.ProfilerMarker s_UpdateMarker = new Unity.Profiling.ProfilerMarker("Vectra.VectraSvgImage.UpdateGeometry");
+        static readonly Unity.Profiling.ProfilerMarker s_ChildrenMarker = new Unity.Profiling.ProfilerMarker("Vectra.VectraSvgImage.RebuildChildren");
+
         protected override void UpdateGeometry()
+        {
+            using (s_UpdateMarker.Auto()) UpdateGeometryCore();
+        }
+
+        void UpdateGeometryCore()
         {
             m_Renderer ??= new VectraShapeRenderer();
             if (m_Mesh == null) m_Mesh = new Mesh { name = "Vectra SVG", hideFlags = HideFlags.HideAndDontSave };
@@ -405,6 +413,11 @@ namespace FirstSymbol.Vectra
         }
 
         void RebuildChildren()
+        {
+            using (s_ChildrenMarker.Auto()) RebuildChildrenCore();
+        }
+
+        void RebuildChildrenCore()
         {
             ClearGenerated();
             m_BuiltSignature = SvgDrawOrder.Split(m_Document, m_GenerateText, true, m_Items, Gamma);

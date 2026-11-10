@@ -93,7 +93,14 @@ namespace FirstSymbol.Vectra.Svg
             return doc;
         }
 
+        static readonly Unity.Profiling.ProfilerMarker s_ParseMarker = new Unity.Profiling.ProfilerMarker("Vectra.SvgParser.Parse");
+
         public static void Parse(string svg, VectraSvgDocument doc, SvgParseOptions options)
+        {
+            using (s_ParseMarker.Auto()) ParseCore(svg, doc, options);
+        }
+
+        static void ParseCore(string svg, VectraSvgDocument doc, SvgParseOptions options)
         {
             options ??= new SvgParseOptions();
             doc.elements.Clear();

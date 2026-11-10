@@ -237,8 +237,15 @@ namespace FirstSymbol.Vectra
 
         public ShapeFrame Frame => new ShapeFrame { rect = LocalRect, pixelSize = CurrentPixelSize() };
 
+        static readonly Unity.Profiling.ProfilerMarker s_RebuildMarker = new Unity.Profiling.ProfilerMarker("Vectra.VectraRenderer.Rebuild");
+
         /// <summary>Rebuilds the mesh immediately.</summary>
         public void Rebuild()
+        {
+            using (s_RebuildMarker.Auto()) RebuildCore();
+        }
+
+        void RebuildCore()
         {
             m_Dirty = false;
             if (m_Renderer == null) m_Renderer = new VectraShapeRenderer();
