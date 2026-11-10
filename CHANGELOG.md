@@ -4,6 +4,43 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-11-10
+
+Figma parity: SVGs exported from Figma render like Figma. Checked on a corpus of 42 Figma frames (shadows, blurs, every gradient type, image fills, blend modes, group opacity, masks, live and outlined text, strokes, booleans, noise), each compared with Figma's own PNG: 39 of 42 match (under 2 % of pixels off) in both Gamma and Linear colour space. The other three: the two live-text frames match on a Canvas, but sprites and PNGs draw no text; noise is close in density and colour but not pixel-exact.
+
+### Added
+- **Layers: group opacity, masks, blend modes, background blur.** SVG parts that need a picture of a subtree are composited offscreen instead of being approximated per shape:
+  - `opacity` on a `<g>`, `<svg>` or `<use>` with several shapes, and on a shape with both a fill and a stroke, applies to the group as one (no see-through overlaps). A single shape with only a fill or a stroke still gets the opacity in its paint.
+  - `<mask>`: luminance (default) and alpha (`mask-type`, also as `style="mask-type:alpha"`), the `maskUnits="userSpaceOnUse"` region, any mask content (gradients, opacity). A mask of plain opaque white shapes stays a geometric clip, so Figma's inside and outside stroke masks stay exact and cost nothing.
+  - `mix-blend-mode`: all 16 CSS modes (multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference, exclusion, hue, saturation, color, luminosity) plus plus-lighter. The backdrop is the SVG's own content below the element, not the scene behind the component.
+  - Figma's background blur (`<foreignObject>` with `backdrop-filter`, then a shape with `data-figma-bg-blur-radius`): the SVG's own content below is blurred inside the shape.
+  - Works on a Canvas (`VectraSvgImage`, child `VectraSvgComposite`), in UI Toolkit (`VectraSvgElement`), in world space (`VectraSvgRenderer`, Built-in and URP), in baked sprites, in the importer's PNG and in `VectraRasterizer.Render(doc, ...)`. Layer textures are drawn again only when the size, the pixel density, the overrides or the document's content (`VectraSvgDocument.contentVersion`) change.
+  - In Linear colour space the layer maths (opacity, masks, blend modes, background blur) runs on sRGB values, as in Figma and browsers; ordinary translucency and anti-aliasing still blend in linear light, as all Unity UI does there, so soft edges look slightly lighter than in Figma.
+  - New API: `VectraSvgDocument.layers` / `maskElements`, `SvgLayerData`, `SvgBlendMode`, `SvgMaskKind`, `SvgLayers`, `SvgCompositor`, `SvgDrawItem.composite`, `VectraRasterizer.Render(doc, w, h, quality, overrides)`.
+- **Figma's filters.** Drop shadows (with spread), inner shadows (with choke), layer blur and noise are recognised from the filter chains Figma exports (`feColorMatrix`, `feMorphology`, `feOffset`, `feGaussianBlur`, `feComposite`, `feBlend`, `feTurbulence`) and become Vectra's native effects; several shadows stack in order. Shadows of an element without a fill follow its stroke. Shadow blend modes: screen and plus-lighter (exact for an inner shadow over a solid fill); other modes are drawn normal and reported.
+- **Angular and diamond gradients from Figma.** `data-figma-gradient-fill` and `data-figma-gradient-stroke` become native angular and diamond paints; Figma's fallback groups (`data-figma-skip-parse`) are skipped.
+- **`<pattern>` fills and strokes**, Figma image fills included (fill and tile modes; cropped, fitted and rotated images through `preserveAspectRatio` and transforms). A pattern that is one picture filling its tile uses the picture itself; other content (shapes, gradients, nested patterns) is drawn into a tile texture the first time the document is built. `patternUnits`, `patternContentUnits`, `viewBox`, `patternTransform`, `href` inheritance. Documents keep the image bytes, never texture objects; textures are made on first use and destroyed with the document. A document whose patterns use different textures is drawn as several meshes.
+- **SVG text as Figma exports it** ("Outline text" off): a `<text>` is cut into pieces at every absolute `x` or `y` (one `<tspan x y>` per line, per-glyph `x` / `y` lists, up to 512 pieces), and each piece is a text object at its own baseline and `text-anchor`, with every text engine, on a Canvas, in world space, in UI Toolkit and in `VectraSvg.Expand`. `dx` / `dy`, `letter-spacing` (`em`, `px`, number), `text-decoration` underline and line-through (Lettera, TextMesh Pro and UI Toolkit; the legacy uGUI Text ignores spacing and decoration), `xml:space="preserve"` and `white-space: pre`. New fields on `SvgTextRun`: `letterSpacing`, `underline`, `lineThrough`, `dx`, `dy`.
+- `GrainEffect` monotone mode (colour, density, size in local units) for noise like Figma's.
+- Tests: 117 new EditMode and 38 new PlayMode tests (layers on the rasterizer, Canvas, world and UI Toolkit; Figma filter, gradient, pattern and text corpus files; text line positions with Lettera; Linear colour space).
+
+### Changed
+- An element whose filter has a primitive Vectra cannot place is drawn without that primitive (and reported); before, the whole element disappeared.
+- Support table and README limits: `<mask>`, `<g>` opacity, `<pattern>`, `<image>`, `<text>`, `<tspan>`, `<foreignObject>`, the filter primitives above, `mix-blend-mode`, `backdrop-filter`, `letter-spacing`, `text-decoration` updated (EN and RU).
+
+### Fixed
+- Shadow offsets of an SVG expanded onto a Canvas (`VectraSvg.Expand`) pointed up instead of down, and inner shadows were not scaled with the document.
+- A `VectraSvgImage` added by script before it was parented under a Canvas (`new GameObject(..., typeof(VectraSvgImage))`, then `SetParent`) drew garbage: the Canvas vertex channels it needs were not switched on.
+- Stale textured world materials are destroyed when their texture is gone.
+
+### Limits
+- `VectraMask` soft masks do not apply to the composited parts of a Canvas image; composited parts in world space do not draw under HDRP; "Expand into objects" ignores layers.
+- Text and images inside a layer are drawn above the layer's picture, with the group's opacity but without its mask or blend mode.
+- World-space layer textures are at most 2048 px a side (scaled down beyond that). Embedded PNG/JPEG pictures over 4096 px a side or 16 megapixels are not decoded; the import report says so.
+- Masks inside masks and `maskContentUnits="objectBoundingBox"` stay geometric clips. A document may have 256 layers, nested 8 deep.
+- Noise is close to Figma's in density and colour, but its specks are square cells.
+- Sprites and PNGs draw no text (as before).
+
 ## [0.6.2] - 2026-11-10
 
 ### Added
