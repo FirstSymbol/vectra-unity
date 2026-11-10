@@ -4,6 +4,17 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Non-scaling strokes in UI Toolkit, in baked sprites and PNG, and in the SVG export.** In `VectraSvgElement` one SVG px of a `vector-effect="non-scaling-stroke"` stroke (and of its dashes) is one panel pixel, so it is `stroke-width` x the panel's density in device pixels. In `VectraSpriteBaker`, `VectraRasterizer` and the importer's Sprite mode it is one pixel of the baked texture. A pixel-mode stroke is written to SVG as `vector-effect="non-scaling-stroke"` and reads back as the same stroke.
+- **SVG support table** in the guide (English and Russian): every SVG 1.1 and SVG 2 element, each filter primitive, key properties, text, animation, conditional processing, CSS selectors, at-rules and units, each marked Supported, Partial (what exactly) or Not supported. The README's SVG limits link to it. `SvgSupport` (public) is the list behind it; a test keeps the table, the list and the parser equal.
+- **The import report names what was silent before:** every unsupported element (animation, `<script>`, `<foreignObject>`, SVG fonts, filter primitives such as `feTurbulence`, unknown elements; elements with a foreign namespace prefix such as `sodipodi:` are skipped quietly), `paint-order`, `mix-blend-mode`, `isolation`, text spacing and baseline properties, `textLength`, per-glyph `dx` / `dy` / `rotate`, `<textPath>`, the CSS `transform` property, `var()`, `calc()`, `clip-path` / `filter` values that are not `url(#id)`, `context-fill`, the focal radius `fr`, `<text>` inside a clip path, `preserveAspectRatio` on an image, a `<use>` of another file or of a missing id, and in CSS the selectors that never match (pseudo-classes, `+`, `~`, `[a^=b]`), `@media` (applied without its condition), `@import`, `@font-face`, `@keyframes`.
+- Tests: COUNTS.
+
+### Fixed
+- A CSS `@import url(...);` (or `@charset`, `@namespace`) in an SVG's `<style>` swallowed the rule that followed it.
+
 ## [0.6.1] - 2026-11-10
 
 ### Added
@@ -15,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `vector-effect` was treated as an inherited property, so a `<g vector-effect="non-scaling-stroke">` changed its children. It is not inherited (SVG 2; Chrome agrees): the element itself, its `style` or a CSS rule sets it, and a `<use>` of a marked element is non-scaling.
 
 ### Limits
-- Non-scaling strokes are not done in UI Toolkit (`VectraSvgElement`), in baked sprites and PNG, or in the SVG export; there they are drawn as N device pixels (UI Toolkit, sprites) or as an ordinary stroke (export). Planned for 0.6.2 with the full SVG support table.
 - With a non-uniform fit (`preserveAspectRatio="none"` into a box of another aspect ratio) the stretched mesh makes a non-scaling stroke a little thicker along one axis than the other; a browser keeps it even.
 
 ## [0.6.0] - 2026-11-10

@@ -170,16 +170,18 @@ VectraSvg.Expand(svgImage);   // отдельный VectraShape на кажды�
 
 ## Ограничения SVG
 
+Главные пробелы ниже; каждый элемент SVG, свойство и возможность CSS с пометкой «Поддерживается», «Частично» или «Не поддерживается» перечислены в [поддержке SVG](Documentation~/Vectra.ru.md#поддержка-svg).
+
 - `<mask>` применяется как геометрический клип, яркость маски не учитывается.
 - Паттерн-заливки заменяются цветом первой фигуры паттерна.
 - Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate; остальные примитивы (`feTurbulence`, `feComposite`, `feBlend` ...) нет.
 - Анимации нет: SMIL (`<animate>`, `<animateTransform>`, `<set>`) и CSS `@keyframes` игнорируются, рисуется первый кадр. `<foreignObject>` и `<script>` игнорируются.
 - Нет `mix-blend-mode`, `paint-order` и `@font-face`.
 - Текст — один фрагмент на `<text>`: нет позиций по глифам (`dx`, `dy`, `rotate`, списки `x`), `<textPath>`, `textLength` и `letter-spacing`.
-- `vector-effect` работает только для `non-scaling-stroke` (на Canvas и в мировом пространстве; см. руководство). `non-scaling-size`, `non-rotation` и `fixed-position` игнорируются.
+- `vector-effect` работает только для `non-scaling-stroke` (Canvas, мировое пространство, UI Toolkit, запечённые спрайты и PNG, экспорт SVG; см. руководство). `non-scaling-size`, `non-rotation` и `fixed-position` игнорируются.
 - `opacity` группы применяется к каждому потомку отдельно.
 - Внешние картинки по URL не загружаются, работают только встроенные data-URI.
-- Обо всём неподдержанном пишется в отчёт импорта (инспектор ассета и Window → Vectra → SVG Import Report); пока не обо всём перечисленном выше.
+- Обо всём неподдержанном пишется в отчёт импорта (инспектор ассета и Window → Vectra → SVG Import Report); каждый неподдерживаемый элемент называется там (тест следит, чтобы список и руководство совпадали).
 
 ## Производительность
 

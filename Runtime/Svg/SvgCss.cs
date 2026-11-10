@@ -28,6 +28,9 @@ namespace FirstSymbol.Vectra.Svg
 
         readonly List<Rule> m_Rules = new List<Rule>();
 
+        /// <summary>Receives a line for every rule or at-rule that is skipped or only approximated (the import report).</summary>
+        public Action<string> report;
+
         public bool IsEmpty => m_Rules.Count == 0;
 
         public void AddStylesheet(string css)
@@ -38,15 +41,31 @@ namespace FirstSymbol.Vectra.Svg
             while (i < css.Length)
             {
                 int open = css.IndexOf('{', i);
-                if (open < 0) break;
-                string selectorText = css.Substring(i, open - i).Trim();
+                if (open < 0)
+                {
+                    SkipStatements(css.Substring(i).Trim());
+                    break;
+                }
+
+                string selectorText = SkipStatements(css.Substring(i, open - i).Trim());
+
                 int close = FindClose(css, open);
                 string body = css.Substring(open + 1, Math.Max(0, close - open - 1));
                 i = close + 1;
                 if (selectorText.StartsWith("@", StringComparison.Ordinal))
                 {
                     // @media and friends: apply nested rules unconditionally; skip @font-face/@keyframes.
-                    if (selectorText.StartsWith("@media", StringComparison.Ordinal)) AddStylesheet(body);
+                    if (selectorText.StartsWith("@media", StringComparison.Ordinal))
+                    {
+                        report?.Invoke("CSS: @media conditions are not evaluated; the rules inside apply always.");
+                        AddStylesheet(body);
+                    }
+                    else
+                    {
+                        int space = selectorText.IndexOfAny(new[] { ' ', '\t', '\n', '\r' });
+                        report?.Invoke("CSS: " + (space < 0 ? selectorText : selectorText.Substring(0, space)) + " is not supported and is ignored.");
+                    }
+
                     continue;
                 }
 
@@ -54,7 +73,14 @@ namespace FirstSymbol.Vectra.Svg
                 foreach (var sel in selectorText.Split(','))
                 {
                     var parts = ParseSelector(sel.Trim());
-                    if (parts == null || parts.Count == 0) continue;
+                    if (parts == null)
+                    {
+                        if (sel.Trim().Length > 0)
+                            report?.Invoke("CSS: the selector '" + sel.Trim() + "' is not supported (pseudo-classes, pseudo-elements, + and ~ never match); the rule is ignored.");
+                        continue;
+                    }
+
+                    if (parts.Count == 0) continue;
                     m_Rules.Add(new Rule
                     {
                         parts = parts,
@@ -65,6 +91,20 @@ namespace FirstSymbol.Vectra.Svg
                     });
                 }
             }
+        }
+
+        // Statement at-rules end with ';' and have no block: skip them without losing the rule that follows.
+        string SkipStatements(string text)
+        {
+            while (text.StartsWith("@", StringComparison.Ordinal) && text.IndexOf(';') >= 0)
+            {
+                int semi = text.IndexOf(';');
+                int sp = text.IndexOf(' ');
+                report?.Invoke("CSS: " + text.Substring(0, sp > 0 && sp < semi ? sp : semi) + " is not supported and is ignored.");
+                text = text.Substring(semi + 1).Trim();
+            }
+
+            return text;
         }
 
         static int FindClose(string css, int open)
@@ -153,6 +193,7 @@ namespace FirstSymbol.Vectra.Svg
                         if (end < 0) return null;
                         string inner = s.Substring(i + 1, end - i - 1);
                         int eq = inner.IndexOf('=');
+                        if (eq > 0 && "^$*~|".IndexOf(inner[eq - 1]) >= 0) return null; // [a^=b] and friends are not matched
                         if (eq < 0) c.attrs.Add(new KeyValuePair<string, string>(inner.Trim(), null));
                         else c.attrs.Add(new KeyValuePair<string, string>(inner.Substring(0, eq).Trim(), inner.Substring(eq + 1).Trim().Trim('"', '\'')));
                         i = end + 1;

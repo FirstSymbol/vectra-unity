@@ -34,6 +34,14 @@ namespace FirstSymbol.Vectra.Svg
             "flood-opacity", "marker-start", "marker-mid", "marker-end", "marker", "overflow"
         };
 
+        // Properties and attributes that change the picture and are not implemented; the import report names them.
+        static readonly HashSet<string> s_Unsupported = new HashSet<string>
+        {
+            "paint-order", "mix-blend-mode", "isolation", "letter-spacing", "word-spacing", "text-decoration", "dominant-baseline",
+            "alignment-baseline", "baseline-shift", "writing-mode", "direction", "unicode-bidi", "font-variant", "font-stretch",
+            "transform-origin", "transform-box", "backdrop-filter", "textLength", "lengthAdjust"
+        };
+
         sealed class Context
         {
             public VectraSvgDocument doc;
@@ -89,11 +97,13 @@ namespace FirstSymbol.Vectra.Svg
             }
 
             var ctx = new Context { doc = doc, opt = options };
+            ctx.css.report = ctx.Warn;
             ctx.path = new NativePath(Allocator.TempJob, 64);
             ctx.builder = new PathBuilder(ctx.path);
             try
             {
                 Index(xml, ctx);
+                ReportElements(xml, ctx, 0);
                 ComputeStyles(root, null, ctx);
                 ctx.styleReady = true;
 
@@ -153,6 +163,57 @@ namespace FirstSymbol.Vectra.Svg
             foreach (var c in n.children) Index(c, ctx);
         }
 
+        /// <summary>Names every element the parser ignores (<see cref="SvgSupport"/>), once per name, without looking inside it.</summary>
+        static void ReportElements(SvgNode n, Context ctx, int depth)
+        {
+            if (depth > 512) return;
+            foreach (var c in n.children)
+            {
+                string name = c.name;
+                // Elements of other namespaces are editor data (sodipodi:, inkscape:, rdf:): skipped quietly.
+                if (string.IsNullOrEmpty(name) || name[0] == '#' || (c.prefix != null && c.prefix != "svg")) continue;
+                var level = SvgSupport.Level(name);
+                if (level == null)
+                {
+                    ctx.Warn($"SVG: <{name}> is not an SVG element Vectra knows; it and its content are ignored.");
+                    continue;
+                }
+
+                if (level == SvgSupportLevel.NotSupported)
+                {
+                    ctx.Warn(IsAnimation(name)
+                        ? $"SVG: <{name}> is not supported (no animation); the document is drawn as written, in its first frame."
+                        : $"SVG: <{name}> is not supported; it and its content are ignored.");
+                    continue;
+                }
+
+                if (name == "metadata" || name == "title" || name == "desc") continue;
+                ReportElements(c, ctx, depth + 1);
+            }
+        }
+
+        static bool IsAnimation(string name) => name == "animate" || name == "animateColor" || name == "animateMotion" ||
+                                                name == "animateTransform" || name == "set" || name == "mpath" || name == "discard";
+
+        /// <summary>Names the properties and attributes of an element that change the picture and are not implemented.</summary>
+        static void ReportProperties(SvgNode n, Dictionary<string, string> s, Context ctx)
+        {
+            foreach (var kv in n.attributes)
+                if (s_Unsupported.Contains(kv.Key)) ctx.Warn($"SVG: {kv.Key} is not supported and is ignored.");
+            foreach (var kv in s)
+            {
+                if (s_Unsupported.Contains(kv.Key)) ctx.Warn($"SVG: {kv.Key} is not supported and is ignored.");
+                else if (kv.Key == "transform") ctx.Warn("SVG: the CSS transform property is not supported (the transform attribute is); it is ignored.");
+                else if (kv.Value.IndexOf("var(", StringComparison.Ordinal) >= 0) ctx.Warn("SVG: CSS variables (var()) are not supported; the declaration is ignored or read wrongly.");
+                else if (kv.Value.IndexOf("calc(", StringComparison.Ordinal) >= 0) ctx.Warn("SVG: calc() is not supported; the declaration is ignored or read wrongly.");
+                else if ((kv.Key == "clip-path" || kv.Key == "filter" || kv.Key == "mask") && kv.Value != "none" &&
+                         kv.Value.IndexOf("url(", StringComparison.Ordinal) < 0)
+                    ctx.Warn($"SVG: {kv.Key} is only supported with url(#id); \"{kv.Value}\" is ignored.");
+                else if ((kv.Key == "fill" || kv.Key == "stroke") && kv.Value.StartsWith("context-", StringComparison.Ordinal))
+                    ctx.Warn("SVG: context-fill and context-stroke are not supported; black is used.");
+            }
+        }
+
         // ---------------------------------------------------------------------------------------------------
         // Styles
         // ---------------------------------------------------------------------------------------------------
@@ -205,6 +266,7 @@ namespace FirstSymbol.Vectra.Svg
                 }
 
             n.style = s;
+            if (n.name != "#document") ReportProperties(n, s, ctx);
             foreach (var c in n.children) ComputeStyles(c, s, ctx);
         }
 
@@ -305,7 +367,19 @@ namespace FirstSymbol.Vectra.Svg
         static void RenderUse(SvgNode n, Affine2 local, float op, List<SvgPathData> clips, List<VectraEffect> effects, Context ctx)
         {
             var href = n.Attr("href");
-            if (href == null || !href.StartsWith("#") || !ctx.ids.TryGetValue(href.Substring(1), out var target)) return;
+            if (href == null) return;
+            if (!href.StartsWith("#"))
+            {
+                ctx.Warn("SVG: <use> references to other files are not loaded: " + href);
+                return;
+            }
+
+            if (!ctx.ids.TryGetValue(href.Substring(1), out var target))
+            {
+                ctx.Warn("SVG: a <use> references an id that does not exist: " + href);
+                return;
+            }
+
             if (ctx.uses >= ctx.opt.maxUseExpansions)
             {
                 ctx.Warn($"SVG limit reached: more than {ctx.opt.maxUseExpansions} <use> copies; further <use> elements are skipped.");
@@ -717,6 +791,8 @@ namespace FirstSymbol.Vectra.Svg
                 float cx = Coord(GradAttr(g, "cx", ctx), 0.5f * vw, vw), cy = Coord(GradAttr(g, "cy", ctx), 0.5f * vh, vh);
                 float r = Coord(GradAttr(g, "r", ctx), 0.5f * diag, diag);
                 float fx = Coord(GradAttr(g, "fx", ctx), cx, vw), fy = Coord(GradAttr(g, "fy", ctx), cy, vh);
+                var fr = GradAttr(g, "fr", ctx);
+                if (!string.IsNullOrEmpty(fr) && Number(fr, 0f) > 0f) ctx.Warn("SVG: the focal radius (fr) of a radialGradient is not supported and is ignored.");
                 r = Mathf.Max(r, 1e-6f);
                 var unit = Affine2.Scale(new float2(1f / r)) * Affine2.Translate(new float2(-cx, -cy));
                 paint.type = PaintType.RadialGradient;
@@ -801,6 +877,7 @@ namespace FirstSymbol.Vectra.Svg
                     continue;
                 }
 
+                if (c.name == "text") ctx.Warn("SVG: <text> inside a clipPath or mask is ignored.");
                 if (!BuildShape(c, ctx)) continue;
                 if (Style(c, "clip-rule") == "evenodd") rule = FillRule.EvenOdd;
                 int pi = 0;
@@ -907,7 +984,7 @@ namespace FirstSymbol.Vectra.Svg
                         break;
                     }
                     default:
-                        ctx.Warn("Filter primitive <" + p.name + "> is not supported.");
+                        // Every other primitive is named by ReportElements (SvgSupport).
                         break;
                 }
             }
@@ -936,6 +1013,7 @@ namespace FirstSymbol.Vectra.Svg
         {
             float scale = ctm.UniformScale;
             var runs = new List<SvgTextRun>();
+            ReportTextFeatures(n, ctx, 0);
             CollectRuns(n, ctm, scale, opacity, ctx, runs, 0);
             TrimRuns(runs);
             if (runs.Count == 0) return;
@@ -970,6 +1048,18 @@ namespace FirstSymbol.Vectra.Svg
                 textRotation = math.degrees(math.atan2(ctm.b, ctm.a))
             };
             ctx.doc.elements.Add(e);
+        }
+
+        static void ReportTextFeatures(SvgNode n, Context ctx, int depth)
+        {
+            if (depth > 16) return;
+            if (n.name == "textPath") ctx.Warn("SVG: <textPath> is drawn as ordinary text; the text does not follow the path.");
+            if (n.attributes.ContainsKey("dx") || n.attributes.ContainsKey("dy") || n.attributes.ContainsKey("rotate"))
+                ctx.Warn("SVG: per-glyph dx, dy and rotate on text are not supported and are ignored.");
+            if (n.attributes.TryGetValue("x", out var xs) && SplitList(xs).Count > 1 || n.attributes.TryGetValue("y", out var ys) && SplitList(ys).Count > 1)
+                ctx.Warn("SVG: a list of x or y values on text places only the first glyph run; the other values are ignored.");
+            foreach (var c in n.children)
+                if (c.name == "tspan" || c.name == "textPath" || c.name == "a") ReportTextFeatures(c, ctx, depth + 1);
         }
 
         // The style a piece of text draws with: that of the element holding it.
@@ -1073,6 +1163,7 @@ namespace FirstSymbol.Vectra.Svg
             if (string.IsNullOrEmpty(href)) return;
             float x = Length(n.Attr("x"), 0, ctx.viewportW, ctx), y = Length(n.Attr("y"), 0, ctx.viewportH, ctx);
             float w = Length(n.Attr("width"), 0, ctx.viewportW, ctx), h = Length(n.Attr("height"), 0, ctx.viewportH, ctx);
+            if (n.attributes.ContainsKey("preserveAspectRatio")) ctx.Warn("SVG: preserveAspectRatio on <image> is not supported; the picture is stretched to its rectangle.");
             byte[] bytes = null;
             int comma = href.IndexOf(',');
             if (href.StartsWith("data:") && comma > 0 && href.Substring(0, comma).Contains("base64"))

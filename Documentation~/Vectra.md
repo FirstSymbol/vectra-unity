@@ -179,8 +179,8 @@ stripes, checker, dots, grid, noise, freeform gradient, and **contour gradient**
 relative lengths, offset); trim path; width profile (`AnimationCurve`); drawn behind or above the fill.
 
 **Hairlines.** A stroke's **Unit** is Local (the width follows the scale of the shape) or **Pixels**: the stroke stays N
-device pixels wide at any scale or zoom, anti-aliased, in a Canvas and in world space. The mesh follows the pixel size
-(a change of 1% rebuilds it), so a camera zoom or a Canvas Scaler change keeps the line crisp. SVG's `vector-effect="non-scaling-stroke"` becomes such a stroke (see the SVG section).
+device pixels wide at any scale or zoom, anti-aliased, in a Canvas and in world space. SVG's `vector-effect="non-scaling-stroke"` becomes such a stroke (see [SVG support](#svg-support)). The mesh follows the pixel size
+(a change of 1% rebuilds it), so a camera zoom or a Canvas Scaler change keeps the line crisp.
 
 ```csharp
 shape.SetStroke(Color.white, 1f, StrokeAlignment.Center);
@@ -323,7 +323,7 @@ engine; assign it on the SVG Image (new images get the default from Project Sett
 fallback font (one per engine), then the engine's default font, is used. Lettera finds fonts only through the map in
 this version.
 
-**Limitations:** `<mask>` is applied as a geometric clip (luminance is ignored); pattern fills fall back to the colour
+**Limitations** (the full list is the SVG support table below): `<mask>` is applied as a geometric clip (luminance is ignored); pattern fills fall back to the colour
 of the first pattern shape; only blur, drop shadow, saturate and hue-rotate filters; external image URLs are not
 loaded; a group's `opacity` is applied to each child separately, so overlapping children show through each other (the
 import report says so); text and images are not clipped by `clip-path`; images are axis-aligned rectangles and
@@ -331,7 +331,138 @@ import report says so); text and images are not clipped by `clip-path`; images a
 `requiredExtensions` conditions pass is drawn (the language list is `SvgParseOptions.languages`, default `en`). A `<use>`
 restyles its target for that copy only; the target keeps its own style where it stands.
 
-**Non-scaling strokes.** `vector-effect="non-scaling-stroke"` keeps a stroke the same width on screen whatever transforms apply, as in browsers: `stroke-width` is in screen units and is not scaled by the element's `transform`, the `viewBox` fit, the Canvas, the object's scale or the camera. `stroke-dasharray` and `stroke-dashoffset` of such a stroke are screen units too. The parser makes it a pixel-mode stroke (`StrokeWidthMode.Pixels` with `dashInPixels`). One SVG px is one reference point on a screen-space Canvas (`stroke-width="2"` is 2 x the Canvas scale factor device pixels; one device pixel on a world-space Canvas) and one device pixel in world space (`VectraSvgRenderer`). The property is not inherited (SVG 2; Chrome draws it so): set it on the element, in its `style` or in a CSS rule; a `<use>` of a marked element is non-scaling, a `<g>` or `<use>` that carries it is not. `non-scaling-size`, `non-rotation` and `fixed-position` are ignored and named in the import report. Not yet in UI Toolkit (`VectraSvgElement`), in baked sprites and PNG, or written by the SVG export.
+### SVG support
+
+Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **Supported** means drawn or used as the specification says; **Partial** names the difference; **Not supported** means ignored, and the import report (the asset's inspector, **Window → Vectra → SVG Import Report**, `VectraSvgDocument.warnings`) names it. An element that is not in the table is reported as unknown; editor data with a namespace prefix (`sodipodi:`, `inkscape:`) is skipped quietly. A test keeps this table equal to the parser's list (`SvgSupport`).
+
+| Element | Support | Notes |
+|---|---|---|
+| `<svg>` | Partial | The root's `viewBox`, `width`, `height` and `preserveAspectRatio` set the document. A nested `<svg>` takes `x`, `y`, `width`, `height`, `viewBox`; it does not clip its content (`overflow` is ignored, silently). |
+| `<g>` | Partial | A group. Its `opacity` is applied to each child separately, so overlapping children show through each other (reported). |
+| `<defs>` | Supported | Content is kept for `<use>` and references, never drawn directly. |
+| `<symbol>` | Supported | Drawn through `<use>` with `viewBox`, `width`, `height`. |
+| `<use>` | Partial | `href` / `xlink:href` to an id in the same document, `x`, `y`, and `width` / `height` for a symbol; the target is restyled for that copy only. A reference to another file is not loaded and a missing id draws nothing (both reported). At most 10 000 copies. |
+| `<switch>` | Partial | Draws the first child whose `systemLanguage` / `requiredExtensions` conditions pass (languages: `SvgParseOptions.languages`, default `en`); the other children are skipped (reported). |
+| `<a>` | Supported | Drawn as a group; links are not followed. |
+| `<title>` | Supported | Read and ignored (nothing to draw). |
+| `<desc>` | Supported | Read and ignored. |
+| `<metadata>` | Supported | Read and ignored; editor data (`sodipodi:`, `inkscape:`, `rdf:` ...) inside or beside it is not reported. |
+| `<style>` | Supported | CSS, see the CSS rows below. |
+| `<script>` | Not supported | Never run. Reported. |
+| `<view>` | Not supported | Named views are not used. Reported. |
+| `<path>` | Supported | All commands, including arcs; data up to 1 000 000 characters. |
+| `<rect>` | Supported | `x`, `y`, `width`, `height`, `rx`, `ry`. |
+| `<circle>` | Supported |  |
+| `<ellipse>` | Supported |  |
+| `<line>` | Supported | Strokes only (no fill, as in browsers). |
+| `<polyline>` | Supported |  |
+| `<polygon>` | Supported |  |
+| `<linearGradient>` | Supported | `x1`..`y2`, `gradientUnits`, `gradientTransform`, `spreadMethod`, `href` inheritance. |
+| `<radialGradient>` | Partial | As the linear one plus `cx`, `cy`, `r`, `fx`, `fy`; the focal radius `fr` is ignored (reported). |
+| `<stop>` | Supported | `offset`, `stop-color`, `stop-opacity`. |
+| `<pattern>` | Partial | Replaced by the colour of the pattern's first shape (reported). |
+| `<solidcolor>` | Not supported | SVG 2 draft element that no browser ships. Reported. |
+| `<hatch>` | Not supported | SVG 2 draft, as above. Reported. |
+| `<hatchpath>` | Not supported | SVG 2 draft. Reported. |
+| `<meshgradient>` | Not supported | SVG 2 draft. Reported. |
+| `<meshrow>` | Not supported | SVG 2 draft. Reported. |
+| `<meshpatch>` | Not supported | SVG 2 draft. Reported. |
+| `<clipPath>` | Partial | The union of its shapes, groups and `<use>` (`clip-rule`, `clipPathUnits`, `transform`). A `<text>` inside is ignored (reported); text and images are not clipped by `clip-path`. |
+| `<mask>` | Partial | Applied as a geometric clip; the luminance is ignored (reported). |
+| `<marker>` | Supported | `marker-start`, `marker-mid`, `marker-end`, `marker`; `orient`, `markerUnits`, `refX`, `refY`, `viewBox`, `markerWidth`, `markerHeight`, `overflow`. Markers inside a marker are not drawn. |
+| `<text>` | Partial | One run placed at the first `x` / `y`, with `text-anchor`, `font-family`, `font-size`, `font-weight`, `font-style`, a solid `fill` and rotation from the transform. A list of `x` / `y` values, `dx`, `dy`, `rotate`, `textLength`, `lengthAdjust`, `letter-spacing`, `word-spacing`, `text-decoration`, `dominant-baseline`, `baseline-shift`, `writing-mode`, `direction` are ignored (reported); stroked text is not drawn and a gradient fill is drawn black. |
+| `<tspan>` | Partial | Own fill, font, weight and style per span; spans do not move the text (only the first `x` / `y` counts). |
+| `<textPath>` | Partial | Drawn as ordinary straight text (reported). |
+| `<tref>` | Not supported | SVG 1.1, removed from SVG 2. Reported. |
+| `<altGlyph>` | Not supported | SVG 1.1. Reported. |
+| `<altGlyphDef>` | Not supported | SVG 1.1. Reported. |
+| `<altGlyphItem>` | Not supported | SVG 1.1. Reported. |
+| `<glyphRef>` | Not supported | SVG 1.1. Reported. |
+| `<textArea>` | Not supported | SVG Tiny 1.2 flowed text. Reported. |
+| `<image>` | Partial | Embedded `data:` URIs (PNG, JPG) as an axis-aligned rectangle with opacity; external URLs are not loaded (reported); `preserveAspectRatio` is ignored (reported). |
+| `<foreignObject>` | Not supported | HTML and other XML inside is not drawn. Reported. |
+| `<video>` | Not supported | Reported. |
+| `<audio>` | Not supported | Reported. |
+| `<canvas>` | Not supported | Reported. |
+| `<iframe>` | Not supported | Reported. |
+| `<filter>` | Partial | Only through `filter="url(#id)"` (CSS filter functions such as `blur()` are reported). Filter regions, `in`, `in2` and `result` are not followed: the primitives of a filter are read as one effect, as listed below. |
+| `<feGaussianBlur>` | Partial | The first `stdDeviation` value; becomes a layer blur, or the blur of a drop shadow when an offset or a merge is present. |
+| `<feOffset>` | Partial | `dx`, `dy` become the offset of a drop shadow. |
+| `<feFlood>` | Partial | `flood-color` and `flood-opacity` become the colour of the drop shadow. |
+| `<feMerge>` | Partial | Marks the offset / blur chain as a drop shadow; the merge order is not followed. |
+| `<feMergeNode>` | Partial | Not read on its own; `feMerge` is taken as a whole. |
+| `<feDropShadow>` | Partial | `dx`, `dy`, `stdDeviation`, `flood-color`, `flood-opacity`. |
+| `<feColorMatrix>` | Partial | `type="saturate"` and `type="hueRotate"`; `matrix` and `luminanceToAlpha` are reported. |
+| `<feBlend>` | Not supported | Reported. |
+| `<feComponentTransfer>` | Not supported | Reported. |
+| `<feComposite>` | Not supported | Reported. |
+| `<feConvolveMatrix>` | Not supported | Reported. |
+| `<feDiffuseLighting>` | Not supported | Reported. |
+| `<feDisplacementMap>` | Not supported | Reported. |
+| `<feImage>` | Not supported | Reported. |
+| `<feMorphology>` | Not supported | Reported. |
+| `<feSpecularLighting>` | Not supported | Reported. |
+| `<feTile>` | Not supported | Reported. |
+| `<feTurbulence>` | Not supported | Reported. |
+| `<feFuncR>` | Not supported | Reported. |
+| `<feFuncG>` | Not supported | Reported. |
+| `<feFuncB>` | Not supported | Reported. |
+| `<feFuncA>` | Not supported | Reported. |
+| `<feDistantLight>` | Not supported | Reported. |
+| `<fePointLight>` | Not supported | Reported. |
+| `<feSpotLight>` | Not supported | Reported. |
+| `<animate>` | Not supported | No animation: the document is drawn as written, in its first frame. Reported. |
+| `<animateColor>` | Not supported | As `animate`. |
+| `<animateMotion>` | Not supported | As `animate`. |
+| `<animateTransform>` | Not supported | As `animate`. |
+| `<set>` | Not supported | As `animate`. |
+| `<mpath>` | Not supported | As `animate`. |
+| `<discard>` | Not supported | As `animate`. |
+| `<handler>` | Not supported | SVG Tiny scripting. Reported. |
+| `<listener>` | Not supported | SVG Tiny events. Reported. |
+| `<prefetch>` | Not supported | SVG Tiny. Reported. |
+| `<font>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<font-face>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<font-face-src>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<font-face-uri>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<font-face-format>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<font-face-name>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<glyph>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<missing-glyph>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<hkern>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<vkern>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<color-profile>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+| `<cursor>` | Not supported | SVG 1.1 font or cursor machinery. Reported. |
+
+Properties, CSS and units (a row marked "silent" is ignored without a report):
+
+| Property or feature | Support | Notes |
+|---|---|---|
+| transform | Supported | `matrix`, `translate`, `scale`, `rotate` (with a centre), `skewX`, `skewY`, in any order. |
+| CSS `transform`, `transform-origin`, `transform-box` | Not supported | Only the `transform` attribute works; these are reported. |
+| `fill`, `stroke` | Supported | Named colours, `#rgb`, `#rrggbb`, `#rgba`, `#rrggbbaa`, `rgb()`, `rgba()`, `hsl()`, `hsla()`, `currentColor`, `transparent`, `url(#id)` with a fallback colour. |
+| `context-fill`, `context-stroke`, `color-mix()`, `lab()`, `oklch()` | Not supported | Black is drawn instead; `context-fill` and `context-stroke` are reported. |
+| `fill-rule`, `clip-rule`, `opacity`, `fill-opacity`, `stroke-opacity`, `visibility`, `display` | Supported |  |
+| `stroke-width`, `stroke-linecap`, `stroke-linejoin`, `stroke-miterlimit`, `stroke-dasharray`, `stroke-dashoffset` | Supported | `miter-clip` and `arcs` joins are drawn as miter. |
+| `vector-effect` | Partial | `non-scaling-stroke` works (see below); `non-scaling-size`, `non-rotation` and `fixed-position` ("at risk" in SVG 2) are ignored and reported. Not inherited, as in browsers. |
+| `paint-order`, `mix-blend-mode`, `isolation`, `backdrop-filter` | Not supported | Ignored; reported. Strokes are always drawn over the fill. |
+| `shape-rendering`, `text-rendering`, `color-rendering`, `image-rendering`, `color-interpolation`, `color-interpolation-filters` | Not supported | Rendering hints; ignored silently (everything is anti-aliased). |
+| `font-family`, `font-size`, `font-weight`, `font-style`, `text-anchor` | Supported | See the text engines and the font map. |
+| `font-variant`, `font-stretch`, `font` shorthand, `@font-face` | Not supported | Ignored; `font-variant`, `font-stretch` and `@font-face` are reported. |
+| `xml:space`, `<?xml-stylesheet?>` | Not supported | Whitespace is always collapsed; external style sheets are not loaded. Silent. |
+| Units | Partial | `px`, `%`, `pt`, `pc`, `mm`, `cm`, `in`, `em` / `rem` (16 px), `ex` (8 px). Other units (`vw`, `vh`, `vmin`, `ch`) are read as plain numbers. Silent. |
+| CSS selectors | Partial | Type, `*`, `.class`, `#id`, `[attr]`, `[attr=value]`, descendant and `>` child combinators, comma lists, specificity, `!important`, the `style` attribute. Pseudo-classes, pseudo-elements, `+`, `~` and `[a^=b]`-style operators never match; the rule is skipped and reported. |
+| CSS at-rules and functions | Partial | `@media` rules apply always, whatever the condition (reported); `@import`, `@font-face`, `@keyframes`, `@supports`, `@namespace`, `@charset` are skipped (reported). `var()` and `calc()` are not evaluated (reported); `inherit` works, `initial`, `unset` and `revert` do not (silent). |
+| Untrusted files | Supported | Budgets for depth, elements, `<use>` copies, path data and file size; a file that hits one keeps what was read and is reported (see Untrusted files). |
+
+**Non-scaling strokes.** `vector-effect="non-scaling-stroke"` keeps a stroke the same width on screen whatever transforms apply, as in browsers: the `stroke-width` is measured in screen units and not scaled by the element's `transform`, the `viewBox` fit, the Canvas, the object's scale or the camera. Dashes (`stroke-dasharray`, `stroke-dashoffset`) of such a stroke are in screen units too. The parser turns the stroke into a pixel-mode stroke (`StrokeWidthMode.Pixels`, with `dashInPixels`), and one SVG px of it is:
+
+- on a screen-space Canvas, one reference point: `stroke-width="2"` is 2 × the Canvas scale factor device pixels (it matches what a browser does at a device pixel ratio of the same value, and it stays the same size when a Canvas Scaler changes the scale factor); on a world-space Canvas, one device pixel;
+- in world space (`VectraSvgRenderer`), one device pixel of the camera that sees it;
+- in UI Toolkit (`VectraSvgElement`), one pixel of the panel (a point; at a density of 2, two device pixels);
+- in a baked sprite or a PNG, one pixel of the baked texture.
+
+`StrokeWidthMode.Pixels` on a shape (without SVG) still counts device pixels, so a Vectra shape on a Canvas scaled by 2 gets a hairline twice as thin in UI points as the same number in an SVG. The property is not inherited (SVG 2; Chrome draws it the same way): put it on the element itself, in its `style`, or in a CSS rule; a `<use>` takes it from the referenced element, not from the `<use>` or the `<g>` around it. The mesh follows the screen scale (a change of 1% rebuilds it). Exporting a shape with a pixel stroke as SVG writes `vector-effect="non-scaling-stroke"`; the width is written as given.
 
 **Untrusted files.** The parser stops at budgets instead of crashing or hanging: nesting depth 256, 200 000 elements,
 200 000 elements drawn (every `<use>` copy counts), 10 000 `<use>` copies, 1 000 000 characters of path data, 32 million

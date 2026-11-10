@@ -8,6 +8,8 @@ namespace FirstSymbol.Vectra.Svg
     public sealed class SvgNode
     {
         public string name;
+        /// <summary>Namespace prefix as written (<c>sodipodi</c> in <c>sodipodi:namedview</c>), or null. The name is the part after it.</summary>
+        public string prefix;
         public readonly Dictionary<string, string> attributes = new Dictionary<string, string>(StringComparer.Ordinal);
         public readonly List<SvgNode> children = new List<SvgNode>();
         public SvgNode parent;
@@ -136,7 +138,10 @@ namespace FirstSymbol.Vectra.Svg
                 i++;
                 int nameStart = i;
                 while (i < n && !char.IsWhiteSpace(xml[i]) && xml[i] != '>' && xml[i] != '/') i++;
-                var node = new SvgNode { name = LocalName(xml.Substring(nameStart, i - nameStart)), parent = current };
+                string qualified = xml.Substring(nameStart, i - nameStart);
+                var node = new SvgNode { name = LocalName(qualified), parent = current };
+                int colonAt = qualified.IndexOf(':');
+                if (colonAt > 0 && !qualified.StartsWith("xml", StringComparison.Ordinal)) node.prefix = qualified.Substring(0, colonAt);
                 current.children.Add(node);
 
                 bool selfClosing = false;
