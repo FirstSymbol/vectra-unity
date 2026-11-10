@@ -76,6 +76,22 @@ namespace FirstSymbol.Vectra
             if (m_Mesh == null) m_Mesh = new Mesh { name = "Vectra SVG layer", hideFlags = HideFlags.HideAndDontSave };
             m_Owner.BuildMesh(m_Renderer, m_Mesh, m_From, m_To);
             canvasRenderer.SetMesh(m_Mesh);
+            if (m_LastTexture != m_Renderer.mainTexture)
+            {
+                m_LastTexture = m_Renderer.mainTexture;
+                canvasRenderer.SetTexture(mainTexture);
+            }
+        }
+
+        Texture m_LastTexture;
+
+        public override Texture mainTexture
+        {
+            get
+            {
+                var t = m_Renderer?.mainTexture;
+                return t != null ? t : s_WhiteTexture;
+            }
         }
     }
 }

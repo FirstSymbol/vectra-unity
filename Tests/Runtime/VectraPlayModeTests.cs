@@ -432,6 +432,37 @@ namespace FirstSymbol.Vectra.Tests
             Assert.Less(corner.r, 0.3f, "red rect clipped away near the corner");
         }
 
+        [UnityTest]
+        public IEnumerator Svg_PatternFillsDrawWithTheirTextures_InTwoMeshes()
+        {
+            var doc = VectraSvg.Parse(
+                "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' width='100' height='100'><defs>" +
+                "<pattern id='a' patternUnits='userSpaceOnUse' width='20' height='20'><rect width='10' height='10' fill='#ff0000'/></pattern>" +
+                "<pattern id='b' patternUnits='userSpaceOnUse' width='20' height='20'><rect width='20' height='20' fill='#0000ff'/></pattern></defs>" +
+                "<rect width='50' height='100' fill='url(#a)'/><rect x='50' width='50' height='100' fill='url(#b)'/></svg>");
+            m_Owned.Add(doc);
+            // The image goes under the Canvas first: it asks the Canvas for the vertex channels when it is enabled.
+            var go = new GameObject("SVG", typeof(RectTransform));
+            go.transform.SetParent(m_Canvas.transform, false);
+            ((RectTransform)go.transform).sizeDelta = new Vector2(200, 200);
+            go.AddComponent<CanvasRenderer>();
+            var img = go.AddComponent<VectraSvgImage>();
+            img.Document = doc;
+            yield return null;
+            yield return null;
+            var layers = go.GetComponentsInChildren<VectraSvgLayer>();
+            Assert.AreEqual(1, layers.Length, "the second pattern has its own mesh");
+            Assert.AreNotSame(img.mainTexture, layers[0].mainTexture);
+            var px = Render();
+            var red = At(px, -90, 90);
+            Assert.Greater(red.r, 0.8f, "tile of the first pattern (top-left square)");
+            Assert.Less(red.b, 0.3f);
+            var blue = At(px, 50, 0);
+            Assert.Greater(blue.b, 0.8f, "tile of the second pattern");
+            Assert.Less(blue.r, 0.3f);
+            Assert.Less(At(px, -70, 90).a, 0.1f, "outside the red square the tile is empty");
+        }
+
         [Test]
         public void Svg_ParseAndLoad()
         {

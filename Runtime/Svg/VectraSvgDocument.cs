@@ -136,6 +136,15 @@ namespace FirstSymbol.Vectra.Svg
         public List<SvgElementData> elements = new List<SvgElementData>();
         /// <summary>Messages about unsupported features met during parsing.</summary>
         public List<string> warnings = new List<string>();
+        /// <summary>Images and tiles that pattern paints (<see cref="VectraPaint.textureSource"/>) draw; see <see cref="SvgPatterns"/>.</summary>
+        public List<SvgPatternData> patterns = new List<SvgPatternData>();
+
+        // Decoded images and rendered tiles of the patterns: made on first use, destroyed with the document (never serialized).
+        [NonSerialized] internal Texture2D[] patternTextures;
+        [NonSerialized] internal VectraSvgDocument patternOwner;
+        [NonSerialized] internal int patternDepth;
+
+        void OnDisable() => SvgPatterns.Release(this);
 
         public float AspectRatio => viewBox.height > 0f ? viewBox.width / viewBox.height : 1f;
 
@@ -239,6 +248,8 @@ namespace FirstSymbol.Vectra.Svg
             Color tint, bool world, VectraQuality quality, List<SvgOverride> overrides = null, SvgAlign? align = null,
             bool? slice = null, int from = 0, int to = int.MaxValue, float pointScale = 1f)
         {
+            // Pattern textures are made before the batch starts: drawing a tile needs a renderer of its own.
+            if (doc != null && doc.patterns != null && doc.patterns.Count > 0) SvgPatterns.Prepare(doc, from, to);
             renderer.BeginBatch();
             if (doc == null || doc.elements == null)
             {

@@ -233,9 +233,9 @@ namespace FirstSymbol.Vectra
             if (kind != m_ShaderKind)
             {
                 m_ShaderKind = kind;
-                if (TryGetComponent(out MeshRenderer main)) main.sharedMaterial = VectraMaterials.GetWorld();
+                if (TryGetComponent(out MeshRenderer main)) main.sharedMaterial = VectraMaterials.GetWorld(ShapeBlendMode.Normal, m_Renderer?.mainTexture);
                 foreach (var l in m_Layers)
-                    if (l.go != null && l.go.TryGetComponent(out MeshRenderer lr)) lr.sharedMaterial = VectraMaterials.GetWorld();
+                    if (l.go != null && l.go.TryGetComponent(out MeshRenderer lr)) lr.sharedMaterial = VectraMaterials.GetWorld(ShapeBlendMode.Normal, l.renderer?.mainTexture);
             }
 
             float px = PixelSize();
@@ -277,13 +277,15 @@ namespace FirstSymbol.Vectra
             GetComponent<MeshFilter>().sharedMesh = m_Mesh;
             var mr = GetComponent<MeshRenderer>();
             m_ShaderKind = VectraMaterials.CurrentWorldKind;
-            mr.sharedMaterial = VectraMaterials.GetWorld();
+            mr.sharedMaterial = VectraMaterials.GetWorld(ShapeBlendMode.Normal, m_Renderer.mainTexture);
             mr.sortingOrder = m_SortingOrder;
 
             foreach (var layer in m_Layers)
             {
                 VectraSvgBuilder.Build(m_Document, layer.renderer, rect, px, m_Color, true, m_Quality, m_Overrides, null, null, layer.from, layer.to);
                 layer.renderer.buffer.Upload(layer.mesh);
+                if (layer.go != null && layer.go.TryGetComponent(out MeshRenderer lr))
+                    lr.sharedMaterial = VectraMaterials.GetWorld(ShapeBlendMode.Normal, layer.renderer.mainTexture);
             }
 
             if (m_TextDirty)
