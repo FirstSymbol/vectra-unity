@@ -21,6 +21,8 @@ namespace FirstSymbol.Vectra.Svg
         }
 
         const float OpaqueEps = 1e-3f;
+        // Every nested layer needs a texture of the size of the output and every layer a pass over it: hostile files must not make hundreds.
+        const int MaxLayerDepth = 8, MaxLayers = 256;
 
         /// <summary>
         /// Looks at the compositing properties of an element before its children are drawn: opacity, mask, mix-blend-mode and the
@@ -47,6 +49,15 @@ namespace FirstSymbol.Vectra.Svg
 
             float own = Number(Style(n, "opacity"), 1f);
             var blend = SvgLayers.ParseBlend(Style(n, "mix-blend-mode"));
+            if (ctx.layerDepth >= MaxLayerDepth || ctx.doc.layers.Count >= MaxLayers)
+            {
+                bool wanted = own < 1f - OpaqueEps || blend != SvgBlendMode.Normal || maskRef != null || n.attributes.ContainsKey("data-figma-bg-blur-radius");
+                if (wanted)
+                    ctx.Warn($"SVG limit reached: more than {MaxLayers} layers or layers nested deeper than {MaxLayerDepth} (group opacity, masks, blend modes); the rest is drawn without them (opacity per shape, masks as clips).");
+                if (maskRef != null) clips = AddClip(maskRef, local, n, clips, ctx);
+                return null;
+            }
+
             float blur = Number(n.Attr("data-figma-bg-blur-radius"), 0f) * 0.5f;
             var kind = SvgMaskKind.None;
             List<SvgElementData> maskContent = null;
@@ -72,6 +83,7 @@ namespace FirstSymbol.Vectra.Svg
                 prevTextExtra = ctx.textExtra
             };
             ctx.textExtra *= scope.own;
+            ctx.layerDepth++;
             return scope;
         }
 
@@ -79,6 +91,7 @@ namespace FirstSymbol.Vectra.Svg
         static void EndLayer(LayerScope s, Context ctx)
         {
             ctx.textExtra = s.prevTextExtra;
+            ctx.layerDepth--;
             var doc = ctx.doc;
             int end = doc.elements.Count;
             int paths = 0, first = -1;

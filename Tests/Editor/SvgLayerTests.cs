@@ -91,6 +91,18 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         [Test]
+        public void HostileNesting_IsLimited_AndReported()
+        {
+            string open = string.Concat(Enumerable.Repeat("<g opacity='0.9'>", 20));
+            string close = string.Concat(Enumerable.Repeat("</g>", 20));
+            var doc = Parse(open + TwoRects + close);
+            Assert.AreEqual(8, doc.layers.Count, "eight nested layers at most");
+            Assert.IsTrue(doc.warnings.Any(w => w.Contains("layers nested deeper")), string.Join(" | ", doc.warnings));
+            var wide = Parse(string.Concat(Enumerable.Repeat("<g opacity='0.5'>" + TwoRects + "</g>", 300)));
+            Assert.AreEqual(256, wide.layers.Count, "256 layers at most");
+        }
+
+        [Test]
         public void ElementWithoutPaint_MakesNoLayer()
         {
             var doc = Parse("<g opacity='0.5'><rect width='5' height='5' fill='none'/></g>");

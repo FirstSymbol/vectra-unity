@@ -60,6 +60,7 @@ namespace FirstSymbol.Vectra.Svg
             public List<SvgElementData> sink;
             /// <summary>Opacity of the enclosing groups that text and images still need (paths get it through layers).</summary>
             public float textExtra = 1f;
+            public int layerDepth;
             public List<SvgElementData> Elements => sink ?? doc.elements;
 
             public void Warn(string msg)
@@ -194,7 +195,7 @@ namespace FirstSymbol.Vectra.Svg
                     continue;
                 }
 
-                if (name == "metadata" || name == "title" || name == "desc") continue;
+                if (name == "metadata" || name == "title" || name == "desc" || name == "foreignObject") continue;
                 ReportElements(c, ctx, depth + 1);
             }
         }

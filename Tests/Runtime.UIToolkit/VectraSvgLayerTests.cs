@@ -47,6 +47,18 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
         }
 
         [UnityTest]
+        public IEnumerator Layer_IsNotFlippedOrMirrored()
+        {
+            var doc = Parse("<g opacity='0.5'><rect x='0' y='0' width='100' height='50' fill='#f00'/><rect x='20' y='0' width='60' height='50' fill='#00f'/></g>");
+            m_H.Place(new VectraSvgElement { Document = doc }, 40, 40, 160, 160);
+            yield return m_H.Frames();
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 50, 40 + 25), 128, 128, 255, 8), "blue over red at the top " + UitkHarness.Hex(m_H.Px(90, 65)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 10, 40 + 25), 255, 128, 128, 8), "red only " + UitkHarness.Hex(m_H.Px(50, 65)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 130, 40 + 25), 255, 255, 255, 3), "top right is empty " + UitkHarness.Hex(m_H.Px(170, 65)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 50, 40 + 135), 255, 255, 255, 3), "bottom is empty " + UitkHarness.Hex(m_H.Px(90, 175)));
+        }
+
+        [UnityTest]
         public IEnumerator Multiply_BlendsWithTheDocumentBelow()
         {
             var doc = Parse("<rect x='20' y='20' width='120' height='120' fill='#C86432'/><rect x='40' y='40' width='80' height='80' fill='#3366CC' style='mix-blend-mode:multiply'/>");

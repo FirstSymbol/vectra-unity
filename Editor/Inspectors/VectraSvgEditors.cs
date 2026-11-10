@@ -61,8 +61,13 @@ namespace FirstSymbol.Vectra.Editor
                     int h = aspect >= 1f ? Mathf.Max(8, Mathf.RoundToInt(168 / aspect)) : 168;
                     using var r = new VectraShapeRenderer();
                     var rect = new Rect(0, 0, w, h);
-                    VectraSvgBuilder.Build(doc, r, rect, 1f, Color.white, true, VectraQuality.High, getOverrides?.Invoke());
-                    tex = VectraRasterizer.Render(r, rect, w, h);
+                    if (SvgLayers.HasLayers(doc)) tex = VectraRasterizer.Render(doc, w, h, VectraQuality.High, getOverrides?.Invoke());
+                    else
+                    {
+                        VectraSvgBuilder.Build(doc, r, rect, 1f, Color.white, true, VectraQuality.High, getOverrides?.Invoke());
+                        tex = VectraRasterizer.Render(r, rect, w, h);
+                    }
+
                     tex.hideFlags = HideFlags.HideAndDontSave;
                     image.image = tex;
                 }

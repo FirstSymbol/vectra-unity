@@ -174,6 +174,27 @@ namespace FirstSymbol.Vectra.Tests
             });
         }
 
+        // Shapes only in the top third: a layer that came out upside down or mirrored would show them at the bottom or on the other side.
+        const string TopLeft = "<g opacity='0.5'><rect x='0' y='0' width='100' height='50' fill='#f00'/><rect x='20' y='0' width='60' height='50' fill='#00f'/></g>";
+
+        static void AssertTopLeft(Shot s, string path)
+        {
+            AssertNear(s, 50, 25, 128, 128, 255, 6, path + " top, blue over red");
+            AssertNear(s, 10, 25, 255, 128, 128, 6, path + " top left, red only");
+            AssertNear(s, 130, 25, 255, 255, 255, 2, path + " top right");
+            AssertNear(s, 50, 135, 255, 255, 255, 2, path + " bottom");
+        }
+
+        [UnityTest]
+        public IEnumerator Layers_KeepTheirOrientation_OnEveryPath()
+        {
+            yield return OnBothPaths(Svg(TopLeft), (path, s) => AssertTopLeft(s, path));
+            Object.DestroyImmediate(m_LastCanvas); // it would draw under the world picture
+            World(Svg(TopLeft));
+            yield return Settle();
+            AssertTopLeft(Capture(), "world");
+        }
+
         [UnityTest]
         public IEnumerator ShapeOpacity_WithFillAndStroke_CompositesFillAndStrokeAsOne()
         {
