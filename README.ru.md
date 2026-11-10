@@ -29,7 +29,7 @@ Package Manager → **+** → **Add package from git URL...**
 https://github.com/FirstSymbol/vectra-unity.git
 ```
 
-Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.6.2`.
+Конкретная версия ставится через тег: `https://github.com/FirstSymbol/vectra-unity.git#0.7.0`.
 
 Vectra и Lettera работают и как пакеты, и как обычные папки в `Assets`: когда Lettera лежит папкой, Vectra замечает её и сам добавляет `VECTRA_LETTERA` в символы компиляции (и убирает, когда папка исчезает). Символ, который вы поставили сами, остаётся как есть. Если удалить Lettera при закрытом редакторе, Unity откроется с ошибками компиляции (или в Safe Mode): уберите `VECTRA_LETTERA` в **Project Settings > Player > Scripting Define Symbols** или верните папку и удалите её изнутри Unity.
 
