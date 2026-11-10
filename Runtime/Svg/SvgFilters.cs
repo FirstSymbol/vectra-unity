@@ -125,19 +125,28 @@ namespace FirstSymbol.Vectra.Svg
                     {
                         if (!sh.active) break; // the shape itself (in="SourceGraphic") or the empty background
                         string mode = p.Attr("mode", "normal");
-                        if (mode != "normal")
+                        // Vectra layers blend normally or additively; screen is the nearest of the CSS modes to additive.
+                        var blend = LayerBlend.Normal;
+                        if (mode == "screen" || mode == "plus-lighter") blend = LayerBlend.Additive;
+                        else if (mode != "normal")
                             ctx.Warn("SVG: the shadow blend mode '" + mode + "' is drawn as normal.");
                         if (sh.inner)
-                            effects.Add(new InnerShadowEffect
+                        {
+                            var inner = new InnerShadowEffect
                             {
                                 color = sh.color, offset = new Vector2(sh.dx, sh.dy) * scale, blur = sh.blur * 2f * scale,
-                                choke = sh.choke * scale
-                            });
+                                choke = sh.choke * scale,
+                                blend = blend
+                            };
+                            effects.Add(inner);
+                            if (mode == "screen") ctx.screenBlended.Add(inner);
+                        }
                         else
                             effects.Add(new DropShadowEffect
                             {
                                 color = sh.color, offset = new Vector2(sh.dx, sh.dy) * scale, blur = sh.blur * 2f * scale,
-                                spread = sh.spread * scale
+                                spread = sh.spread * scale,
+                                blend = blend
                             });
                         sh = new FigmaShadow();
                         break;

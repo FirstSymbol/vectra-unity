@@ -56,6 +56,8 @@ namespace FirstSymbol.Vectra.Svg
             public bool stopped, styleReady;
             public readonly List<SvgNode> activeUse = new List<SvgNode>();
             public readonly HashSet<string> warned = new HashSet<string>();
+            /// <summary>Effects that came from a screen blend and were mapped to an additive one (see Emit).</summary>
+            public readonly HashSet<VectraEffect> screenBlended = new HashSet<VectraEffect>();
 
             public void Warn(string msg)
             {
@@ -627,7 +629,8 @@ namespace FirstSymbol.Vectra.Svg
             string stroke = Style(n, "stroke", "none");
             if (stroke != "none" || n.Attr("data-figma-gradient-stroke") != null)
             {
-                var paint = FigmaGradientPaint(n.Attr("data-figma-gradient-stroke"), inverse) ?? (stroke != "none" ? ResolvePaint(stroke, n, bbox, inverse, ctx) : null);
+                var figmaPaint = FigmaGradientPaint(n.Attr("data-figma-gradient-stroke"), inverse);
+                var paint = figmaPaint ?? (stroke != "none" ? ResolvePaint(stroke, n, bbox, inverse, ctx) : null);
                 if (paint != null)
                 {
                     // Non-scaling: the width and the dashes are screen units (pixel mode), whatever transforms apply.
@@ -642,7 +645,8 @@ namespace FirstSymbol.Vectra.Svg
                         widthMode = nonScaling ? StrokeWidthMode.Pixels : StrokeWidthMode.Local,
                         dashInPixels = nonScaling
                     };
-                    paint.opacity *= Mathf.Clamp01(Number(Style(n, "stroke-opacity"), 1f) * opacity);
+                    // Figma writes stroke-opacity="0" next to its gradient JSON: the JSON replaces the paint and its opacity.
+                    paint.opacity *= Mathf.Clamp01((figmaPaint != null ? 1f : Number(Style(n, "stroke-opacity"), 1f)) * opacity);
                     var dashes = Style(n, "stroke-dasharray");
                     if (!string.IsNullOrEmpty(dashes) && dashes != "none")
                     {
@@ -666,7 +670,20 @@ namespace FirstSymbol.Vectra.Svg
             if (!e.hasFill && !e.hasStroke) return;
             if (clips != null) e.clips.AddRange(clips);
             if (effects != null)
-                foreach (var fx in effects) e.effects.Add(fx.Clone());
+                foreach (var fx in effects)
+                {
+                    var copy = fx.Clone();
+                    // Screen over a solid fill is dst + s * (1 - dst): additive with the colour scaled by what the fill leaves free.
+                    if (copy is InnerShadowEffect ins && ctx.screenBlended.Contains(fx) && e.hasFill && e.fill != null &&
+                        e.fill.type == PaintType.Solid && e.fill.opacity >= 1f && e.fill.color.a >= 1f)
+                    {
+                        var f = e.fill.color;
+                        ins.color = new Color(ins.color.r * (1f - f.r), ins.color.g * (1f - f.g), ins.color.b * (1f - f.b), ins.color.a);
+                    }
+
+                    e.effects.Add(copy);
+                }
+
             ctx.doc.elements.Add(e);
         }
 

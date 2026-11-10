@@ -225,6 +225,43 @@ namespace FirstSymbol.Vectra.Editor.Tests
             Assert.AreEqual(-6f, shadow.offset.y, 1e-3f); // y-up local space: the shadow falls below the shape
         }
 
+        [Test]
+        public void RealFigmaStrokeGradients_ReplaceThePaintAndItsZeroOpacity()
+        {
+            foreach (var pair in new[] { ("40_angular_stroke", PaintType.AngularGradient), ("41_diamond_stroke_rect", PaintType.DiamondGradient) })
+            {
+                var doc = Load(pair.Item1);
+                var e = doc.elements.Last();
+                Assert.IsTrue(e.hasStroke, pair.Item1);
+                Assert.AreEqual(pair.Item2, e.stroke.paint.type);
+                Assert.AreEqual(1f, e.stroke.paint.opacity, 1e-4f);
+                Assert.IsFalse(doc.warnings.Any(w => w.Contains("foreignObject")), string.Join(" | ", doc.warnings));
+            }
+        }
+
+        [Test]
+        public void ShadowBlend_ScreenIsMappedToAdditive_MultiplyIsReported()
+        {
+            var screen = Load("45_inner_shadow_blend_screen");
+            var ins = (InnerShadowEffect)Shape(screen).effects[0];
+            Assert.AreEqual(LayerBlend.Additive, ins.blend);
+            Assert.IsFalse(screen.warnings.Any(w => w.Contains("blend mode")), string.Join(" | ", screen.warnings));
+            var mul = Load("42_shadow_blend_multiply");
+            Assert.AreEqual(LayerBlend.Normal, ((DropShadowEffect)Shape(mul).effects[0]).blend);
+            Assert.IsTrue(mul.warnings.Any(w => w.Contains("multiply")));
+        }
+
+        [Test]
+        public void Pixels_ShadowOfAStrokeOnlyElementFollowsTheStroke()
+        {
+            var t = Render("44_shadow_on_stroke_only");
+            Assert.Greater(Px(t, 80, 80).r, 0.98f);      // the disc interior stays clean
+            Assert.Less(Px(t, 80, 126).r, 0.9f);          // below the ring: its shadow
+            var s = Render("40_angular_stroke");
+            Assert.Less(Px(s, 124, 80).g, 0.4f);          // ring painted (red at 3 o'clock)
+            Assert.Greater(Px(s, 80, 80).r, 0.98f);       // hole
+        }
+
         // ---- pixels ----
 
         static Color Px(Texture2D t, float x, float y) => t.GetPixel(Mathf.RoundToInt(x * t.width / 160f), t.height - 1 - Mathf.RoundToInt(y * t.height / 160f));
