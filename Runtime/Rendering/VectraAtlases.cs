@@ -903,10 +903,14 @@ namespace FirstSymbol.Vectra.Rendering
         static void UploadRegion(RectInt r)
         {
             bool half = s_Texture.format == TextureFormat.RHalf;
-            if (s_Staging == null || s_Staging.width != r.width || s_Staging.height != r.height || s_Staging.format != s_Texture.format)
+            // The staging texture only grows (in steps of 16 texels), so a block that changes by a texel from one rebuild to the next
+            // does not make a new texture, which would allocate managed memory every time.
+            if (s_Staging == null || s_Staging.width < r.width || s_Staging.height < r.height || s_Staging.format != s_Texture.format)
             {
+                int w = Mathf.Max((r.width + 15) & ~15, s_Staging != null ? s_Staging.width : 0);
+                int h = Mathf.Max((r.height + 15) & ~15, s_Staging != null ? s_Staging.height : 0);
                 if (s_Staging != null) UnityEngine.Object.DestroyImmediate(s_Staging);
-                s_Staging = new Texture2D(r.width, r.height, s_Texture.format, false, true)
+                s_Staging = new Texture2D(w, h, s_Texture.format, false, true)
                 {
                     name = "Vectra SDF Staging",
                     hideFlags = HideFlags.HideAndDontSave,
@@ -916,18 +920,18 @@ namespace FirstSymbol.Vectra.Rendering
 
             if (half)
             {
-                var rows = new NativeArray<half>(r.width * r.height, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                var rows = new NativeArray<half>(s_Staging.width * s_Staging.height, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
                 for (int y = 0; y < r.height; y++)
-                    NativeArray<half>.Copy(s_Data, (r.y + y) * s_Size + r.x, rows, y * r.width, r.width);
+                    NativeArray<half>.Copy(s_Data, (r.y + y) * s_Size + r.x, rows, y * s_Staging.width, r.width);
                 s_Staging.SetPixelData(rows, 0);
                 rows.Dispose();
             }
             else
             {
-                var rows = new NativeArray<float>(r.width * r.height, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                var rows = new NativeArray<float>(s_Staging.width * s_Staging.height, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
                 for (int y = 0; y < r.height; y++)
                 {
-                    int src = (r.y + y) * s_Size + r.x, dst = y * r.width;
+                    int src = (r.y + y) * s_Size + r.x, dst = y * s_Staging.width;
                     for (int x = 0; x < r.width; x++) rows[dst + x] = s_Data[src + x];
                 }
 

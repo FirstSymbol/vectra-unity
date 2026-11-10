@@ -55,6 +55,24 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         [Test]
+        public void Rebuild_WhenTheDistanceRegionChangesSize_AllocatesNothing()
+        {
+            if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null) Assert.Ignore("needs a graphics device");
+            using var r = new VectraShapeRenderer();
+            var shape = Boolean(6f);
+            var input = Input(shape);
+            // The union grows and shrinks, so the block sent to the atlas changes size from one rebuild to the next.
+            var (bytes, count) = GcProbe.Measure(i =>
+            {
+                shape.operands[1].rect = new Rect(0.2f, 0.2f, 0.3f + (i % 9) * 0.07f, 0.5f);
+                r.Build(input);
+                VectraAtlases.Flush();
+            }, 18, out string all);
+            Assert.AreEqual(0, bytes, "managed bytes on this thread (" + all + ")");
+            Assert.AreEqual(0, count, "managed allocations");
+        }
+
+        [Test]
         public void NestedBoolean_MatchesTheFlatEquivalent()
         {
             var inner = new BooleanShape();
