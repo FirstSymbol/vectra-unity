@@ -396,6 +396,9 @@ namespace FirstSymbol.Vectra.Editor
             output.Add(VxFields.For(so.FindProperty("filterMode"), t, "Filter mode").VisibleWhen(mode, p => p.enumValueIndex != 0));
             output.Add(VxFields.For(so.FindProperty("pixelsPerUnit"), t, "Pixels per unit").VisibleWhen(mode, p => p.enumValueIndex == 1));
             output.Add(VxFields.For(so.FindProperty("spritePivot"), t, "Pivot").VisibleWhen(mode, p => p.enumValueIndex == 1));
+            output.Add(VxFields.For(so.FindProperty("spriteBorder"), t, "9-slice border").VisibleWhen(mode, p => p.enumValueIndex == 1));
+            output.Add(VxFields.For(so.FindProperty("tightMesh"), t, "Tight mesh").VisibleWhen(mode, p => p.enumValueIndex == 1));
+            output.Add(VxFields.For(so.FindProperty("generateMipmaps"), t, "Mipmaps").VisibleWhen(mode, p => p.enumValueIndex == 1));
             root.Add(VxUI.TitledCard("vectra.import.output", VxIcon.Kind.Settings, "Output", output));
             root.Add(VxUI.TitledCard("vectra.import.warn", VxIcon.Kind.Warning, "Import report",
                 VxSvg.Warnings(() => AssetDatabase.LoadAssetAtPath<VectraSvgDocument>(path))));

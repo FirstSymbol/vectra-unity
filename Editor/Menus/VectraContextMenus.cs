@@ -90,32 +90,6 @@ namespace FirstSymbol.Vectra.Editor
         }
 
         // -----------------------------------------------------------------------------------------------------
-        // Export as sprite asset
-        // -----------------------------------------------------------------------------------------------------
-
-        [MenuItem("CONTEXT/VectraShape/Export as Sprite Asset...", false, 620)]
-        static void ExportSprite(MenuCommand c)
-        {
-            var shape = (VectraShape)c.context;
-            var r = shape.rectTransform.rect;
-            string path = EditorUtility.SaveFilePanelInProject("Export Sprite", shape.name, "png", "Where to save the sprite");
-            if (string.IsNullOrEmpty(path)) return;
-            var tex = VectraRasterizer.Render(shape.Content, r.size, Mathf.CeilToInt(r.width * 2f), Mathf.CeilToInt(r.height * 2f));
-            System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
-            Object.DestroyImmediate(tex);
-            AssetDatabase.ImportAsset(path);
-            if (AssetImporter.GetAtPath(path) is TextureImporter ti)
-            {
-                ti.textureType = TextureImporterType.Sprite;
-                ti.spritePixelsPerUnit = 200f;
-                ti.alphaIsTransparency = true;
-                ti.SaveAndReimport();
-            }
-
-            EditorGUIUtility.PingObject(AssetDatabase.LoadAssetAtPath<Sprite>(path));
-        }
-
-        // -----------------------------------------------------------------------------------------------------
         // SVG
         // -----------------------------------------------------------------------------------------------------
 

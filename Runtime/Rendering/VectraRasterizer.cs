@@ -52,11 +52,7 @@ namespace FirstSymbol.Vectra.Rendering
             var proj = Matrix4x4.Ortho(view.xMin, view.xMax, view.yMin, view.yMax, -1f, 1f);
             // CommandBuffer.SetViewProjectionMatrices applies the platform's render-texture Y flip itself.
             cmd.SetViewProjectionMatrices(Matrix4x4.identity, proj);
-            var mat = VectraMaterials.GetWorld();
-            var block = new MaterialPropertyBlock();
-            if (renderer.mainTexture != null) block.SetTexture("_MainTex", renderer.mainTexture);
-            else block.SetTexture("_MainTex", Texture2D.whiteTexture);
-            cmd.DrawMesh(mesh, Matrix4x4.identity, mat, 0, 0, block);
+            cmd.DrawMesh(mesh, Matrix4x4.identity, VectraMaterials.GetWorld(ShapeBlendMode.Normal, renderer.mainTexture), 0, 0);
             Graphics.ExecuteCommandBuffer(cmd);
             cmd.Release();
 

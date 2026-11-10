@@ -254,7 +254,8 @@ namespace FirstSymbol.Vectra
         {
             // Pixel-size dependent tessellation and anti-aliasing margins follow large scale changes.
             float s = CurrentScale();
-            if (m_LastScale > 0f && (s > m_LastScale * 1.25f || s < m_LastScale * 0.8f))
+            bool fine = m_Content.HasPixelStrokes;
+            if (m_LastScale > 0f && (fine ? Mathf.Abs(s - m_LastScale) > m_LastScale * 0.01f : (s > m_LastScale * 1.25f || s < m_LastScale * 0.8f)))
             {
                 m_LastScale = s;
                 SetVerticesDirty();
@@ -336,7 +337,8 @@ namespace FirstSymbol.Vectra
             foreach (var s in m_Content.ActiveStrokes)
             {
                 if (s == null || !s.enabled) continue;
-                float w = s.alignment == StrokeAlignment.Center ? s.width * 0.5f : s.alignment == StrokeAlignment.Outside ? s.width : 0f;
+                float sw = s.EffectiveWidth(frame.pixelSize);
+                float w = s.alignment == StrokeAlignment.Center ? sw * 0.5f : s.alignment == StrokeAlignment.Outside ? sw : 0f;
                 strokeReach = math.max(strokeReach, w);
             }
 

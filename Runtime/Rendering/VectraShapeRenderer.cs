@@ -437,7 +437,7 @@ namespace FirstSymbol.Vectra.Rendering
             }
         }
 
-        static bool StrokeVisible(StrokeLayer s) =>
+        bool StrokeVisible(StrokeLayer s) =>
             s != null && s.enabled && s.width > 0f && s.paint != null && s.paint.IsVisible && s.trimStart != s.trimEnd;
 
         bool CanStrokeAnalytically(bool analytic, StrokeLayer s)
@@ -754,13 +754,15 @@ namespace FirstSymbol.Vectra.Rendering
 
             var h = new HashBuilder(m_PolyKey);
             h.Add(s.ComputeGeometryHash());
+            float width = s.EffectiveWidth(m_Frame.pixelSize);
+            if (s.widthMode == StrokeWidthMode.Pixels) h.Add(width);
             int key = h.Value | 1;
             var traps = m_StrokeTraps[index];
             if (m_StrokeKeys[index] == key) return traps;
             m_StrokeKeys[index] = key;
             traps.Clear();
 
-            var p = StrokeParams.Default(s.alignment == StrokeAlignment.Center ? s.width : s.width * 2f);
+            var p = StrokeParams.Default(s.alignment == StrokeAlignment.Center ? width : width * 2f);
             p.cap = s.cap;
             p.join = s.join;
             p.miterLimit = s.miterLimit;
@@ -1213,9 +1215,10 @@ namespace FirstSymbol.Vectra.Rendering
         void EmitStroke(int index, StrokeLayer s, bool analytic, VectraShapeGeometry geometry, float tol)
         {
             if (!StrokeVisible(s)) return;
+            float width = s.EffectiveWidth(m_Frame.pixelSize);
             if (CanStrokeAnalytically(analytic, s))
             {
-                float hw = s.width * 0.5f;
+                float hw = width * 0.5f;
                 float offset = s.alignment == StrokeAlignment.Inside ? -hw : s.alignment == StrokeAlignment.Outside ? hw : 0f;
                 EmitAnalytic(LayerKind.Stroke, s.paint, new float2(hw, offset), math.max(offset + hw, 0f), float2.zero);
                 return;
@@ -1224,7 +1227,7 @@ namespace FirstSymbol.Vectra.Rendering
             if (m_SmoothSdf)
             {
                 // Smooth booleans have no exact outline: the stroke is a band of the distance field.
-                float hw = s.width * 0.5f;
+                float hw = width * 0.5f;
                 float offset = s.alignment == StrokeAlignment.Inside ? -hw : s.alignment == StrokeAlignment.Outside ? hw : 0f;
                 EmitSdf(LayerKind.Stroke, s.paint, new float2(hw, offset), float2.zero);
                 return;

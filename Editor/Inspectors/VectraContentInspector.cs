@@ -693,7 +693,8 @@ namespace FirstSymbol.Vectra.Editor
                 if (stroke)
                 {
                     var align = (StrokeAlignment)e.FindPropertyRelative("alignment").enumValueIndex;
-                    title.text = $"{e.FindPropertyRelative("width").floatValue:0.##} px · {align}";
+                    bool hair = e.FindPropertyRelative("widthMode").enumValueIndex == (int)StrokeWidthMode.Pixels;
+                    title.text = $"{e.FindPropertyRelative("width").floatValue:0.##} px{(hair ? " fixed" : "")} · {align}";
                     if (e.FindPropertyRelative("dashed").boolValue) title.text += " · dashed";
                 }
                 else title.text = VxPaint.NameOf(type);
@@ -738,6 +739,8 @@ namespace FirstSymbol.Vectra.Editor
             var width = new Slider(0f, 64f) { showInputField = true };
             width.BindProperty(P("width"));
             body.Add(VxUI.Row("Width", width));
+            body.Add(VxUI.Row("Unit", VxSegmented.ForEnum(P("widthMode"), new[] { "Local", "Pixels" }, null,
+                new[] { "Width follows the scale of the shape", "Width is in device pixels at any scale or zoom (hairline)" }), "Local units or device pixels"));
             body.Add(VxUI.Row("Position", VxSegmented.ForEnum(P("alignment"), new[] { "Center", "Inside", "Outside" },
                 new[] { VxIcon.Kind.AlignCenter, VxIcon.Kind.AlignInside, VxIcon.Kind.AlignOutside }), "Where the stroke sits relative to the outline"));
             body.Add(VxUI.Row("Caps", VxSegmented.ForEnum(P("cap"), new[] { "Butt", "Round", "Square" },

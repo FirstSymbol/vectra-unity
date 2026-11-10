@@ -30,6 +30,18 @@ namespace FirstSymbol.Vectra
         public List<StrokeLayer> ActiveStrokes => style != null ? style.strokes : strokes;
         public List<VectraEffect> ActiveEffects => style != null ? style.effects : effects;
 
+        /// <summary>True when a visible stroke is measured in device pixels (then the mesh must follow small scale changes).</summary>
+        public bool HasPixelStrokes
+        {
+            get
+            {
+                var list = ActiveStrokes;
+                for (int i = 0; i < list.Count; i++)
+                    if (list[i] != null && list[i].enabled && list[i].widthMode == StrokeWidthMode.Pixels) return true;
+                return false;
+            }
+        }
+
         public VectraBuildInput ToInput(in ShapeFrame frame, Color tint, bool world) => new VectraBuildInput
         {
             geometry = ActiveGeometry,

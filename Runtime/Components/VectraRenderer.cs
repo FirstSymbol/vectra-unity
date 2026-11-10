@@ -31,11 +31,9 @@ namespace FirstSymbol.Vectra
         Mesh m_Mesh;
         MeshRenderer m_MeshRenderer;
         MeshFilter m_MeshFilter;
-        MaterialPropertyBlock m_Block;
         bool m_Dirty = true;
         float m_BuiltPixelSize;
 
-        static readonly int s_MainTex = Shader.PropertyToID("_MainTex");
         static readonly List<VectraRenderer> s_StyleUsers = new List<VectraRenderer>();
         static bool s_StyleHooked;
 
@@ -181,7 +179,7 @@ namespace FirstSymbol.Vectra
         void ApplyRendererSettings()
         {
             if (m_MeshRenderer == null) return;
-            m_MeshRenderer.sharedMaterial = VectraMaterials.GetWorld(m_Content.blendMode);
+            m_MeshRenderer.sharedMaterial = VectraMaterials.GetWorld(m_Content.blendMode, m_Renderer?.mainTexture);
             m_MeshRenderer.sortingOrder = m_SortingOrder;
             if (!string.IsNullOrEmpty(m_SortingLayer)) m_MeshRenderer.sortingLayerName = m_SortingLayer;
             m_MeshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -193,7 +191,8 @@ namespace FirstSymbol.Vectra
             if (!m_Dirty && m_PixelSize <= 0f)
             {
                 float px = CurrentPixelSize();
-                if (m_BuiltPixelSize > 0f && (px > m_BuiltPixelSize * 1.5f || px < m_BuiltPixelSize / 1.5f)) m_Dirty = true;
+                float band = m_Content.HasPixelStrokes ? 1.01f : 1.5f;
+                if (m_BuiltPixelSize > 0f && (px > m_BuiltPixelSize * band || px < m_BuiltPixelSize / band)) m_Dirty = true;
             }
 
             if (m_Dirty) Rebuild();
@@ -245,12 +244,9 @@ namespace FirstSymbol.Vectra
 
             if (m_MeshRenderer != null)
             {
-                if (m_MeshRenderer.sharedMaterial == null || m_MeshRenderer.sharedMaterial != VectraMaterials.GetWorld(m_Content.blendMode))
-                    ApplyRendererSettings();
-                m_Block ??= new MaterialPropertyBlock();
-                m_MeshRenderer.GetPropertyBlock(m_Block);
-                m_Block.SetTexture(s_MainTex, m_Renderer.mainTexture != null ? m_Renderer.mainTexture : Texture2D.whiteTexture);
-                m_MeshRenderer.SetPropertyBlock(m_Block);
+                // The paint texture lives on a shared material, not on a property block: that keeps shapes in one SRP Batcher batch.
+                var material = VectraMaterials.GetWorld(m_Content.blendMode, m_Renderer.mainTexture);
+                if (m_MeshRenderer.sharedMaterial != material) m_MeshRenderer.sharedMaterial = material;
             }
 
             if (m_GenerateCollider) UpdateCollider();
@@ -261,8 +257,13 @@ namespace FirstSymbol.Vectra
         {
             m_HitTester ??= new VectraHitTester();
             float reach = 0f;
+            float pixel = CurrentPixelSize();
             foreach (var s in m_Content.ActiveStrokes)
-                if (s != null && s.enabled) reach = math.max(reach, s.alignment == StrokeAlignment.Center ? s.width * 0.5f : s.alignment == StrokeAlignment.Outside ? s.width : 0f);
+            {
+                if (s == null || !s.enabled) continue;
+                float sw = s.EffectiveWidth(pixel);
+                reach = math.max(reach, s.alignment == StrokeAlignment.Center ? sw * 0.5f : s.alignment == StrokeAlignment.Outside ? sw : 0f);
+            }
             return m_HitTester.Contains(m_Content.ActiveGeometry, Frame, local, reach);
         }
 

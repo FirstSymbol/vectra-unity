@@ -30,6 +30,12 @@ namespace FirstSymbol.Vectra.Editor
         public FilterMode filterMode = FilterMode.Bilinear;
         public float pixelsPerUnit = 100f;
         public Vector2 spritePivot = new Vector2(0.5f, 0.5f);
+        [Tooltip("Sprite mode: 9-slice border in texture pixels (left, bottom, right, top).")]
+        public Vector4 spriteBorder;
+        [Tooltip("Sprite mode: the mesh hugs the opaque pixels (ignored with a border).")]
+        public bool tightMesh = true;
+        [Tooltip("Sprite mode: build mipmaps (smoother when the image is drawn much smaller).")]
+        public bool generateMipmaps;
 
         public override void OnImportAsset(AssetImportContext ctx)
         {
@@ -51,13 +57,37 @@ namespace FirstSymbol.Vectra.Editor
             int w = aspect >= 1f ? size : Mathf.Max(1, Mathf.RoundToInt(size * aspect));
             int h = aspect >= 1f ? Mathf.Max(1, Mathf.RoundToInt(size / aspect)) : size;
             Texture2D tex;
+            Sprite baked = null;
             try
             {
-                tex = VectraRasterizer.Render(doc, w, h, quality);
+                if (mode == OutputMode.Sprite)
+                {
+                    var options = new VectraSpriteOptions
+                    {
+                        resolution = size,
+                        pixelsPerUnit = pixelsPerUnit,
+                        pivot = spritePivot,
+                        border = spriteBorder,
+                        tightMesh = tightMesh,
+                        generateMipmaps = generateMipmaps,
+                        filterMode = filterMode,
+                        quality = quality
+                    };
+                    baked = VectraSpriteBaker.Bake(doc, options);
+                    tex = baked != null ? baked.texture : null;
+                }
+                else tex = VectraRasterizer.Render(doc, w, h, quality);
             }
             catch (System.Exception e)
             {
                 ctx.LogImportError($"Could not rasterize {doc.name}: {e.Message}");
+                ctx.SetMainObject(doc);
+                return;
+            }
+
+            if (tex == null)
+            {
+                ctx.LogImportError($"Could not rasterize {doc.name}.");
                 ctx.SetMainObject(doc);
                 return;
             }
@@ -69,7 +99,7 @@ namespace FirstSymbol.Vectra.Editor
             ctx.AddObjectToAsset("texture", tex);
             if (mode == OutputMode.Sprite)
             {
-                var sprite = Sprite.Create(tex, new Rect(0, 0, w, h), spritePivot, pixelsPerUnit, 0, SpriteMeshType.FullRect);
+                var sprite = baked;
                 sprite.name = doc.name;
                 ctx.AddObjectToAsset("sprite", sprite);
                 ctx.SetMainObject(sprite);

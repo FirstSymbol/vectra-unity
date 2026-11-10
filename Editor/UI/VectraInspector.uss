@@ -31,6 +31,33 @@
     --vx-faint: rgba(31, 35, 40, 0.35);
 }
 
+/* The hub can show the page light while the editor skin is dark: built-in fields do not follow the class, so they are coloured here. */
+.vx--light .unity-base-field__input,
+.vx--light .unity-base-text-field__input,
+.vx--light .unity-base-popup-field__input,
+.vx--light .unity-object-field__input,
+.vx--light .unity-object-field-display {
+    background-color: #ffffff;
+    border-color: rgba(0, 0, 0, 0.22);
+    color: var(--vx-text);
+}
+
+.vx--light .unity-object-field-display__label,
+.vx--light .unity-base-popup-field__text,
+.vx--light .unity-text-element,
+.vx--light .unity-label {
+    color: var(--vx-text);
+}
+
+.vx--light .unity-object-field__selector {
+    background-color: #e4e6ea;
+    border-color: rgba(0, 0, 0, 0.22);
+}
+
+.vx--light .unity-base-popup-field__arrow {
+    -unity-background-image-tint-color: var(--vx-dim);
+}
+
 /* ---------- Header ---------- */
 
 .vx-header {

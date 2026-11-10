@@ -197,6 +197,15 @@ namespace FirstSymbol.Vectra
         }
     }
 
+    /// <summary>What <see cref="StrokeLayer.width"/> is measured in.</summary>
+    public enum StrokeWidthMode
+    {
+        /// <summary>Local units of the shape (follows the scale of the object).</summary>
+        Local,
+        /// <summary>Device pixels: the stroke keeps this width at any scale or zoom (hairline).</summary>
+        Pixels
+    }
+
     public enum StrokeAlignment
     {
         Center,
@@ -221,6 +230,8 @@ namespace FirstSymbol.Vectra
         public bool enabled = true;
         public VectraPaint paint = VectraPaint.Solid(Color.black);
         [Min(0f)] public float width = 2f;
+        /// <summary>Unit of <see cref="width"/>. <see cref="StrokeWidthMode.Pixels"/> keeps the stroke N device pixels wide at any scale.</summary>
+        public StrokeWidthMode widthMode = StrokeWidthMode.Local;
         public StrokeAlignment alignment = StrokeAlignment.Center;
         public LineCap cap = LineCap.Butt;
         public LineJoin join = LineJoin.Miter;
@@ -249,6 +260,9 @@ namespace FirstSymbol.Vectra
             paint = VectraPaint.Solid(color);
             this.width = width;
         }
+
+        /// <summary>Width in local units for a shape whose screen pixel is <paramref name="pixelSize"/> local units.</summary>
+        public float EffectiveWidth(float pixelSize) => widthMode == StrokeWidthMode.Pixels ? width * pixelSize : width;
 
         public bool HasTrim => trimStart > 0f || trimEnd < 1f;
 
