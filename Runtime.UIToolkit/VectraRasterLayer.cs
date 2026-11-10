@@ -18,12 +18,13 @@ namespace FirstSymbol.Vectra.UIToolkit
         SurfaceRegion m_Region;
         Rect m_Quad;
         Rect m_Uv;
+        bool m_Ready;
 
         /// <summary>Pixels per point the layer was rasterized for.</summary>
         public float builtScale;
         public int rasterCount;
         public Vector2Int pixelSize => new Vector2Int(m_Region.w, m_Region.h);
-        public bool HasImage => m_Region.IsValid;
+        public bool HasImage => m_Ready && m_Region.IsValid;
         public Texture Texture => m_Region.Texture;
         /// <summary>The quad in element space (y down), including the one-pixel border.</summary>
         public Rect Quad => m_Quad;
@@ -66,7 +67,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             if (m_Mesh == null) m_Mesh = new Mesh { name = "Vectra UI Toolkit", hideFlags = HideFlags.HideAndDontSave };
             buf.Upload(m_Mesh);
             var material = VectraMaterials.GetUI(blend);
-            VectraSurfaces.Draw(m_Region, m_Mesh, material, renderer.mainTexture, area);
+            m_Ready = VectraSurfaces.Draw(m_Region, m_Mesh, material, renderer.mainTexture, area);
             var ps = m_Region.PageSize;
             m_Uv = Rect.MinMaxRect((float)m_Region.x / ps.x, (float)m_Region.y / ps.y,
                 (float)(m_Region.x + m_Region.w) / ps.x, (float)(m_Region.y + m_Region.h) / ps.y);
@@ -76,7 +77,7 @@ namespace FirstSymbol.Vectra.UIToolkit
         public void Emit(MeshGenerationContext mgc, Color32 tint)
         {
             var tex = m_Region.Texture;
-            if (tex == null) return;
+            if (!m_Ready || tex == null) return;
             var q = m_Quad;
             var uv = m_Uv;
             // The projection used for the render texture comes out flipped when sampled by UI Toolkit on platforms whose
@@ -100,6 +101,7 @@ namespace FirstSymbol.Vectra.UIToolkit
 
         public void Release()
         {
+            m_Ready = false;
             if (m_Region.IsValid) VectraSurfaces.Free(ref m_Region);
             m_Quad = default;
         }

@@ -192,11 +192,11 @@ namespace FirstSymbol.Vectra.UIToolkit
         /// drawn straight into the page: no scissor clear and no texture copy, which some platforms (WebGL 2) do not offer
         /// for render textures.
         /// </summary>
-        public static void Draw(in SurfaceRegion region, Mesh mesh, Material material, Texture main, Rect area)
+        public static bool Draw(in SurfaceRegion region, Mesh mesh, Material material, Texture main, Rect area)
         {
-            if (!region.IsValid || mesh == null || material == null) return;
+            if (!region.IsValid || mesh == null || material == null) return false;
             var clear = ClearMaterial;
-            if (clear == null) return;
+            if (clear == null) return false;
             VectraAtlases.Flush();
             s_Cmd ??= new CommandBuffer { name = "Vectra UI Toolkit" };
             s_Block ??= new MaterialPropertyBlock();
@@ -217,6 +217,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             cmd.Clear();
             Graphics.SetRenderTarget(previous);
             DrawCount++;
+            return true;
         }
 
         static Material ClearMaterial
