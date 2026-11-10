@@ -91,7 +91,11 @@ namespace FirstSymbol.Vectra.Geometry
             }
 
             double extent = math.max(math.max(maxX - minX, maxY - minY), 1e-6);
-            double epsX = extent * 1e-9;
+            // Inputs are floats (strokers and flatteners add a few ulps of noise to edges that are meant to coincide), so
+            // a gap narrower than that noise is not a real gap: left alone it becomes a sliver whose two sides are both
+            // anti-aliased, which shows as a lighter seam through a uniform area.
+            double maxAbs = math.max(math.max(math.abs(minX), math.abs(maxX)), math.max(math.abs(minY), math.abs(maxY)));
+            double epsX = math.max(extent * 1e-9, maxAbs * 1e-6);
             double epsY = extent * 1e-9;
 
             edges.Sort(new EdgeStartComparer());

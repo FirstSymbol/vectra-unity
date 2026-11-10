@@ -197,10 +197,19 @@ namespace FirstSymbol.Vectra
                 float px = CurrentPixelSize();
                 float band = m_Content.HasPixelStrokes ? 1.01f : 1.5f;
                 if (m_BuiltPixelSize > 0f && (px > m_BuiltPixelSize * band || px < m_BuiltPixelSize / band)) m_Dirty = true;
+                else if (m_BuiltDetail > 0f && !m_Content.HasPixelStrokes && VectraScreenDensity.HasExtraCameras)
+                {
+                    // Curves follow the densest view (a Scene view magnifying the object); small steps at most ten times a second.
+                    float now = VectraScreenDensity.WithExtraCameras(transform, px);
+                    if (VectraScreenDensity.Drifted(now < px ? now : px, m_BuiltDetail, ref m_NextDetailCheck, Time.unscaledTime)) m_Dirty = true;
+                }
             }
 
             if (m_Dirty) Rebuild();
         }
+
+        float m_BuiltDetail;
+        float m_NextDetailCheck;
 
         float CurrentPixelSize()
         {
@@ -242,6 +251,8 @@ namespace FirstSymbol.Vectra
             if (m_MeshFilter == null) m_MeshFilter = GetComponent<MeshFilter>();
             var frame = Frame;
             m_BuiltPixelSize = frame.pixelSize;
+            if (m_PixelSize <= 0f && !m_Content.HasPixelStrokes) frame.detailPixelSize = VectraScreenDensity.DetailSize(transform, frame.pixelSize);
+            m_BuiltDetail = frame.FlattenSize;
             m_Renderer.Build(m_Content.ToInput(frame, m_Color, true));
             m_Renderer.buffer.Upload(m_Mesh);
             m_MeshFilter.sharedMesh = m_Mesh;

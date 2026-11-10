@@ -4,6 +4,12 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.3] - 2026-11-11
+
+### Fixed
+- Thin lighter streaks across wide strokes (a circle with a 16 px stroke showed radial lighter lines at 1x and more at 4x; since 0.6.x). The stroker builds a stroke from overlapping pieces and the tessellator treated float noise between pieces that meet as a real gap: the sliver had two anti-aliased sides, and two half-covered edges blended to 75 %. The tessellator now tolerates a gap of a few ulps (1e-6 of the largest coordinate), so a uniform stroke is uniform in every direction at any zoom. Strokes also tessellate into fewer trapezoids (about 20 % faster to build); dashes, caps, joins, gradients and pixel-width strokes are unchanged.
+- Rounded corners and other curves of vector meshes looked polygonal when a Scene view (or any other camera than the Game view's) magnified the Canvas. SVG meshes (`VectraSvgImage`, `VectraSvgRenderer`) and native shapes (`VectraShape`, `VectraRenderer`) now flatten curves for the densest view, with the same rule as the pictures of 0.7.2: a step over 25 % rebuilds at once, a change over 3 % at most ten times a second, idle frames cost nothing. The anti-aliasing margin stays that of the main view. Documents and shapes with non-scaling strokes keep the Game view. UI Toolkit elements draw into a texture at the panel density, so there is no separate magnifying view to follow.
+
 ## [0.7.2] - 2026-11-11
 
 ### Fixed

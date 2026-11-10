@@ -43,7 +43,7 @@ namespace FirstSymbol.Vectra
                 return;
             }
 
-            float tol = math.max(frame.pixelSize, 1e-4f) * 0.25f;
+            float tol = math.max(frame.FlattenSize, 1e-4f) * 0.25f;
             var pa = Outline(from, frame, tol);
             var pb = Outline(to, frame, tol);
             int n = math.max(resolution, 16);

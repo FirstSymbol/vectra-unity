@@ -289,7 +289,8 @@ namespace FirstSymbol.Vectra.Svg
         /// <param name="pointScale">Device pixels in one SVG px of a non-scaling stroke: the Canvas scale factor or the UI Toolkit density; 1 in world space and for baked sprites.</param>
         public static void Build(VectraSvgDocument doc, VectraShapeRenderer renderer, Rect localRect, float localPixelSize,
             Color tint, bool world, VectraQuality quality, List<SvgOverride> overrides = null, SvgAlign? align = null,
-            bool? slice = null, int from = 0, int to = int.MaxValue, float pointScale = 1f, List<SvgElementData> source = null)
+            bool? slice = null, int from = 0, int to = int.MaxValue, float pointScale = 1f, List<SvgElementData> source = null,
+            float detailPixelSize = 0f)
         {
             // Pattern textures are made before the batch starts: drawing a tile needs a renderer of its own.
             if (doc != null && doc.patterns != null && doc.patterns.Count > 0) SvgPatterns.Prepare(doc, from, to, source);
@@ -306,7 +307,7 @@ namespace FirstSymbol.Vectra.Svg
 
             var toLocal = doc.DocumentToLocal(localRect, align, slice);
             float scale = math.max(toLocal.UniformScale, 1e-6f);
-            var frame = new ShapeFrame { rect = doc.viewBox, pixelSize = localPixelSize / scale, pointScale = pointScale };
+            var frame = new ShapeFrame { rect = doc.viewBox, pixelSize = localPixelSize / scale, detailPixelSize = detailPixelSize / scale, pointScale = pointScale };
             var clip = new Polylines(Allocator.TempJob, 64);
             var clipPath = new NativePath(Allocator.TempJob, 32);
             var clipBuilder = new PathBuilder(clipPath);
@@ -376,7 +377,7 @@ namespace FirstSymbol.Vectra.Svg
                     clipPath.Clear();
                     clipBuilder.Reset(clipPath, Affine2.Identity);
                     e.clips[0].WriteTo(clipBuilder);
-                    VectraGeometry.Flatten(clipPath, Affine2.Identity, frame.pixelSize * 0.2f, 0, true, ref clip);
+                    VectraGeometry.Flatten(clipPath, Affine2.Identity, frame.FlattenSize * 0.2f, 0, true, ref clip);
                     input.clip = clip;
                     input.clipRule = e.clips[0].rule;
                 }

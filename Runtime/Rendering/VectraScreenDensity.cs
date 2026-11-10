@@ -30,6 +30,60 @@ namespace FirstSymbol.Vectra.Rendering
             return d > 1e-4f ? 1f / d : float.PositiveInfinity;
         }
 
+        /// <summary>True when something other than the main view can show objects (the editor sets the hooks): lets components skip polling in players.</summary>
+        public static bool HasExtraCameras => ExtraCameraCount != null && ExtraCamera != null;
+
+        /// <summary>
+        /// The densest-view rule for meshes: the pixel size curves must be flattened for when an extra view is denser than
+        /// <paramref name="current"/> (the main view), 0 when none is.
+        /// </summary>
+        public static float DetailSize(Transform t, float current)
+        {
+            float d = WithExtraCameras(t, current);
+            return d < current ? d : 0f;
+        }
+
+        /// <summary>
+        /// Size of a screen pixel in the local units of a canvas object, taking the densest view: the camera of a Screen Space - Camera
+        /// canvas (which includes zoom) and the extra (editor) cameras. <paramref name="px"/> is the plain value of the main view.
+        /// </summary>
+        public static float CanvasDensest(Transform t, Canvas canvas, float px)
+        {
+            if (canvas != null)
+            {
+                var root = canvas.rootCanvas;
+                if (root.renderMode == RenderMode.ScreenSpaceCamera && root.worldCamera != null)
+                {
+                    float seen = LocalPerPixel(t, root.worldCamera);
+                    if (seen < float.PositiveInfinity) px = seen;
+                }
+            }
+
+            return WithExtraCameras(t, px);
+        }
+
+        /// <summary>True when views other than the one that gave the plain pixel size can show a canvas object (an extra camera or a Screen Space - Camera canvas).</summary>
+        public static bool CanvasFollowsViews(Canvas canvas)
+        {
+            if (HasExtraCameras) return true;
+            return canvas != null && canvas.rootCanvas.renderMode == RenderMode.ScreenSpaceCamera && canvas.rootCanvas.worldCamera != null;
+        }
+
+        /// <summary>
+        /// Debounce shared by every object that rebuilds when the density on screen changes: a step over 25 % rebuilds at once, a smaller
+        /// change over 3 % at most ten times a second. <paramref name="nextCheck"/> is the object's own clock.
+        /// </summary>
+        public static bool Drifted(float now, float built, ref float nextCheck, float time)
+        {
+            if (!(built > 0f) || !(now > 0f) || float.IsInfinity(now)) return false;
+            float ratio = now / built;
+            if (ratio > 0.97f && ratio < 1.03f) return false;
+            bool step = ratio > 1.25f || ratio < 0.8f;
+            if (!step && time < nextCheck) return false;
+            nextCheck = time + 0.1f;
+            return true;
+        }
+
         /// <summary>The smaller of <paramref name="current"/> and the pixel size the extra (editor) cameras give <paramref name="t"/>.</summary>
         public static float WithExtraCameras(Transform t, float current)
         {

@@ -239,11 +239,17 @@ namespace FirstSymbol.Vectra
             m_Dirty = true;
         }
 
-        float PixelSize()
+        /// <summary>Size of a screen pixel for the main camera: the anti-aliasing margin and non-scaling strokes follow it.</summary>
+        float GamePixelSize()
         {
             var s = transform.lossyScale;
-            float px = VectraRenderer.EstimatePixelSize(Camera.main, transform.position, math.max(math.abs(s.x), math.abs(s.y)));
-            // Pictures (composited parts) follow the editor's Scene views too, unless a stroke is measured in Game view pixels.
+            return VectraRenderer.EstimatePixelSize(Camera.main, transform.position, math.max(math.abs(s.x), math.abs(s.y)));
+        }
+
+        /// <summary>The densest view: pictures are drawn at it and curves flattened for it, unless a stroke is measured in Game view pixels.</summary>
+        float PixelSize()
+        {
+            float px = GamePixelSize();
             return m_Document != null && m_Document.HasPixelStrokes ? px : VectraScreenDensity.WithExtraCameras(transform, px);
         }
 
@@ -267,33 +273,34 @@ namespace FirstSymbol.Vectra
                 m_Dirty = m_StructureDirty = m_TextDirty = true;
             }
 
-            float px = m_BuiltPixelSize;
-            // Pictures follow the density on screen; small steps are rebuilt at most ten times a second so that zooming does not rebuild every frame.
-            px = PixelSize();
-            if (m_HasComposites && !m_Dirty && m_BuiltPixelSize > 0f && !(m_Document != null && m_Document.HasPixelStrokes))
+            float game = GamePixelSize();
+            float px = PixelSize();
+            if (!m_Dirty && m_BuiltPixelSize > 0f)
             {
-                float ratio = px / m_BuiltPixelSize;
-                bool step = ratio > 1.25f || ratio < 0.8f;
-                if (!step && Time.unscaledTime < m_NextDensityCheck) px = m_BuiltPixelSize; // a small step waits (zooming)
-                else if (Mathf.Abs(ratio - 1f) > 0.04f) m_NextDensityCheck = Time.unscaledTime + 0.1f;
+                if (game > m_BuiltPixelSize * Band || game < m_BuiltPixelSize / Band) m_Dirty = true;
+                // Meshes and pictures follow the densest view (Scene view, zoom); small steps are rebuilt at most ten times a second so
+                // that zooming does not rebuild every frame.
+                else if (!(m_Document != null && m_Document.HasPixelStrokes) &&
+                         VectraScreenDensity.Drifted(px, m_BuiltDense, ref m_NextDensityCheck, Time.unscaledTime)) m_Dirty = true;
             }
 
-            if (!m_Dirty && m_BuiltPixelSize > 0f && (px > m_BuiltPixelSize * Band || px < m_BuiltPixelSize / Band)) m_Dirty = true;
             if (!m_Dirty) return;
-            Rebuild(px);
+            Rebuild(game, px);
         }
 
         // Non-scaling strokes follow the screen scale closely; other pixel-size dependencies only need a rough match.
-        float Band => m_Document != null && m_Document.HasPixelStrokes ? 1.01f : m_HasComposites ? 1.04f : 1.5f;
+        float Band => m_Document != null && m_Document.HasPixelStrokes ? 1.01f : 1.5f;
         bool m_HasComposites;
         float m_NextDensityCheck;
+        float m_BuiltDense;
 
-        void Rebuild() => Rebuild(PixelSize());
+        void Rebuild() => Rebuild(GamePixelSize(), PixelSize());
 
-        void Rebuild(float px)
+        void Rebuild(float game, float px)
         {
             m_Dirty = false;
-            m_BuiltPixelSize = px;
+            m_BuiltPixelSize = game;
+            m_BuiltDense = px;
             m_BuiltVersion = m_Document != null ? m_Document.contentVersion : 0;
             int signature = SvgDrawOrder.Split(m_Document, m_GenerateText, false, m_Items, Gamma);
             m_HasComposites = false;
@@ -316,7 +323,8 @@ namespace FirstSymbol.Vectra
             if (m_Mesh == null) m_Mesh = new Mesh { name = "Vectra SVG", hideFlags = HideFlags.HideAndDontSave };
             SvgDrawOrder.MainRange(m_Items, out int from, out int to);
             var rect = LocalRect;
-            VectraSvgBuilder.Build(m_Document, m_Renderer, rect, px, m_Color, true, m_Quality, m_Overrides, null, null, from, to);
+            float detail = px < game ? px : 0f;
+            VectraSvgBuilder.Build(m_Document, m_Renderer, rect, game, m_Color, true, m_Quality, m_Overrides, null, null, from, to, detailPixelSize: detail);
             m_Renderer.buffer.Upload(m_Mesh);
             GetComponent<MeshFilter>().sharedMesh = m_Mesh;
             var mr = GetComponent<MeshRenderer>();
@@ -332,7 +340,7 @@ namespace FirstSymbol.Vectra
                     continue;
                 }
 
-                VectraSvgBuilder.Build(m_Document, layer.renderer, rect, px, m_Color, true, m_Quality, m_Overrides, null, null, layer.from, layer.to);
+                VectraSvgBuilder.Build(m_Document, layer.renderer, rect, game, m_Color, true, m_Quality, m_Overrides, null, null, layer.from, layer.to, detailPixelSize: detail);
                 layer.renderer.buffer.Upload(layer.mesh);
                 if (layer.go != null && layer.go.TryGetComponent(out MeshRenderer lr))
                     lr.sharedMaterial = VectraMaterials.GetWorld(ShapeBlendMode.Normal, layer.renderer.mainTexture);

@@ -12,9 +12,15 @@ namespace FirstSymbol.Vectra
         public Rect rect;
         /// <summary>Approximate size of one screen pixel in local units (used for tolerances and anti-aliasing).</summary>
         public float pixelSize;
+        /// <summary>Size of a screen pixel in the densest view that shows the object (a Scene view magnifying a Canvas), in local units;
+        /// 0 when no view is denser than <see cref="pixelSize"/>. Only curve flattening uses it: the anti-aliasing margin stays that of the main view.</summary>
+        public float detailPixelSize;
         /// <summary>Device pixels in one unit of a pixel-mode stroke width (0 counts as 1). SVG documents set it to the UI scale, so
         /// "1 px" of a <c>non-scaling-stroke</c> is one reference point on a Canvas and in UI Toolkit.</summary>
         public float pointScale;
+
+        /// <summary>Pixel size that curve flattening must satisfy: the finest of the main view and the densest extra view.</summary>
+        public float FlattenSize => detailPixelSize > 0f && detailPixelSize < pixelSize ? detailPixelSize : pixelSize;
 
         public float2 Center => new float2(rect.center.x, rect.center.y);
         public float2 HalfSize => new float2(rect.width, rect.height) * 0.5f;

@@ -328,7 +328,7 @@ namespace FirstSymbol.Vectra.Rendering
             bool needFillTraps = !analytic && (anyFill || needSdf) && !smooth;
             needSdf &= !analytic;
 
-            float tol = m_Frame.pixelSize * QualityTolerance(input.quality);
+            float tol = m_Frame.FlattenSize * QualityTolerance(input.quality);
             if (needPoly) EnsurePolylines(geometry, tol, input);
             if (needFillTraps) EnsureFillTraps(geometry, input, fillAmount);
             if (needFillTraps && strokeSilhouette >= 0 && !smooth)

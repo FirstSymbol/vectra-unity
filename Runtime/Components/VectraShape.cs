@@ -260,6 +260,13 @@ namespace FirstSymbol.Vectra
                 m_LastScale = s;
                 SetVerticesDirty();
             }
+            else if (m_BuiltDetail > 0f && !fine && VectraScreenDensity.CanvasFollowsViews(canvas))
+            {
+                // Curves follow the densest view (a Scene view magnifying the Canvas); small steps at most ten times a second.
+                float px = PixelSize();
+                float now = VectraScreenDensity.CanvasDensest(transform, canvas, px);
+                if (VectraScreenDensity.Drifted(now < px ? now : px, m_BuiltDetail, ref m_NextDetailCheck, Time.unscaledTime)) SetVerticesDirty();
+            }
         }
 
         /// <summary>Size of a screen pixel in this graphic's local units.</summary>
@@ -284,6 +291,17 @@ namespace FirstSymbol.Vectra
 
         public ShapeFrame Frame => new ShapeFrame { rect = rectTransform.rect, pixelSize = PixelSize() };
 
+        float m_BuiltDetail;
+        float m_NextDetailCheck;
+
+        /// <summary>Pixel size of the densest view (Scene view, zoomed camera) when it is finer than the main view's, else 0; non-scaling strokes keep the main view.</summary>
+        float DetailPixelSize(float px)
+        {
+            if (m_Content.HasPixelStrokes) return 0f;
+            float d = VectraScreenDensity.CanvasDensest(transform, canvas, px);
+            return d < px ? d : 0f;
+        }
+
         protected override void OnPopulateMesh(VertexHelper vh) => vh.Clear();
 
         protected override void UpdateGeometry()
@@ -301,7 +319,10 @@ namespace FirstSymbol.Vectra
                 return;
             }
 
-            var input = m_Content.ToInput(Frame, color, false);
+            var frame = Frame;
+            frame.detailPixelSize = DetailPixelSize(frame.pixelSize);
+            m_BuiltDetail = frame.FlattenSize;
+            var input = m_Content.ToInput(frame, color, false);
             if (TryGetComponent(out VectraMask mask) && mask.IsSoft)
             {
                 input.requireDistance = true;

@@ -234,6 +234,8 @@ namespace FirstSymbol.Vectra
         float m_BuiltPixelSize;
         float m_CompositePixelSize;
         float m_NextPictureCheck;
+        float m_BuiltDetail;
+        float m_NextDetailCheck;
         int m_BuiltVersion;
 
         /// <summary>Device pixels in one SVG px of a non-scaling stroke: the scale factor of the screen-space Canvas (one reference point).</summary>
@@ -268,18 +270,7 @@ namespace FirstSymbol.Vectra
         {
             float px = PixelSize();
             if (m_Document != null && m_Document.HasPixelStrokes) return px;
-            var c = canvas;
-            if (c != null)
-            {
-                var root = c.rootCanvas;
-                if (root.renderMode == RenderMode.ScreenSpaceCamera && root.worldCamera != null)
-                {
-                    float seen = VectraScreenDensity.LocalPerPixel(transform, root.worldCamera);
-                    if (seen < float.PositiveInfinity) px = seen;
-                }
-            }
-
-            return VectraScreenDensity.WithExtraCameras(transform, px);
+            return VectraScreenDensity.CanvasDensest(transform, canvas, px);
         }
 
         protected override void OnPopulateMesh(VertexHelper vh) => vh.Clear();
@@ -317,8 +308,11 @@ namespace FirstSymbol.Vectra
         internal void BuildMesh(VectraShapeRenderer renderer, Mesh mesh, int from, int to)
         {
             m_BuiltPixelSize = PixelSize();
+            // Curves are flattened for the densest view (a Scene view magnifying the Canvas), not only for the Game view.
+            m_BuiltDetail = PictureSize();
             VectraSvgBuilder.Build(m_Document, renderer, rectTransform.rect, m_BuiltPixelSize, color, false, m_Quality,
-                m_Overrides, m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None, null, from, to, PointScale());
+                m_Overrides, m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None, null, from, to, PointScale(),
+                detailPixelSize: m_BuiltDetail < m_BuiltPixelSize ? m_BuiltDetail : 0f);
             renderer.buffer.Upload(mesh);
         }
 
@@ -344,6 +338,14 @@ namespace FirstSymbol.Vectra
                 float now = PixelSize();
                 if (Mathf.Abs(now - m_BuiltPixelSize) > m_BuiltPixelSize * 0.01f) SetVerticesDirty();
             }
+            if (m_BuiltDetail > 0f && VectraScreenDensity.CanvasFollowsViews(canvas) &&
+                VectraScreenDensity.Drifted(PictureSize(), m_BuiltDetail, ref m_NextDetailCheck, Time.unscaledTime))
+            {
+                SetVerticesDirty();
+                foreach (var g in m_Generated)
+                    if (g.layer != null) g.layer.SetVerticesDirty();
+            }
+
             if (m_ChildrenDirty)
             {
                 m_ChildrenDirty = false;

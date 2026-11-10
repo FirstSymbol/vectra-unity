@@ -31,12 +31,13 @@ namespace FirstSymbol.Vectra
 
         public ShapeFrame Frame(in ShapeFrame owner)
         {
-            if (absolute) return new ShapeFrame { rect = rect, pixelSize = owner.pixelSize };
+            if (absolute) return new ShapeFrame { rect = rect, pixelSize = owner.pixelSize, detailPixelSize = owner.detailPixelSize };
             var r = owner.rect;
             return new ShapeFrame
             {
                 rect = new Rect(r.xMin + rect.x * r.width, r.yMin + rect.y * r.height, rect.width * r.width, rect.height * r.height),
-                pixelSize = owner.pixelSize
+                pixelSize = owner.pixelSize,
+                detailPixelSize = owner.detailPixelSize
             };
         }
 
@@ -142,7 +143,7 @@ namespace FirstSymbol.Vectra
         public override void BuildPath(in ShapeFrame frame, PathBuilder b)
         {
             // The result outline (outer contours counter-clockwise, holes clockwise).
-            float tol = math.max(frame.pixelSize, 1e-4f) * 0.15f;
+            float tol = math.max(frame.FlattenSize, 1e-4f) * 0.15f;
             var traps = new NativeList<Trapezoid>(256, Allocator.TempJob);
             Tessellate(frame, tol, ref traps);
             var outline = new Polylines(Allocator.TempJob, 256);
