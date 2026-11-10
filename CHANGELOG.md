@@ -4,7 +4,7 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.6.1] - 2026-11-10
 
 ### Added
 - **`vector-effect="non-scaling-stroke"` works as in browsers on a Canvas (`VectraSvgImage`) and in world space (`VectraSvgRenderer`).** The stroke keeps its authored width on screen whatever transforms apply (the element's own `transform`, the `viewBox` fit, the Canvas, the object's scale, the camera), and so do its dashes (`stroke-dasharray`, `stroke-dashoffset`). Before, only the element's own scale was skipped and the document's scale still grew or shrank the stroke. The parser makes such a stroke a pixel-mode stroke (`StrokeWidthMode.Pixels` plus the new `StrokeLayer.dashInPixels`). One SVG px is one reference point on a screen-space Canvas (`stroke-width="2"` is 2 x the Canvas scale factor device pixels; one device pixel on a world-space Canvas) and one device pixel in world space. `StrokeWidthMode.Pixels` on an ordinary shape still counts device pixels. The mesh follows the screen scale (1% rebuilds it). `VectraSvgBuilder.Build` takes the new `pointScale` argument and `ShapeFrame` the field of the same name. `non-scaling-size`, `non-rotation` and `fixed-position` are ignored and named in the import report.
