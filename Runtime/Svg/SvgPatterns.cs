@@ -75,6 +75,9 @@ namespace FirstSymbol.Vectra.Svg
         {
             if (p == null || p.type != PaintType.Texture || p.textureSource < 0 || p.texture != null) return;
             p.texture = Resolve(doc, p.textureSource);
+            var owner = doc.patternOwner != null ? doc.patternOwner : doc;
+            // Pictures are drawn with crisp texels when magnified, like Figma; rendered tiles stay smooth.
+            p.sharpTexels = owner.patterns != null && p.textureSource < owner.patterns.Count && owner.patterns[p.textureSource].IsImage;
         }
 
         /// <summary>The texture of pattern <paramref name="index"/>, made when needed; null when it cannot be made.</summary>

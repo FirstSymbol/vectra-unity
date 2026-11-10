@@ -233,6 +233,23 @@ namespace FirstSymbol.Vectra.Tests
             AssertGroupShadow(Capture(), "world");
         }
 
+        // A plain <image> on a Canvas: a 2x2 picture magnified 80 times has crisp texels (green | yellow on the top row).
+        [UnityTest]
+        public IEnumerator ImageElement_MagnifiedOnACanvas_HasCrispTexels()
+        {
+            var t = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            t.SetPixels32(new[] { new Color32(255, 0, 0, 255), new Color32(0, 0, 255, 255), new Color32(0, 255, 0, 255), new Color32(255, 255, 0, 255) });
+            t.Apply();
+            string png = Convert.ToBase64String(t.EncodeToPNG());
+            Object.DestroyImmediate(t);
+            CanvasImage("<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'><image x='0' y='0' width='160' height='160' preserveAspectRatio='none' href='data:image/png;base64," + png + "'/></svg>");
+            yield return Settle();
+            var s = Capture();
+            AssertNear(s, 60, 30, 0, 255, 0, 12, "10 px inside the green texel (bilinear would mix in a quarter of the neighbours)");
+            AssertNear(s, 100, 30, 255, 255, 0, 12, "inside the yellow texel");
+            AssertNear(s, 60, 130, 255, 0, 0, 12, "the red texel below");
+        }
+
         [UnityTest]
         public IEnumerator MultiplyShadow_MultipliesWithTheBackdrop_OnEveryPath()
         {

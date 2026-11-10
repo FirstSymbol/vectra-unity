@@ -89,6 +89,24 @@ namespace FirstSymbol.Vectra.Rendering
         /// <summary>How many times <see cref="RenderStep"/> has drawn since the domain loaded (diagnostics and tests).</summary>
         public static int StepsRendered { get; private set; }
 
+        static Material s_ImageMaterial;
+
+        /// <summary>The material for the pictures of an SVG (<c>&lt;image&gt;</c>) on a Canvas: the default UI look with crisp texels when magnified.</summary>
+        public static Material ImageMaterial
+        {
+            get
+            {
+                if (s_ImageMaterial == null)
+                {
+                    var shader = Resources.Load<Shader>("Vectra/Vectra-Image") ?? UnityEngine.Shader.Find("Vectra/Image");
+                    if (shader == null) return null;
+                    s_ImageMaterial = new Material(shader) { name = "Vectra Image", hideFlags = HideFlags.HideAndDontSave };
+                }
+
+                return s_ImageMaterial;
+            }
+        }
+
         /// <summary>The material that draws a composited texture as a quad (Canvas and world space): premultiplied alpha, with Canvas masking.</summary>
         public static Material LayerMaterial
         {

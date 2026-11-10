@@ -979,7 +979,7 @@ namespace FirstSymbol.Vectra.Rendering
                     r.color = ToVertex(m_Adjust.Apply(paint.ResolvedColor) * tint);
                     // SVG patterns map document space straight to texture space (like SVG gradients).
                     r.toPaint = paint.useCustomMapping ? paint.customMapping : TextureMapping(paint, mn, size);
-                    r.spread = paint.textureFit == TextureFit.Tile ? 1 : 0;
+                    r.spread = (paint.textureFit == TextureFit.Tile ? 1 : 0) | (paint.sharpTexels ? 2 : 0);
                     return r;
                 }
                 case PaintType.Freeform:

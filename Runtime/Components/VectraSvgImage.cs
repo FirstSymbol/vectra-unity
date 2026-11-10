@@ -562,6 +562,7 @@ namespace FirstSymbol.Vectra
             var go = CreateChild("SVG Image", e, false);
             var img = go.AddComponent<RawImage>();
             img.texture = e.image;
+            img.material = SvgCompositor.ImageMaterial;
             img.raycastTarget = false;
         }
 

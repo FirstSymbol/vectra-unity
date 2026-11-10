@@ -123,11 +123,15 @@ namespace FirstSymbol.Vectra.Editor.Tests
         [Test]
         public void LayerBlur_IsRead()
         {
+            // A star has sharp tips, which the native distance-field blur rounds off: it is blurred as a picture.
             var doc = Load("05_layer_blur");
-            var fx = Shape(doc).effects;
-            Assert.AreEqual(1, fx.Count);
-            Assert.AreEqual(6f * Scale, ((LayerBlurEffect)fx[0]).blur, 1e-4f);
+            Assert.AreEqual(1, doc.layers.Count);
+            var blur = doc.layers[0].filter.Single(s => s.kind == SvgFilterKind.Blur);
+            Assert.AreEqual(3f * Scale, blur.sigma, 1e-4f);
             NoUnsupportedWarning(doc);
+            var rect = ParseText("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><filter id='b'><feGaussianBlur stdDeviation='3'/></filter></defs>" +
+                                 "<rect width='50' height='50' fill='red' filter='url(#b)'/></svg>");
+            Assert.AreEqual(6f, ((LayerBlurEffect)rect.elements[0].effects[0]).blur, 1e-4f, "a plain filter of another generator is not scaled");
         }
 
         [Test]

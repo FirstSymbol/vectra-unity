@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using FirstSymbol.Vectra.Geometry;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace FirstSymbol.Vectra.Svg
@@ -236,6 +238,7 @@ namespace FirstSymbol.Vectra.Svg
         static bool CanDrawNatively(List<SvgFilterStep> steps, SvgElementData e)
         {
             if (e.hasFill && e.hasStroke) return false; // the shadow of fill and stroke together is the union, not the fill's
+            if (!IsSimpleOutline(e.path)) return false; // the native blur is a distance-field approximation: fine for a box, wrong for glyphs and icons
             foreach (var s in steps)
             {
                 switch (s.kind)
@@ -248,6 +251,32 @@ namespace FirstSymbol.Vectra.Svg
                         if (s.blend != SvgBlendMode.Normal) return false;
                         break;
                 }
+            }
+
+            return true;
+        }
+
+        // One contour of at most 16 segments: rectangles, ellipses, rounded rectangles, polygons and stars. Text outlines and icons have more.
+        static bool IsSimpleOutline(SvgPathData d)
+        {
+            if (d == null || d.verbs.Count > 16) return false;
+            int moves = 0;
+            for (int i = 0; i < d.verbs.Count; i++)
+                if (d.verbs[i] == (byte)PathVerb.MoveTo) moves++;
+            if (moves > 1) return false;
+            // A polygon with a sharp tip (a star): the distance-field blur rounds the tip off too much.
+            int n = d.points.Count;
+            for (int i = 0; i < d.verbs.Count; i++)
+                if (d.verbs[i] != (byte)PathVerb.MoveTo && d.verbs[i] != (byte)PathVerb.LineTo && d.verbs[i] != (byte)PathVerb.Close) return true;
+            if (n > 2 && d.points[n - 1].Equals(d.points[0])) n--;
+            for (int i = 0; i < n && n > 2; i++)
+            {
+                var p0 = d.points[(i + n - 1) % n];
+                var p1 = d.points[i];
+                var p2 = d.points[(i + 1) % n];
+                var u = math.normalizesafe(p0 - p1);
+                var v = math.normalizesafe(p2 - p1);
+                if (math.dot(u, v) > 0.5f) return false; // the corner is sharper than 60 degrees
             }
 
             return true;

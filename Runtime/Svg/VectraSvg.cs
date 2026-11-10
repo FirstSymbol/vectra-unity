@@ -263,6 +263,7 @@ namespace FirstSymbol.Vectra.Svg
             var rt = Child(root, name, rootRect, a, b);
             var img = rt.gameObject.AddComponent<RawImage>();
             img.texture = e.image;
+            img.material = FirstSymbol.Vectra.Rendering.SvgCompositor.ImageMaterial;
             img.color = e.textColor * tint;
         }
 

@@ -285,6 +285,20 @@ float Fbm(float2 p)
     return v / 0.9375;
 }
 
+// A magnified bitmap with crisp texels (what Figma draws): the sample position stays on the texel centre and moves across the
+// texel boundary only within about one screen pixel, so each texel is a sharp block with an anti-aliased edge. Minified or 1:1
+// (a texel is not larger than a pixel) the coordinates are unchanged, and bilinear filtering and mip levels apply as usual.
+float2 SharpTexelUV(float2 uv, float2 dgdx, float2 dgdy)
+{
+    float2 size = _MainTex_TexelSize.zw;
+    float2 t = uv * size;
+    float2 w = clamp(max(abs(dgdx), abs(dgdy)) * size, 1e-4, 1.0); // texels per screen pixel, 1 when minified
+    float2 fi = floor(t);
+    float2 s = t - fi - 0.5;
+    float2 o = sign(s) * 0.5 * saturate((abs(s) - (0.5 - 0.5 * w)) / (0.5 * w));
+    return (fi + 0.5 + o) / size;
+}
+
 // g = paint coordinates, v = gradient row (or block start), w = paint parameter.
 float4 EvaluatePaint(VectraHeader h, float2 g, float2 dgdx, float2 dgdy, float v, float w, float4 vertexColor)
 {
@@ -292,7 +306,9 @@ float4 EvaluatePaint(VectraHeader h, float2 g, float2 dgdx, float2 dgdy, float v
     if (kind == PAINT_SOLID) return float4(vertexColor.rgb * w, vertexColor.a);
     if (kind == PAINT_TEXTURE)
     {
-        float2 uv = h.spread == 1u ? frac(g) : g;
+        float2 uv = (h.spread & 1u) != 0u ? frac(g) : g;
+        // spread bit 1: sharp texels (SVG pictures, see SharpTexelUV). The mip level still comes from the true derivatives.
+        if ((h.spread & 2u) != 0u) uv = SharpTexelUV(uv, dgdx, dgdy);
         return tex2Dgrad(_MainTex, uv, dgdx, dgdy) * vertexColor;
     }
 

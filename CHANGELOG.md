@@ -4,6 +4,12 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.5] - 2026-11-11
+
+### Fixed
+- Pictures in SVG (Figma image fills, patterns of images, a plain `<image>` on a Canvas) were smooth when magnified: bilinear filtering blurred every source pixel. Figma draws a magnified picture with crisp texels, each source pixel a sharp block whose edge is anti-aliased over about one screen pixel (browsers smooth it unless `image-rendering` says otherwise; Vectra follows Figma, the reference). The shader keeps the sample on the texel centre and moves across the texel boundary only within one screen pixel; minified or at 1:1 the coordinates are unchanged, so filtering and mip levels apply as before. Rendered pattern tiles (vector content) stay smooth. Frame 11 (image fill): 6.0 % of pixels off by more than 8 levels (Chrome 6.0 %) to 0.00 %; frame 12 (tiled image): 4.9 % to 0.00 %. A Canvas `<image>` uses the new `Vectra/Image` material.
+- A drop shadow on one outlined text or icon (a single path with many segments or several contours) was paler and more diffuse than Figma's: a lone shape kept the native shadow, which is a distance-field approximation that is only exact for simple shapes. A single shape now keeps native effects only when it is a simple outline (one contour of at most 16 segments, no polygon tip sharper than 60 degrees: rectangles, rounded rectangles, ellipses, simple polygons); text, icons and stars are blurred as pictures like groups. Frame 47 (text shadow): 2.2 % to 0.33 % off by more than 8 (Chrome 1.6 %), largest 5x5 patch difference 23 to 14 levels (Chrome 17); frame 05 (blurred star): 2.4 % to 0.00 %, patch difference 63 to 3 levels.
+
 ## [0.7.4] - 2026-11-11
 
 SVG shadows, blurs and edges now match Figma's own renders. A second, stricter comparison with Figma's PNG exports (share of pixels off by more than 8 levels after a 1 px blur, at most max(1 %, Chrome's own value + 1 %); the old rule was more than 32 levels, under 2 %) flagged 12 of the 42 test frames in 0.7.3 on the rasterizer (10 on a Canvas); now 41 of 42 pass it on both, in Gamma and in Linear projects (the 42nd is the noise texture; live text on the rasterizer path keeps failing the old rule, as before).

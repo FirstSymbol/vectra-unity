@@ -107,6 +107,8 @@ namespace FirstSymbol.Vectra
         /// first use, so saved documents hold bytes, not texture objects); -1 when the texture is assigned directly.
         /// </summary>
         public int textureSource = -1;
+        /// <summary>A magnified texture is drawn with crisp texels (anti-aliased over one screen pixel) instead of smooth bilinear; set for SVG pictures.</summary>
+        public bool sharpTexels;
 
         // Patterns
         [ColorUsage(true, true)] public Color secondaryColor = new Color(0f, 0f, 0f, 1f);

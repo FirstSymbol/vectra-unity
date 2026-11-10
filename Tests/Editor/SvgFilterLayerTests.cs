@@ -176,6 +176,53 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         [Test]
+        public void ShadowOnAGlyphLikePathOrASharpStar_IsALayer_ARectangleOrCircleStaysNative()
+        {
+            string Svg(string shape) => Doc(ShadowFilter() + "<g filter='url(#f)'>" + shape + "</g>");
+            string glyphs = "<path d='M10 10H20V30H10Z M30 10H40V30H30Z' fill='#000'/>";
+            string star = "<path d='M80 30L91.2 64.5H127.5L98.2 85.9L109.4 120.5L80 99.1L50.6 120.5L61.8 85.9L32.4 64.5H68.8L80 30Z' fill='#000'/>";
+            Assert.AreEqual(1, Parse(Svg(glyphs)).layers.Count, "two contours: text outlines and icons");
+            Assert.AreEqual(1, Parse(Svg(star)).layers.Count, "tips sharper than 60 degrees");
+            Assert.AreEqual(0, Parse(Svg("<rect x='10' y='10' width='50' height='50' fill='#000'/>")).layers.Count);
+            Assert.AreEqual(0, Parse(Svg("<rect x='10' y='10' width='50' height='50' rx='8' fill='#000'/>")).layers.Count);
+            Assert.AreEqual(0, Parse(Svg("<circle cx='50' cy='50' r='30' fill='#000'/>")).layers.Count);
+        }
+
+        static string PngBase64(params Color32[] pixels2x2)
+        {
+            var t = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            t.SetPixels32(pixels2x2);
+            t.Apply();
+            string b = System.Convert.ToBase64String(t.EncodeToPNG());
+            Object.DestroyImmediate(t);
+            return b;
+        }
+
+        [Test]
+        public void Pixels_AMagnifiedPictureFill_HasCrispTexels_AndKeepsTheTexelEdgesAntiAliased()
+        {
+            // Figma's way of writing an image fill: a pattern with the image scaled to the bounding box. 2x2 texels at 40 px each.
+            string png = PngBase64(new Color32(255, 0, 0, 255), new Color32(0, 0, 255, 255), new Color32(0, 255, 0, 255), new Color32(255, 255, 0, 255));
+            var doc = Parse("<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 80 80'><defs>" +
+                            "<pattern id='p' patternContentUnits='objectBoundingBox' width='1' height='1'><use xlink:href='#i' transform='scale(0.5)'/></pattern>" +
+                            "<image id='i' width='2' height='2' preserveAspectRatio='none' xlink:href='data:image/png;base64," + png + "'/></defs>" +
+                            "<rect width='80' height='80' fill='url(#p)'/></svg>");
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) Assert.Ignore("needs a graphics device");
+            var t = VectraRasterizer.Render(doc, 80, 80);
+            m_Owned.Add(t);
+            // Bilinear would mix 25 % of the neighbour 10 px from the boundary; crisp texels are pure there.
+            var left = t.GetPixel(30, 60); // the top row of the picture is the last two pixels set: green | yellow
+            Assert.Less(left.r, 0.03f, left.ToString());
+            Assert.Greater(left.g, 0.97f, left.ToString());
+            var right = t.GetPixel(50, 60);
+            Assert.Greater(right.r, 0.97f, right.ToString());
+            Assert.Greater(right.g, 0.97f, right.ToString());
+            // The boundary is a sharp edge, anti-aliased over one pixel: four pixels apart the colours are already pure.
+            Assert.Less(t.GetPixel(38, 60).r, 0.1f);
+            Assert.Greater(t.GetPixel(42, 60).r, 0.9f);
+        }
+
+        [Test]
         public void ADocumentWithoutFilters_HasNoFilterWork()
         {
             var doc = Parse(Doc("<g opacity='0.5'>" + CircleAndSquare + "</g>"));
@@ -325,7 +372,9 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         // The cases that were off by more than 8 in 0.7.3 (shadows on groups, shadow blend modes, edges on pixel boundaries, background blur).
+        [TestCase("05_layer_blur")]
         [TestCase("06_background_blur")]
+        [TestCase("11_image_fill")]
         [TestCase("10_diamond_gradient")]
         [TestCase("15_blend_screen")]
         [TestCase("16_fill_blend_mode")]
@@ -336,6 +385,7 @@ namespace FirstSymbol.Vectra.Editor.Tests
         [TestCase("42_shadow_blend_multiply")]
         [TestCase("45_inner_shadow_blend_screen")]
         [TestCase("46_shadow_on_group")]
+        [TestCase("47_text_shadow_live")]
         public void RasterizerIsWithin8OfFigma(string name)
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) Assert.Ignore("needs a graphics device");

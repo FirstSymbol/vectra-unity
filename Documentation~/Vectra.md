@@ -37,7 +37,7 @@ a few other shapes still builds a small point array).
 ## Installation
 
 Package Manager → **+** → **Add package from git URL…** →
-`https://github.com/FirstSymbol/vectra-unity.git` (a specific version: append `#0.7.4`).
+`https://github.com/FirstSymbol/vectra-unity.git` (a specific version: append `#0.7.5`).
 
 Samples: **Package Manager → Vectra Vector Graphics → Samples**.
 
@@ -356,7 +356,7 @@ Some SVG features need a picture of a part of the document, not just a mesh. Vec
 - `mask`: luminance (the default) or alpha (`mask-type`), with its `maskUnits` region. A mask that is only plain opaque white shapes (any opaque colour in an alpha mask) stays a geometric clip: exact and free. Figma's inside and outside stroke masks are of that kind.
 - `mix-blend-mode`, all CSS modes (the separable ones and hue, saturation, color, luminosity).
 - Figma's background blur (`data-figma-bg-blur-radius`): blurs the content below, only inside the shape (what lies outside it does not mix in).
-- `filter` on an element whose result depends on more than one painted thing: a `<g>`, `<svg>` or `<use>` with several shapes, or a shape with both fill and stroke. The shadows (drop shadow with spread, inner shadow with choke) and the layer blur are computed from the picture of the whole subtree, in the order of the filter chain, so one soft shadow falls from the combined silhouette and a shape never shadows its sibling. A single shape with only a fill or a stroke keeps native, resolution-free effects.
+- `filter` on an element whose result depends on more than one painted thing: a `<g>`, `<svg>` or `<use>` with several shapes, a shape with both fill and stroke, or a single complicated outline (several contours or more than 16 segments, such as text and icons, or a polygon with a tip sharper than 60 degrees: the native blur of a distance field is only exact for simple shapes). The shadows (drop shadow with spread, inner shadow with choke) and the layer blur are computed from the picture of the whole subtree, in the order of the filter chain, so one soft shadow falls from the combined silhouette and a shape never shadows its sibling. A single shape with only a fill or a stroke keeps native, resolution-free effects.
 - The blend mode of a Figma shadow (`feBlend mode="multiply"` and the others, all CSS modes). Figma writes `in2="BackgroundImageFix"`, an empty flood, which in strict SVG makes any mode a no-op (browsers draw a normal shadow); Figma itself blends the shadow with what is below, and so does Vectra: a drop shadow with a mode blends with the backdrop through the layer compositor, an inner shadow with the picture of the shape. A shape with such a shadow is a layer.
 
 Only the parts that need it become layers; everything else stays in the mesh. The layers of a Canvas, UI Toolkit or world component are drawn into render textures that the component keeps, and drawn again only when the size, the pixel density or the overrides change; the sprite importer and `VectraRasterizer` draw the same layers into the PNG.
@@ -419,7 +419,7 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | `<altGlyphItem>` | Not supported | SVG 1.1. Reported. |
 | `<glyphRef>` | Not supported | SVG 1.1. Reported. |
 | `<textArea>` | Not supported | SVG Tiny 1.2 flowed text. Reported. |
-| `<image>` | Partial | Embedded `data:` URIs (PNG, JPG); external URLs are not loaded (reported). On its own: an axis-aligned rectangle with opacity, `preserveAspectRatio` is ignored (reported). Inside a `<pattern>`: `preserveAspectRatio` (`meet`, `slice`) and any transform are honoured. |
+| `<image>` | Partial | Embedded `data:` URIs (PNG, JPG); external URLs are not loaded (reported). On its own: an axis-aligned rectangle with opacity, `preserveAspectRatio` is ignored (reported). Inside a `<pattern>`: `preserveAspectRatio` (`meet`, `slice`) and any transform are honoured. A picture magnified on screen is drawn with crisp texels, each source pixel a sharp block whose edge is anti-aliased over one screen pixel, as Figma draws it (browsers smooth it with bilinear filtering unless `image-rendering` says otherwise; Vectra follows Figma); minified or at 1:1 it is filtered and mip-mapped as usual. Applies to pattern pictures on every path (Canvas, UI Toolkit, world, sprites, PNG) and to a plain `<image>` on a Canvas. |
 | `<foreignObject>` | Partial | The HTML and other XML inside is not drawn (reported). Skipped silently, because they are read from elsewhere: Figma's gradient fallbacks (`data-figma-skip-parse="true"` groups; the angular and diamond gradients are built from `data-figma-gradient-fill` / `-stroke` instead) and Figma's background blur (a `<foreignObject>` with `backdrop-filter`, then a shape with `data-figma-bg-blur-radius`; see [Layers](#layers-opacity-masks-blend-modes-background-blur)). |
 | `<video>` | Not supported | Reported. |
 | `<audio>` | Not supported | Reported. |
