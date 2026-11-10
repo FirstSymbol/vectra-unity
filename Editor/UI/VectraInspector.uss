@@ -327,6 +327,21 @@
 
 .vx-button:hover { background-color: var(--vx-accent-soft); }
 
+/* On a light page the inset tint reads as a dark grey button next to the hub's own buttons. */
+.vx--light .vx-button {
+    background-color: rgba(255, 255, 255, 0.75);
+    border-width: 1px;
+    border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vx--light .vx-button:hover { background-color: var(--vx-accent-soft); }
+
+.vx--light .unity-toggle__input,
+.vx--light .unity-toggle__checkmark {
+    background-color: rgba(0, 0, 0, 0.14);
+    border-color: rgba(0, 0, 0, 0.25);
+}
+
 /* ---------- Shape grid ---------- */
 
 .vx-search {
