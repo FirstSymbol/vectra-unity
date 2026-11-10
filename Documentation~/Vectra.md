@@ -323,8 +323,8 @@ engine; assign it on the SVG Image (new images get the default from Project Sett
 fallback font (one per engine), then the engine's default font, is used. Lettera finds fonts only through the map in
 this version.
 
-**Limitations** (the full list is the SVG support table below): `<mask>` is applied as a geometric clip (luminance is ignored); pattern fills fall back to the colour
-of the first pattern shape; only blur, drop shadow, saturate and hue-rotate filters; external image URLs are not
+**Limitations** (the full list is the SVG support table below): `<mask>` is applied as a geometric clip (luminance is ignored); text inside a `<pattern>` is not drawn;
+only blur, drop shadow, saturate and hue-rotate filters; external image URLs are not
 loaded; a group's `opacity` is applied to each child separately, so overlapping children show through each other (the
 import report says so); text and images are not clipped by `clip-path`; images are axis-aligned rectangles and
 `preserveAspectRatio` is ignored for them; of a `<switch>` only the first child whose `systemLanguage` /
@@ -360,7 +360,7 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | `<linearGradient>` | Supported | `x1`..`y2`, `gradientUnits`, `gradientTransform`, `spreadMethod`, `href` inheritance. |
 | `<radialGradient>` | Partial | As the linear one plus `cx`, `cy`, `r`, `fx`, `fy`; the focal radius `fr` is ignored (reported). |
 | `<stop>` | Supported | `offset`, `stop-color`, `stop-opacity`. |
-| `<pattern>` | Partial | Replaced by the colour of the pattern's first shape (reported). |
+| `<pattern>` | Partial | Fills and strokes: `patternUnits`, `patternContentUnits`, `x`/`y`/`width`/`height`, `viewBox` with `preserveAspectRatio`, `patternTransform`, `href` inheritance, nested patterns, and an `<image>` inside (also through `<use>`; cropped, fitted or rotated pictures included). A pattern that is one picture filling its tile (Figma image fill and tile) uses the picture itself; other content is drawn into a tile texture (4 px per unit, at most 1024 px a side) the first time the document is drawn, and freed with the document. A mesh has one texture, so a pattern with another texture starts a new mesh (as text does). Text inside a pattern is not drawn (reported). |
 | `<solidcolor>` | Not supported | SVG 2 draft element that no browser ships. Reported. |
 | `<hatch>` | Not supported | SVG 2 draft, as above. Reported. |
 | `<hatchpath>` | Not supported | SVG 2 draft. Reported. |
@@ -379,7 +379,7 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | `<altGlyphItem>` | Not supported | SVG 1.1. Reported. |
 | `<glyphRef>` | Not supported | SVG 1.1. Reported. |
 | `<textArea>` | Not supported | SVG Tiny 1.2 flowed text. Reported. |
-| `<image>` | Partial | Embedded `data:` URIs (PNG, JPG) as an axis-aligned rectangle with opacity; external URLs are not loaded (reported); `preserveAspectRatio` is ignored (reported). |
+| `<image>` | Partial | Embedded `data:` URIs (PNG, JPG); external URLs are not loaded (reported). On its own: an axis-aligned rectangle with opacity, `preserveAspectRatio` is ignored (reported). Inside a `<pattern>`: `preserveAspectRatio` (`meet`, `slice`) and any transform are honoured. |
 | `<foreignObject>` | Not supported | HTML and other XML inside is not drawn. Reported. |
 | `<video>` | Not supported | Reported. |
 | `<audio>` | Not supported | Reported. |

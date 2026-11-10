@@ -56,6 +56,7 @@ namespace FirstSymbol.Vectra.Svg
             public bool stopped, styleReady;
             public readonly List<SvgNode> activeUse = new List<SvgNode>();
             public readonly HashSet<string> warned = new HashSet<string>();
+            public readonly SvgPatternState patterns = new SvgPatternState();
 
             public void Warn(string msg)
             {
@@ -88,6 +89,7 @@ namespace FirstSymbol.Vectra.Svg
             options ??= new SvgParseOptions();
             doc.elements.Clear();
             doc.warnings.Clear();
+            SvgPatterns.Reset(doc);
             var xml = SvgXml.Parse(svg, options, doc.warnings);
             var root = FindFirst(xml, "svg");
             if (root == null)
@@ -347,7 +349,8 @@ namespace FirstSymbol.Vectra.Svg
                     RenderText(n, local, op, ctx);
                     break;
                 case "image":
-                    RenderImage(n, local, op, ctx);
+                    if (ctx.patterns.capture > 0) CaptureImage(n, local, op, elementClips, elementEffects, ctx);
+                    else RenderImage(n, local, op, ctx);
                     break;
                 default:
                     if (BuildShape(n, ctx))
@@ -665,7 +668,7 @@ namespace FirstSymbol.Vectra.Svg
             if (clips != null) e.clips.AddRange(clips);
             if (effects != null)
                 foreach (var fx in effects) e.effects.Add(fx.Clone());
-            ctx.doc.elements.Add(e);
+            AddElement(ctx, e);
         }
 
         // ---------------------------------------------------------------------------------------------------
@@ -730,13 +733,7 @@ namespace FirstSymbol.Vectra.Svg
 
         static VectraPaint GradientPaint(SvgNode g, Bounds2 bbox, Affine2 docToUser, Context ctx)
         {
-            if (g.name == "pattern")
-            {
-                ctx.Warn("Pattern fills are approximated with the colour of their first shape.");
-                var first = FindFirstShape(g);
-                var fill = first != null ? Style(first, "fill", "black") : "black";
-                return VectraPaint.Solid(SvgColor.TryParse(fill, out var pc) ? pc : Color.gray);
-            }
+            if (g.name == "pattern") return PatternPaint(g, bbox, docToUser, ctx);
 
             if (g.name != "linearGradient" && g.name != "radialGradient") return null;
             var grad = new VectraGradient { interpolation = GradientInterpolation.Gamma };

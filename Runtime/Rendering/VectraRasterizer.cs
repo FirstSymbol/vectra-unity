@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using FirstSymbol.Vectra.Svg;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -13,10 +14,43 @@ namespace FirstSymbol.Vectra.Rendering
         public static Texture2D Render(VectraSvgDocument doc, int width, int height, VectraQuality quality = VectraQuality.High)
         {
             if (doc == null) return null;
-            using var renderer = new VectraShapeRenderer();
             var rect = new Rect(0, 0, width, height);
-            VectraSvgBuilder.Build(doc, renderer, rect, 1f, Color.white, true, quality);
-            return Render(renderer, rect, width, height);
+            var renderers = BuildDocument(doc, rect, quality);
+            try
+            {
+                return Render(renderers, rect, width, height);
+            }
+            finally
+            {
+                foreach (var r in renderers) r.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Builds the path elements of a document, one renderer per mesh: a mesh draws with one texture, so a pattern with another
+        /// texture starts the next one. The caller disposes the renderers.
+        /// </summary>
+        internal static List<VectraShapeRenderer> BuildDocument(VectraSvgDocument doc, Rect rect, VectraQuality quality)
+        {
+            var renderers = new List<VectraShapeRenderer>();
+            var items = new List<SvgDrawItem>();
+            SvgDrawOrder.Split(doc, false, false, items);
+            if (items.Count <= 1)
+            {
+                var single = new VectraShapeRenderer();
+                renderers.Add(single);
+                VectraSvgBuilder.Build(doc, single, rect, 1f, Color.white, true, quality);
+                return renderers;
+            }
+
+            foreach (var item in items)
+            {
+                var r = new VectraShapeRenderer();
+                renderers.Add(r);
+                VectraSvgBuilder.Build(doc, r, rect, 1f, Color.white, true, quality, null, null, null, item.from, item.to);
+            }
+
+            return renderers;
         }
 
         public static Texture2D Render(VectraShapeContent content, Vector2 size, int width, int height)
@@ -33,12 +67,21 @@ namespace FirstSymbol.Vectra.Rendering
         }
 
         /// <summary>Renders the renderer's current buffer; <paramref name="view"/> is the local area mapped to the texture.</summary>
-        public static Texture2D Render(VectraShapeRenderer renderer, Rect view, int width, int height)
+        public static Texture2D Render(VectraShapeRenderer renderer, Rect view, int width, int height) =>
+            Render(new List<VectraShapeRenderer> { renderer }, view, width, height);
+
+        /// <summary>Renders several renderers in order, each with its own texture; later ones are drawn above earlier ones.</summary>
+        internal static Texture2D Render(List<VectraShapeRenderer> renderers, Rect view, int width, int height)
         {
             width = Mathf.Clamp(width, 1, 8192);
             height = Mathf.Clamp(height, 1, 8192);
-            var mesh = new Mesh { hideFlags = HideFlags.HideAndDontSave };
-            renderer.buffer.Upload(mesh);
+            var meshes = new Mesh[renderers.Count];
+            for (int i = 0; i < meshes.Length; i++)
+            {
+                meshes[i] = new Mesh { hideFlags = HideFlags.HideAndDontSave };
+                renderers[i].buffer.Upload(meshes[i]);
+            }
+
             VectraAtlases.Flush();
 
             var rt = RenderTexture.GetTemporary(new RenderTextureDescriptor(width, height, RenderTextureFormat.ARGB32, 0)
@@ -52,7 +95,8 @@ namespace FirstSymbol.Vectra.Rendering
             var proj = Matrix4x4.Ortho(view.xMin, view.xMax, view.yMin, view.yMax, -1f, 1f);
             // CommandBuffer.SetViewProjectionMatrices applies the platform's render-texture Y flip itself.
             cmd.SetViewProjectionMatrices(Matrix4x4.identity, proj);
-            cmd.DrawMesh(mesh, Matrix4x4.identity, VectraMaterials.GetWorld(ShapeBlendMode.Normal, renderer.mainTexture, VectraWorldShaderKind.BuiltIn), 0, 0);
+            for (int i = 0; i < meshes.Length; i++)
+                cmd.DrawMesh(meshes[i], Matrix4x4.identity, VectraMaterials.GetWorld(ShapeBlendMode.Normal, renderers[i].mainTexture, VectraWorldShaderKind.BuiltIn), 0, 0);
             Graphics.ExecuteCommandBuffer(cmd);
             cmd.Release();
 
@@ -62,7 +106,7 @@ namespace FirstSymbol.Vectra.Rendering
             tex.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
             RenderTexture.active = prev;
             RenderTexture.ReleaseTemporary(rt);
-            Object.DestroyImmediate(mesh);
+            foreach (var mesh in meshes) Object.DestroyImmediate(mesh);
 
             // The shaders output premultiplied alpha; textures are usually straight alpha.
             var px = tex.GetPixels32();

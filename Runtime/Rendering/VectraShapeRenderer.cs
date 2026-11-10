@@ -956,7 +956,8 @@ namespace FirstSymbol.Vectra.Rendering
                     r.kind = PaintKind.Texture;
                     mainTexture = paint.texture;
                     r.color = ToVertex(m_Adjust.Apply(paint.ResolvedColor) * tint);
-                    r.toPaint = TextureMapping(paint, mn, size);
+                    // SVG patterns map document space straight to texture space (like SVG gradients).
+                    r.toPaint = paint.useCustomMapping ? paint.customMapping : TextureMapping(paint, mn, size);
                     r.spread = paint.textureFit == TextureFit.Tile ? 1 : 0;
                     return r;
                 }

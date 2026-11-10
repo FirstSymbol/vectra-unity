@@ -140,7 +140,17 @@ namespace FirstSymbol.Vectra.Rendering
             s_Stale.Clear();
             foreach (var kv in cache)
                 if (kv.Key.Item1 == null || kv.Value == null) s_Stale.Add(kv.Key);
-            foreach (var t in s_Stale) cache.Remove(t);
+            foreach (var t in s_Stale)
+            {
+                // The material of a destroyed texture (a pattern tile of a document that was freed) goes with it.
+                if (cache.TryGetValue(t, out var stale) && stale != null)
+                {
+                    if (Application.isPlaying) Object.Destroy(stale);
+                    else Object.DestroyImmediate(stale);
+                }
+
+                cache.Remove(t);
+            }
             m = new Material(shader) { name = $"Vectra World {kind} ({mode}, {paintTexture.name})", hideFlags = HideFlags.HideAndDontSave };
             Apply(m, mode);
             m.SetTexture(s_MainTexId, paintTexture);

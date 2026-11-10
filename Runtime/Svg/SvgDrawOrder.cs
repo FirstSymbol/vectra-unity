@@ -26,7 +26,7 @@ namespace FirstSymbol.Vectra.Svg
             items.Clear();
             int hash = 17;
             if (doc == null || doc.elements == null) return hash;
-            int runStart = -1;
+            int runStart = -1, runKey = 0;
             var list = doc.elements;
             for (int i = 0; i < list.Count; i++)
             {
@@ -36,12 +36,17 @@ namespace FirstSymbol.Vectra.Svg
                 if (overlay)
                 {
                     Close(items, ref runStart, i, ref hash);
+                    runKey = 0;
                     items.Add(new SvgDrawItem { from = i, to = i + 1, overlay = true });
                     hash = hash * 31 + i * 2 + 1;
                     continue;
                 }
 
                 if (e.isText || e.isImage || e.path == null || e.path.IsEmpty) continue;
+                // A mesh draws with one texture: a pattern with another texture starts a new run.
+                int key = SvgPatterns.TextureKey(e);
+                if (key != 0 && runKey != 0 && key != runKey) Close(items, ref runStart, i, ref hash);
+                if (key != 0) runKey = key;
                 if (runStart < 0) runStart = i;
             }
 

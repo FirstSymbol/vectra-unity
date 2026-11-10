@@ -173,7 +173,7 @@ Add the **Vectra Backdrop Feature** to the URP Renderer asset. It captures befor
 The main gaps are below; every SVG element, property and CSS feature is listed as Supported, Partial or Not supported in [SVG support](Documentation~/Vectra.md#svg-support).
 
 - `<mask>` is applied as a geometric clip; the mask's luminance is ignored.
-- Pattern fills are replaced by the colour of the pattern's first shape.
+- Text inside a `<pattern>` is not drawn; other pattern content (images, shapes, gradients, nested patterns) is.
 - Of the filters, blur, drop shadow (including the offset + blur + merge chain), saturate and hueRotate are supported; the other primitives (`feTurbulence`, `feComposite`, `feBlend`, ...) are not.
 - No animation: SMIL (`<animate>`, `<animateTransform>`, `<set>`) and CSS `@keyframes` are ignored; the first frame is drawn. `<foreignObject>` and `<script>` are ignored.
 - No `mix-blend-mode`, `paint-order` or `@font-face`.
