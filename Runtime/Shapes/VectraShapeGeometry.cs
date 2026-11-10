@@ -12,6 +12,9 @@ namespace FirstSymbol.Vectra
         public Rect rect;
         /// <summary>Approximate size of one screen pixel in local units (used for tolerances and anti-aliasing).</summary>
         public float pixelSize;
+        /// <summary>Device pixels in one unit of a pixel-mode stroke width (0 counts as 1). SVG documents set it to the UI scale, so
+        /// "1 px" of a <c>non-scaling-stroke</c> is one reference point on a Canvas and in UI Toolkit.</summary>
+        public float pointScale;
 
         public float2 Center => new float2(rect.center.x, rect.center.y);
         public float2 HalfSize => new float2(rect.width, rect.height) * 0.5f;

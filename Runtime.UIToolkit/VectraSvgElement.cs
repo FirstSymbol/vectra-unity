@@ -272,7 +272,7 @@ namespace FirstSymbol.Vectra.UIToolkit
                 if (!item.overlay)
                 {
                     var layer = m_Layers[layerIndex++];
-                    VectraSvgBuilder.Build(m_Document, layer.renderer, rect, 1f / density, Color.white, true, m_Quality, m_Overrides, align, null, item.from, item.to);
+                    VectraSvgBuilder.Build(m_Document, layer.renderer, rect, 1f / density, Color.white, true, m_Quality, m_Overrides, align, null, item.from, item.to, density);
                     layer.Rasterize(cr.center, density);
                     if (i != 0) ((VectraSvgLayerElement)m_Generated[childIndex++]).MarkDirtyRepaint();
                     continue;

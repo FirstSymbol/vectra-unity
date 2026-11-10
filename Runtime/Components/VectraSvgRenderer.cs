@@ -239,10 +239,13 @@ namespace FirstSymbol.Vectra
             }
 
             float px = PixelSize();
-            if (!m_Dirty && m_BuiltPixelSize > 0f && (px > m_BuiltPixelSize * 1.5f || px < m_BuiltPixelSize / 1.5f)) m_Dirty = true;
+            if (!m_Dirty && m_BuiltPixelSize > 0f && (px > m_BuiltPixelSize * Band || px < m_BuiltPixelSize / Band)) m_Dirty = true;
             if (!m_Dirty) return;
             Rebuild(px);
         }
+
+        // Non-scaling strokes follow the screen scale closely; other pixel-size dependencies only need a rough match.
+        float Band => m_Document != null && m_Document.HasPixelStrokes ? 1.01f : 1.5f;
 
         void Rebuild() => Rebuild(PixelSize());
 

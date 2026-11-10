@@ -61,6 +61,7 @@ namespace FirstSymbol.Vectra.Svg
                 string paint = Paint(s.paint, rect, defs, ref gid);
                 body.Append("  <path d=\"").Append(d).Append("\" fill=\"none\" stroke=\"").Append(paint)
                     .Append("\" stroke-width=\"").Append(F(s.width)).Append('"');
+                if (s.widthMode == StrokeWidthMode.Pixels) body.Append(" vector-effect=\"non-scaling-stroke\"");
                 if (s.paint.opacity < 1f) body.Append(" stroke-opacity=\"").Append(F(s.paint.opacity)).Append('"');
                 if (s.cap != LineCap.Butt) body.Append(" stroke-linecap=\"").Append(s.cap == LineCap.Round ? "round" : "square").Append('"');
                 if (s.join != LineJoin.Miter) body.Append(" stroke-linejoin=\"").Append(s.join == LineJoin.Round ? "round" : "bevel").Append('"');

@@ -242,6 +242,8 @@ namespace FirstSymbol.Vectra
         public float dashOffset;
         /// <summary>When set, dash lengths are fractions of the contour length (0..1).</summary>
         public bool dashRelative;
+        /// <summary>Dash lengths and the offset are screen pixels too (as for <c>vector-effect="non-scaling-stroke"</c>); needs <see cref="StrokeWidthMode.Pixels"/>.</summary>
+        public bool dashInPixels;
 
         [Range(0f, 1f)] public float trimStart;
         [Range(0f, 1f)] public float trimEnd = 1f;
@@ -288,6 +290,7 @@ namespace FirstSymbol.Vectra
                 h = h * 31 + (int)join;
                 h = h * 31 + miterLimit.GetHashCode();
                 h = h * 31 + (dashed ? 1 : 0);
+                h = h * 31 + (dashInPixels ? 1 : 0);
                 if (dashed && dashPattern != null)
                     foreach (var d in dashPattern) h = h * 31 + d.GetHashCode();
                 h = h * 31 + dashOffset.GetHashCode();

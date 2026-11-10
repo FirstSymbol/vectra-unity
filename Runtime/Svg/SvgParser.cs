@@ -21,7 +21,7 @@ namespace FirstSymbol.Vectra.Svg
         {
             "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap",
             "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "font-family",
-            "font-size", "font-weight", "font-style", "text-anchor", "visibility", "color", "clip-rule", "vector-effect",
+            "font-size", "font-weight", "font-style", "text-anchor", "visibility", "color", "clip-rule",
             "marker", "marker-start", "marker-mid", "marker-end"
         };
 
@@ -509,6 +509,16 @@ namespace FirstSymbol.Vectra.Svg
         {
             if (Style(n, "visibility") == "hidden" || Style(n, "visibility") == "collapse") return;
             var bbox = PathFlattener.ControlBounds(ctx.path.points.AsArray(), Affine2.Identity);
+            bool nonScaling = false;
+            var vectorEffect = Style(n, "vector-effect");
+            if (!string.IsNullOrEmpty(vectorEffect) && vectorEffect != "none")
+                foreach (var token in vectorEffect.Split(new[] { ' ', ',' }, System.StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (token == "non-scaling-stroke") nonScaling = true;
+                    else if (token != "none")
+                        ctx.Warn($"SVG: vector-effect=\"{token}\" is not supported and is ignored (only non-scaling-stroke is).");
+                }
+
             var e = new SvgElementData
             {
                 tag = n.name,
@@ -544,7 +554,7 @@ namespace FirstSymbol.Vectra.Svg
                 var paint = ResolvePaint(stroke, n, bbox, inverse, ctx);
                 if (paint != null)
                 {
-                    bool nonScaling = Style(n, "vector-effect") == "non-scaling-stroke";
+                    // Non-scaling: the width and the dashes are screen units (pixel mode), whatever transforms apply.
                     float scale = nonScaling ? 1f : ctm.UniformScale;
                     var s = new StrokeLayer
                     {
@@ -552,7 +562,9 @@ namespace FirstSymbol.Vectra.Svg
                         width = Length(Style(n, "stroke-width"), 1f, Diag(ctx.viewportW, ctx.viewportH), ctx) * scale,
                         cap = ParseCap(Style(n, "stroke-linecap")),
                         join = ParseJoin(Style(n, "stroke-linejoin")),
-                        miterLimit = Mathf.Max(1f, Number(Style(n, "stroke-miterlimit"), 4f))
+                        miterLimit = Mathf.Max(1f, Number(Style(n, "stroke-miterlimit"), 4f)),
+                        widthMode = nonScaling ? StrokeWidthMode.Pixels : StrokeWidthMode.Local,
+                        dashInPixels = nonScaling
                     };
                     paint.opacity *= Mathf.Clamp01(Number(Style(n, "stroke-opacity"), 1f) * opacity);
                     var dashes = Style(n, "stroke-dasharray");

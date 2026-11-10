@@ -744,6 +744,9 @@ namespace FirstSymbol.Vectra.Rendering
             float h = math.max(k - math.abs(a - b), 0f) / k;
             return math.min(a, b) - h * h * k * 0.25f;
         }
+        /// <summary>Local size of the unit a pixel-mode stroke is measured in.</summary>
+        float StrokePixel => m_Frame.pixelSize * (m_Frame.pointScale > 0f ? m_Frame.pointScale : 1f);
+
         NativeList<Trapezoid> EnsureStrokeTraps(int index, StrokeLayer s, VectraShapeGeometry geometry, float tol)
         {
             while (m_StrokeTraps.Count <= index)
@@ -754,8 +757,10 @@ namespace FirstSymbol.Vectra.Rendering
 
             var h = new HashBuilder(m_PolyKey);
             h.Add(s.ComputeGeometryHash());
-            float width = s.EffectiveWidth(m_Frame.pixelSize);
+            float width = s.EffectiveWidth(StrokePixel);
             if (s.widthMode == StrokeWidthMode.Pixels) h.Add(width);
+            float dashUnit = s.widthMode == StrokeWidthMode.Pixels && s.dashInPixels && !s.dashRelative ? StrokePixel : 1f;
+            if (dashUnit != 1f) h.Add(dashUnit);
             int key = h.Value | 1;
             var traps = m_StrokeTraps[index];
             if (m_StrokeKeys[index] == key) return traps;
@@ -770,12 +775,12 @@ namespace FirstSymbol.Vectra.Rendering
             p.trimStart = s.trimStart;
             p.trimEnd = s.trimEnd;
             p.trimOffset = s.trimOffset;
-            p.dashOffset = s.dashOffset;
+            p.dashOffset = s.dashOffset * dashUnit;
             p.dashRelative = s.dashRelative;
 
             var dash = new NativeArray<float>(s.dashed && s.dashPattern != null ? s.dashPattern.Count : 0, Allocator.TempJob);
             for (int i = 0; i < dash.Length; i++)
-                dash[i] = s.dashRelative ? s.dashPattern[i] : s.dashPattern[i];
+                dash[i] = s.dashPattern[i] * dashUnit;
             var profile = new NativeArray<float>(s.useWidthProfile && s.widthProfile != null ? 33 : 0, Allocator.TempJob);
             for (int i = 0; i < profile.Length; i++) profile[i] = math.max(s.widthProfile.Evaluate(i / 32f), 0f);
 
@@ -1215,7 +1220,7 @@ namespace FirstSymbol.Vectra.Rendering
         void EmitStroke(int index, StrokeLayer s, bool analytic, VectraShapeGeometry geometry, float tol)
         {
             if (!StrokeVisible(s)) return;
-            float width = s.EffectiveWidth(m_Frame.pixelSize);
+            float width = s.EffectiveWidth(StrokePixel);
             if (CanStrokeAnalytically(analytic, s))
             {
                 float hw = width * 0.5f;

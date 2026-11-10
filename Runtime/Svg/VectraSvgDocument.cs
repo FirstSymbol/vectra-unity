@@ -139,6 +139,30 @@ namespace FirstSymbol.Vectra.Svg
 
         public float AspectRatio => viewBox.height > 0f ? viewBox.width / viewBox.height : 1f;
 
+        [NonSerialized] int m_PixelStrokeCount = -1, m_PixelStrokeScan = -1;
+        [NonSerialized] bool m_HasPixelStrokes;
+
+        /// <summary>True when an element has a pixel-mode stroke (<c>vector-effect="non-scaling-stroke"</c>): the mesh then depends on the screen scale.</summary>
+        public bool HasPixelStrokes
+        {
+            get
+            {
+                int count = elements != null ? elements.Count : 0;
+                if (m_PixelStrokeScan != count)
+                {
+                    m_PixelStrokeScan = count;
+                    m_HasPixelStrokes = false;
+                    for (int i = 0; i < count && !m_HasPixelStrokes; i++)
+                    {
+                        var s = elements[i]?.stroke;
+                        m_HasPixelStrokes = s != null && s.widthMode == StrokeWidthMode.Pixels;
+                    }
+                }
+
+                return m_HasPixelStrokes;
+            }
+        }
+
         /// <summary>Maps document coordinates into <paramref name="rect"/> (y flipped) honouring preserveAspectRatio.</summary>
         public Affine2 DocumentToLocal(Rect rect, SvgAlign? alignOverride = null, bool? sliceOverride = null)
         {
@@ -210,9 +234,10 @@ namespace FirstSymbol.Vectra.Svg
         static readonly List<StrokeLayer> s_Strokes = new List<StrokeLayer>();
         static readonly List<VectraEffect> s_Effects = new List<VectraEffect>();
 
+        /// <param name="pointScale">Device pixels in one SVG px of a non-scaling stroke: the Canvas scale factor or the UI Toolkit density; 1 in world space and for baked sprites.</param>
         public static void Build(VectraSvgDocument doc, VectraShapeRenderer renderer, Rect localRect, float localPixelSize,
             Color tint, bool world, VectraQuality quality, List<SvgOverride> overrides = null, SvgAlign? align = null,
-            bool? slice = null, int from = 0, int to = int.MaxValue)
+            bool? slice = null, int from = 0, int to = int.MaxValue, float pointScale = 1f)
         {
             renderer.BeginBatch();
             if (doc == null || doc.elements == null)
@@ -226,7 +251,7 @@ namespace FirstSymbol.Vectra.Svg
 
             var toLocal = doc.DocumentToLocal(localRect, align, slice);
             float scale = math.max(toLocal.UniformScale, 1e-6f);
-            var frame = new ShapeFrame { rect = doc.viewBox, pixelSize = localPixelSize / scale };
+            var frame = new ShapeFrame { rect = doc.viewBox, pixelSize = localPixelSize / scale, pointScale = pointScale };
             var clip = new Polylines(Allocator.TempJob, 64);
             var clipPath = new NativePath(Allocator.TempJob, 32);
             var clipBuilder = new PathBuilder(clipPath);

@@ -194,6 +194,17 @@ namespace FirstSymbol.Vectra
             m_LayoutDirty = true;
         }
 
+        float m_BuiltPixelSize;
+
+        /// <summary>Device pixels in one SVG px of a non-scaling stroke: the scale factor of the screen-space Canvas (one reference point).</summary>
+        float PointScale()
+        {
+            var c = canvas;
+            if (c == null) return 1f;
+            var root = c.rootCanvas;
+            return root.renderMode == RenderMode.WorldSpace ? 1f : root.scaleFactor;
+        }
+
         float PixelSize()
         {
             var c = canvas;
@@ -224,8 +235,9 @@ namespace FirstSymbol.Vectra
         /// <summary>Builds the path elements in [from, to) of the document into <paramref name="mesh"/>.</summary>
         internal void BuildMesh(VectraShapeRenderer renderer, Mesh mesh, int from, int to)
         {
-            VectraSvgBuilder.Build(m_Document, renderer, rectTransform.rect, PixelSize(), color, false, m_Quality,
-                m_Overrides, m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None, null, from, to);
+            m_BuiltPixelSize = PixelSize();
+            VectraSvgBuilder.Build(m_Document, renderer, rectTransform.rect, m_BuiltPixelSize, color, false, m_Quality,
+                m_Overrides, m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None, null, from, to, PointScale());
             renderer.buffer.Upload(mesh);
         }
 
@@ -237,6 +249,12 @@ namespace FirstSymbol.Vectra
             // The layout of the document changed (elements added or reordered): the generated objects no longer match it.
             if (m_Signature != m_BuiltSignature) m_ChildrenDirty = true;
             if (rectTransform.rect.size != m_LaidOutSize) m_LayoutDirty = true;
+            if (m_Document != null && m_Document.HasPixelStrokes && m_BuiltPixelSize > 0f)
+            {
+                // Non-scaling strokes keep their screen width: the mesh follows the scale of the object, the camera and the Canvas.
+                float now = PixelSize();
+                if (Mathf.Abs(now - m_BuiltPixelSize) > m_BuiltPixelSize * 0.01f) SetVerticesDirty();
+            }
             if (m_ChildrenDirty)
             {
                 m_ChildrenDirty = false;
