@@ -1,0 +1,70 @@
+.page {
+    flex-grow: 1;
+    padding: 24px;
+    background-color: rgb(24, 26, 34);
+}
+
+.title {
+    font-size: 28px;
+    color: white;
+    margin-bottom: 6px;
+}
+
+.note {
+    color: rgb(170, 175, 190);
+    margin-bottom: 14px;
+}
+
+.row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 18px;
+}
+
+.row > * {
+    margin-right: 22px;
+}
+
+.badge {
+    width: 120px;
+    height: 120px;
+    --vectra-fill: rgb(255, 204, 0);
+    --vectra-stroke: rgb(34, 34, 34);
+    --vectra-stroke-width: 4;
+}
+
+.badge:hover {
+    --vectra-fill: rgb(255, 230, 128);
+}
+
+.chip {
+    width: 180px;
+    height: 72px;
+    --vectra-fill: rgb(70, 130, 255);
+}
+
+.chip:hover {
+    --vectra-fill: rgb(120, 170, 255);
+    --vectra-corner-radius: 36;
+}
+
+.dot {
+    width: 72px;
+    height: 72px;
+    --vectra-fill: rgb(80, 220, 160);
+}
+
+.heart {
+    width: 96px;
+    height: 96px;
+    --vectra-fill: rgb(255, 80, 120);
+}
+
+.heart:hover {
+    --vectra-fill: rgb(255, 140, 170);
+}
+
+.spinner {
+    width: 110px;
+    height: 110px;
+}

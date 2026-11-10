@@ -1,0 +1,16 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:vf="FirstSymbol.Vectra.UIToolkit">
+    <Style src="UiToolkitSample.uss" />
+    <ui:VisualElement class="page">
+        <ui:Label text="Vectra in UI Toolkit" class="title" />
+        <ui:Label text="Shapes are described in UXML, styled from USS and drawn with the same SDF shader as in a Canvas." class="note" />
+        <ui:VisualElement class="row">
+            <vf:VectraElement class="badge" shape="Star" sides="6" corner-radius="3" />
+            <vf:VectraElement class="chip" shape="Rectangle" corner-radius="18" />
+            <vf:VectraElement class="dot" shape="Ellipse" />
+            <vf:VectraElement class="heart" shape="Heart" />
+            <vf:VectraElement name="spinner" class="spinner" shape="Squircle" />
+        </ui:VisualElement>
+        <ui:Label text="Hover the badge, the chip and the heart: the colours come from USS custom properties." class="note" />
+        <ui:VisualElement name="svg-row" class="row" />
+    </ui:VisualElement>
+</ui:UXML>

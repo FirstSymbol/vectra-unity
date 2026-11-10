@@ -1,6 +1,6 @@
 # Vectra — Vector Graphics for Unity
 
-Vectra draws resolution-independent vector shapes in **uGUI Canvas** and in **world space**: analytic primitives,
+Vectra draws resolution-independent vector shapes in **uGUI Canvas**, in **world space** and in **UI Toolkit**: analytic primitives,
 arbitrary paths, boolean operations, gradients, strokes, effects, masks and SVG documents. All shapes share one
 material, so a whole UI made of Vectra shapes batches into a handful of draw calls, and rebuilding analytic shapes,
 rectangle and ellipse paths and boolean groups of them does not allocate managed memory (path mode of star, polygon and
@@ -18,20 +18,21 @@ a few other shapes still builds a small point array).
 1. [Installation](#installation)
 2. [How it works](#how-it-works)
 3. [Components](#components)
-4. [Shapes](#shapes)
-5. [Paint, strokes and palettes](#paint-strokes-and-palettes)
-6. [Effects](#effects)
-7. [Masks](#masks)
-8. [Boolean operations](#boolean-operations)
-9. [SVG](#svg)
-10. [World space and Shader Graph](#world-space-and-shader-graph)
-11. [Vector sprites](#vector-sprites)
-12. [Animation](#animation)
-13. [URP backdrop](#urp-backdrop)
-14. [Editor tools](#editor-tools)
-15. [Command line](#command-line)
-16. [Performance](#performance)
-17. [Troubleshooting](#troubleshooting)
+4. [UI Toolkit](#ui-toolkit)
+5. [Shapes](#shapes)
+6. [Paint, strokes and palettes](#paint-strokes-and-palettes)
+7. [Effects](#effects)
+8. [Masks](#masks)
+9. [Boolean operations](#boolean-operations)
+10. [SVG](#svg)
+11. [World space and Shader Graph](#world-space-and-shader-graph)
+12. [Vector sprites](#vector-sprites)
+13. [Animation](#animation)
+14. [URP backdrop](#urp-backdrop)
+15. [Editor tools](#editor-tools)
+16. [Command line](#command-line)
+17. [Performance](#performance)
+18. [Troubleshooting](#troubleshooting)
 
 ## Installation
 
@@ -48,6 +49,7 @@ Samples: **Package Manager → Vectra Vector Graphics → Samples**.
 | Boolean Operations | Groups with moving operands, smooth union (metaballs), a BooleanShape built in code |
 | Animation | Fluent tweens, an AnimationClip keying Animated Properties, morphing, marching dashes |
 | World Space | VectraRenderer cards in 3D, generated colliders, click handling |
+| UI Toolkit | A UXML panel with `VectraElement`s styled from USS, an SVG element and a code-built star (see [UI Toolkit](#ui-toolkit)) |
 | URP Backdrop | Frosted glass and 15 blend modes over moving UI (see [URP backdrop](#urp-backdrop)) |
 
 ## How it works
@@ -73,6 +75,7 @@ paints, backdrop shapes and soft-masked children are the exceptions (their own t
 | `VectraShape` | uGUI shape (`MaskableGraphic`): Mask, RectMask2D (with softness), layout, precise raycasts |
 | `VectraRenderer` | World-space shape (MeshRenderer): sorting layer/order, optional `PolygonCollider2D` |
 | `VectraSvgImage` / `VectraSvgRenderer` | An SVG document as one mesh (UI / world) with per-element overrides |
+| `VectraElement` / `VectraSvgElement` | The same shapes and SVG documents for UI Toolkit (UXML, USS, runtime and editor panels): [UI Toolkit](#ui-toolkit) |
 | `VectraBooleanGroup` + `VectraBooleanOperand` | Child shapes become operands of a boolean operation |
 | `VectraMask` | Masks children by the outline of the shape: stencil or soft (feathered, invertible) |
 | `VectraTheme` | Activates a `VectraPalette` and selects its theme |
@@ -97,6 +100,58 @@ shape.AddEffect<DropShadowEffect>().blur = 12f;
 shape.Strokes[0].trimEnd = 0.5f;
 shape.SetShapeDirty();
 ```
+
+## UI Toolkit
+
+`VectraElement` and `VectraSvgElement` (namespace `FirstSymbol.Vectra.UIToolkit`, assembly `FirstSymbol.Vectra.UIToolkit`) draw Vectra in UI Toolkit panels: runtime `UIDocument`s and editor windows. Both are `[UxmlElement]`s, so UI Builder lists them under **Library → Project → Custom Controls (C#)**.
+
+| Element | Purpose |
+|---|---|
+| `VectraElement` | Any primitive or path with fills, strokes, effects, booleans, palettes and styles. Takes the same `VectraShapeContent` as `VectraShape`, so code written for uGUI moves over unchanged. |
+| `VectraSvgElement` | A `VectraSvgDocument`: shapes, colour overrides by selector, paint order, SVG text (see the limits below). |
+
+```xml
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:vf="FirstSymbol.Vectra.UIToolkit">
+    <vf:VectraElement shape="Star" sides="6" fill="#ffcc00" stroke="#222222" stroke-width="3" class="badge" />
+    <vf:VectraSvgElement document="project://database/Assets/Icons/logo.svg" />
+</ui:UXML>
+```
+
+Attributes of `VectraElement`: `shape` (Rectangle, Ellipse, Triangle, Polygon, Star, Heart, Squircle, Custom), `sides`, `fill`, `stroke`, `stroke-width`, `corner-radius`, `quality`, `shape-asset` and `style-asset` (shared geometry and appearance). Attributes of `VectraSvgElement`: `document`, `preserve-aspect`, `quality`, `generate-text`. Size comes from the usual `width` and `height`; with none, the element is 100 by 100 points.
+
+USS properties, which win over the attributes and follow `:hover`, `:active` and the other pseudo states:
+
+```css
+.badge { --vectra-fill: #ffcc00; --vectra-stroke: #222222; --vectra-stroke-width: 3; --vectra-corner-radius: 8; }
+.badge:hover { --vectra-fill: #ffe680; }
+```
+
+From code, the shape is described like a `VectraShape`:
+
+```csharp
+using FirstSymbol.Vectra.UIToolkit;
+using UnityEngine.UIElements;
+
+var root = new VisualElement();
+var star = new VectraElement { Shape = VectraElementShape.Star, Fill = Color.yellow, StrokeWidth = 3f };
+star.style.width = 120;
+star.style.height = 120;
+star.SetGeometry<StarShape>().points = 7;
+star.AddEffect<DropShadowEffect>().blur = 10f;
+star.Fills[0].paint = VectraPaint.Linear(Color.yellow, Color.red, 90f);
+star.SetShapeDirty();   // after changing geometry, fills, strokes or effects
+root.Add(star);
+```
+
+**How it works.** UI Toolkit meshes carry only a position, a colour and one uv, and `MeshGenerationContext` takes a texture, not a material, while a Vectra vertex carries four float4. So the element builds the same mesh as `VectraShape`, draws it with the same material and shader into a render texture, and UI Toolkit shows that texture as a quad. Anti-aliased SDF edges, gradients, dashes, shadows, glows, bevels and every other effect therefore look the same as in a Canvas. Small elements share 2048-pixel pages, so UI Toolkit batches their quads into one draw call; an element over 512 pixels gets a texture of its own. The picture is redrawn only when the shape, the element's size or the screen density (by 25 %) changes; an idle element costs nothing, and redrawing allocates no managed memory after warm-up.
+
+**Limits.**
+- The element is a bitmap at the density it was drawn for. A scale transform stretches it until the density has drifted by 25 %, then it is redrawn. A rotated element is resampled and softer.
+- Blend modes other than Normal, `VectraMask`, interaction states, the URP backdrop and Lettera-drawn text are uGUI and world features and do not apply here. A shape cannot blend with what is behind the element.
+- SVG text is drawn by UI Toolkit labels in the panel's font (Lettera and TextMesh Pro have no UI Toolkit element). The panel needs a theme style sheet for any font to show. Baseline and anchor are placed from the font size, so a font with unusual metrics sits a point or two off.
+- SVG `<image>` elements are skipped.
+- A texture is at most 4096 pixels on a side; a larger element is drawn at a lower density.
+- Elements pick by outline (`ContainsPoint`), including holes and strokes.
 
 ## Shapes
 
@@ -410,6 +465,7 @@ unity command vectra expand_svg --target "SVG Image"
 - Shapes rebuild only when changed. Animated parameters rebuild every frame without managed allocations.
 - Texture paints, backdrop shapes and soft-masked children use separate materials (they batch among themselves).
 - World shapes under URP and HDRP use SRP Batcher compatible shaders (the 0.5.3 one was not). Measured: 500 shapes cost the same CPU time as before in a Windows IL2CPP player (see [Platforms](Platforms.md)); the change is that they now qualify for the batcher (no property block per shape, shared batches with other batcher-compatible objects), not a faster frame at this size.
+- In UI Toolkit a shape is rasterized into a shared page only when it changes; small elements share pages so their quads batch (see [UI Toolkit](#ui-toolkit)).
 - The SDF atlas size limit is in Project Settings and reaches player builds (the build adds a small settings asset to the Preloaded Assets and removes it afterwards); the Atlas Debugger shows usage. A change uploads only the changed blocks of the atlas, not the whole texture.
 - The gradient atlas (256 texels wide, up to 4096 rows, 8 MiB of half floats at most) shares rows between paints with the same colours and stops. Rows are compared by content, so two paints can never end up on one row. A row nobody uses any more stays baked; the least recently used ones are dropped when the atlas is full. If 4095 different gradients are alive at once, the rest draw white and the console warns once.
 - What has been built and run on which platform: [Platforms](Platforms.md).
@@ -422,4 +478,5 @@ unity command vectra expand_svg --target "SVG Image"
 | Backdrop shapes render plain | Add the Vectra Backdrop Feature to the active URP renderer |
 | Glass does not blur other UI | Draw the background UI with a base camera and the glass with an overlay camera |
 | SVG text is missing | Check **Project Settings → Vectra → Text engine**. For TextMesh Pro import TMP Essential Resources or assign a font / font map; Lettera needs the package; the console warns once when an engine had to be replaced |
+| A Vectra element in UI Toolkit shows nothing | It needs a size (width and height) and to be in a panel; SVG text also needs a theme style sheet on the panel for a font |
 | `.svg` imported by another importer | Choose Vectra Svg Importer on the file or enable it in Project Settings |
