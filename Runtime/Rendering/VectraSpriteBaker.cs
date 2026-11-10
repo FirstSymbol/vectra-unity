@@ -83,7 +83,7 @@ namespace FirstSymbol.Vectra.Rendering
             var rect = new Rect(0f, 0f, size.x, size.y);
             using var renderer = new VectraShapeRenderer();
             VectraSvgBuilder.Build(doc, renderer, rect, 1f, Color.white, true, options.quality);
-            return Finish(renderer, rect, 1f, options, size, null);
+            return Finish(renderer, rect, 1f, options, size, null, SvgLayers.HasLayers(doc) ? doc : null);
         }
 
         static bool ReachesOutside(VectraShapeContent content)
@@ -101,7 +101,7 @@ namespace FirstSymbol.Vectra.Rendering
             return o;
         }
 
-        static Sprite Finish(VectraShapeRenderer renderer, Rect rect, float px, VectraSpriteOptions o, Vector2 size, RectangleShape frame)
+        static Sprite Finish(VectraShapeRenderer renderer, Rect rect, float px, VectraSpriteOptions o, Vector2 size, RectangleShape frame, VectraSvgDocument layered = null)
         {
             // The view covers the shape and whatever reaches outside it (shadows, glows, outside strokes) in whole pixels.
             var view = rect;
@@ -119,7 +119,8 @@ namespace FirstSymbol.Vectra.Rendering
             float sx = rect.width / w, sy = rect.height / h;
             var mapped = new Rect(rect.xMin - padL * sx, rect.yMin - padB * sy, tw * sx, th * sy);
 
-            var raw = VectraRasterizer.Render(renderer, mapped, tw, th);
+            // Documents with layers are composited; the plain build above only measured the overflow.
+            var raw = layered != null ? VectraRasterizer.RenderLayered(layered, rect, mapped, tw, th, o.quality) : VectraRasterizer.Render(renderer, mapped, tw, th);
             if (raw == null) return null;
             var pixels = raw.GetPixels32();
             UnityEngine.Object.DestroyImmediate(raw);

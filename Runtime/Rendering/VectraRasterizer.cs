@@ -14,14 +14,14 @@ namespace FirstSymbol.Vectra.Rendering
         {
             if (doc == null) return null;
             var rect = new Rect(0, 0, width, height);
-            if (SvgLayers.HasLayers(doc)) return RenderLayered(doc, rect, width, height, quality);
+            if (SvgLayers.HasLayers(doc)) return RenderLayered(doc, rect, rect, width, height, quality);
             using var renderer = new VectraShapeRenderer();
             VectraSvgBuilder.Build(doc, renderer, rect, 1f, Color.white, true, quality);
             return Render(renderer, rect, width, height);
         }
 
         // Documents with layers (group opacity, masks, blend modes, background blur) go through the compositor.
-        static Texture2D RenderLayered(VectraSvgDocument doc, Rect rect, int width, int height, VectraQuality quality)
+        internal static Texture2D RenderLayered(VectraSvgDocument doc, Rect rect, Rect view, int width, int height, VectraQuality quality)
         {
             width = Mathf.Clamp(width, 1, 8192);
             height = Mathf.Clamp(height, 1, 8192);
@@ -31,7 +31,7 @@ namespace FirstSymbol.Vectra.Rendering
                 using var compositor = new SvgCompositor();
                 compositor.Render(doc, 0, doc.elements.Count, -1, new SvgCompositeSettings
                 {
-                    localRect = rect, view = rect, width = width, height = height, localPixelSize = 1f,
+                    localRect = rect, view = view, width = width, height = height, localPixelSize = Mathf.Max(view.width / width, view.height / height),
                     tint = Color.white, quality = quality, pointScale = 1f
                 }, rt);
                 return Read(rt, width, height);

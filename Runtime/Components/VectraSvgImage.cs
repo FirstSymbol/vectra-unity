@@ -42,6 +42,7 @@ namespace FirstSymbol.Vectra
             public GameObject go;
             public SvgElementData element;
             public VectraSvgLayer layer;
+            public VectraSvgComposite composite;
             public bool isText;
         }
 
@@ -195,6 +196,7 @@ namespace FirstSymbol.Vectra
         }
 
         float m_BuiltPixelSize;
+        float m_CompositePixelSize;
 
         /// <summary>Device pixels in one SVG px of a non-scaling stroke: the scale factor of the screen-space Canvas (one reference point).</summary>
         float PointScale()
@@ -267,11 +269,15 @@ namespace FirstSymbol.Vectra
                 LayoutChildren();
             }
 
+            if (m_CompositePixelSize > 0f && Mathf.Abs(PixelSize() - m_CompositePixelSize) > m_CompositePixelSize * 0.02f) m_LayersDirty = true;
             if (m_LayersDirty)
             {
                 m_LayersDirty = false;
                 foreach (var g in m_Generated)
+                {
                     if (g.layer != null) g.layer.SetVerticesDirty();
+                    if (g.composite != null) g.composite.Refresh();
+                }
             }
         }
 
@@ -286,6 +292,7 @@ namespace FirstSymbol.Vectra
 
             m_Generated.Clear();
             m_Backend = null;
+            m_CompositePixelSize = 0f;
         }
 
         /// <summary>Rebuilds the generated text and image children now (otherwise it happens in the next LateUpdate).</summary>
@@ -307,6 +314,12 @@ namespace FirstSymbol.Vectra
             for (int i = 0; i < m_Items.Count; i++)
             {
                 var item = m_Items[i];
+                if (item.composite)
+                {
+                    CreateComposite(item.from, item.to);
+                    continue;
+                }
+
                 if (!item.overlay)
                 {
                     if (i > 0) CreateLayer(item.from, item.to); // the first run, when it opens the document, is the component's own mesh
@@ -385,6 +398,35 @@ namespace FirstSymbol.Vectra
             var layer = go.AddComponent<VectraSvgLayer>();
             layer.Setup(this, from, to);
             m_Generated.Add(new Generated { go = go, layer = layer });
+        }
+
+        void CreateComposite(int from, int to)
+        {
+            var go = new GameObject("SVG Composite", typeof(RectTransform)) { hideFlags = HideFlags.DontSave | HideFlags.NotEditable };
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(transform, false);
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            var composite = go.AddComponent<VectraSvgComposite>();
+            composite.Setup(this, from, to);
+            m_Generated.Add(new Generated { go = go, composite = composite });
+        }
+
+        /// <summary>Renders the layers of [from, to) into <paramref name="texture"/> for the current size and density; skipped when nothing changed since <paramref name="key"/>.</summary>
+        internal bool RenderComposite(int from, int to, ref RenderTexture texture, ref int key)
+        {
+            if (m_Document == null) return false;
+            var rect = rectTransform.rect;
+            float px = PixelSize();
+            var align = m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None;
+            int k = System.HashCode.Combine(rect.width, rect.height, px, (int)m_Quality, m_PreserveAspect, from, to);
+            foreach (var o in m_Overrides)
+                if (o != null) k = System.HashCode.Combine(k, o.selector, o.hide, o.overrideFill, o.fill, o.overrideStroke, o.stroke);
+            if (texture != null && texture.IsCreated() && k == key) return true;
+            key = k;
+            m_CompositePixelSize = px;
+            return SvgCompositor.RenderStep(m_Document, from, to, rect, px, m_Quality, m_Overrides, align, PointScale(), ref texture);
         }
 
         /// <summary>Sets up a text object of <paramref name="backend"/> for an SVG text element placed in a rect of this image's size.</summary>

@@ -45,6 +45,10 @@ namespace FirstSymbol.Vectra
             public VectraShapeRenderer renderer;
             public Mesh mesh;
             public int from, to;
+            // A step drawn by the compositor: the picture is a render texture shown on a quad (renderer and mesh are not used).
+            public bool composite;
+            public RenderTexture texture;
+            public MaterialPropertyBlock block;
         }
 
         sealed class WorldText
@@ -235,7 +239,7 @@ namespace FirstSymbol.Vectra
                 m_ShaderKind = kind;
                 if (TryGetComponent(out MeshRenderer main)) main.sharedMaterial = VectraMaterials.GetWorld();
                 foreach (var l in m_Layers)
-                    if (l.go != null && l.go.TryGetComponent(out MeshRenderer lr)) lr.sharedMaterial = VectraMaterials.GetWorld();
+                    if (l.go != null && !l.composite && l.go.TryGetComponent(out MeshRenderer lr)) lr.sharedMaterial = VectraMaterials.GetWorld();
             }
 
             float px = PixelSize();
@@ -282,6 +286,12 @@ namespace FirstSymbol.Vectra
 
             foreach (var layer in m_Layers)
             {
+                if (layer.composite)
+                {
+                    RenderComposite(layer, rect, px);
+                    continue;
+                }
+
                 VectraSvgBuilder.Build(m_Document, layer.renderer, rect, px, m_Color, true, m_Quality, m_Overrides, null, null, layer.from, layer.to);
                 layer.renderer.buffer.Upload(layer.mesh);
             }
@@ -299,6 +309,7 @@ namespace FirstSymbol.Vectra
             {
                 l.renderer?.Dispose();
                 DestroyMesh(l.mesh);
+                SvgCompositor.Free(ref l.texture);
                 DestroyObject(l.go);
             }
 
@@ -323,6 +334,12 @@ namespace FirstSymbol.Vectra
             {
                 var item = m_Items[i];
                 int order = m_SortingOrder + i;
+                if (item.composite)
+                {
+                    CreateComposite(item, order);
+                    continue;
+                }
+
                 if (!item.overlay)
                 {
                     if (i == 0) continue; // the component's own mesh
@@ -344,6 +361,41 @@ namespace FirstSymbol.Vectra
                 go.transform.SetParent(transform, false);
                 m_Texts.Add(new WorldText { go = go, element = e, order = order });
             }
+        }
+
+        void CreateComposite(SvgDrawItem item, int order)
+        {
+            var go = new GameObject("SVG Composite", typeof(MeshFilter), typeof(MeshRenderer)) { hideFlags = HideFlags.DontSave | HideFlags.NotEditable };
+            go.transform.SetParent(transform, false);
+            var layer = new WorldLayer
+            {
+                go = go,
+                mesh = new Mesh { name = "Vectra SVG composite", hideFlags = HideFlags.HideAndDontSave },
+                from = item.from,
+                to = item.to,
+                composite = true,
+                block = new MaterialPropertyBlock()
+            };
+            go.GetComponent<MeshFilter>().sharedMesh = layer.mesh;
+            var mr = go.GetComponent<MeshRenderer>();
+            mr.sharedMaterial = SvgCompositor.LayerMaterial;
+            mr.sortingOrder = order;
+            m_Layers.Add(layer);
+        }
+
+        // Draws the layers of the step into its texture at the current pixel size and puts the texture on a quad covering the document.
+        void RenderComposite(WorldLayer layer, Rect rect, float px)
+        {
+            if (!SvgCompositor.RenderStep(m_Document, layer.from, layer.to, rect, px, m_Quality, m_Overrides, null, 1f, ref layer.texture)) return;
+            var m = layer.mesh;
+            m.Clear();
+            m.SetVertices(new[] { new Vector3(rect.xMin, rect.yMin), new Vector3(rect.xMin, rect.yMax), new Vector3(rect.xMax, rect.yMax), new Vector3(rect.xMax, rect.yMin) });
+            m.SetUVs(0, new[] { new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(1f, 0f) });
+            m.SetColors(new[] { m_Color, m_Color, m_Color, m_Color });
+            m.SetTriangles(new[] { 0, 1, 2, 2, 3, 0 }, 0);
+            m.RecalculateBounds();
+            layer.block.SetTexture("_MainTex", layer.texture);
+            layer.go.GetComponent<MeshRenderer>().SetPropertyBlock(layer.block);
         }
 
         void CreateLayer(SvgDrawItem item, int order)

@@ -75,6 +75,64 @@ namespace FirstSymbol.Vectra.Rendering
             }
         }
 
+        static Material s_LayerMaterial;
+
+        /// <summary>The material that draws a composited texture as a quad (Canvas and world space): premultiplied alpha, with Canvas masking.</summary>
+        public static Material LayerMaterial
+        {
+            get
+            {
+                if (s_LayerMaterial == null)
+                {
+                    var shader = Resources.Load<Shader>("Vectra/Vectra-Layer") ?? UnityEngine.Shader.Find("Vectra/Layer");
+                    if (shader == null) return null;
+                    s_LayerMaterial = new Material(shader) { name = "Vectra Layer", hideFlags = HideFlags.HideAndDontSave };
+                }
+
+                return s_LayerMaterial;
+            }
+        }
+
+        /// <summary>
+        /// Renders the elements [from, to) of the document (with their layers) into <paramref name="texture"/>, which is created or
+        /// resized to cover <paramref name="rect"/> at <paramref name="pixelSize"/> local units per device pixel. The caller owns the texture.
+        /// </summary>
+        public static bool RenderStep(VectraSvgDocument doc, int from, int to, Rect rect, float pixelSize, VectraQuality quality,
+            List<SvgOverride> overrides, SvgAlign? align, float pointScale, ref RenderTexture texture, int maxSize = 4096)
+        {
+            if (doc == null || rect.width <= 0f || rect.height <= 0f) return false;
+            float ps = Mathf.Max(pixelSize, 1e-6f);
+            int w = Mathf.Clamp(Mathf.CeilToInt(rect.width / ps), 1, maxSize), h = Mathf.Clamp(Mathf.CeilToInt(rect.height / ps), 1, maxSize);
+            if (texture == null || texture.width != w || texture.height != h || !texture.IsCreated())
+            {
+                if (texture != null)
+                {
+                    texture.Release();
+                    UnityEngine.Object.DestroyImmediate(texture);
+                }
+
+                texture = Allocate(w, h);
+            }
+
+            using var compositor = new SvgCompositor();
+            compositor.Render(doc, from, to, -1, new SvgCompositeSettings
+            {
+                localRect = rect, view = rect, width = w, height = h, localPixelSize = Mathf.Max(rect.width / w, rect.height / h),
+                tint = Color.white, quality = quality, overrides = overrides, align = align, pointScale = pointScale
+            }, texture);
+            return true;
+        }
+
+        /// <summary>Releases a texture made by <see cref="RenderStep"/> or <see cref="Allocate"/>.</summary>
+        public static void Free(ref RenderTexture texture)
+        {
+            if (texture == null) return;
+            texture.Release();
+            if (Application.isPlaying) UnityEngine.Object.Destroy(texture);
+            else UnityEngine.Object.DestroyImmediate(texture);
+            texture = null;
+        }
+
         /// <summary>Creates a render texture of the format layers are composited in. The caller owns and releases it.</summary>
         public static RenderTexture Allocate(int width, int height)
         {

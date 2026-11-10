@@ -179,18 +179,30 @@ namespace FirstSymbol.Vectra.UIToolkit
 
         void Poll()
         {
-            if (m_Dirty || m_Layers.Count == 0) return;
-            float built = m_Layers[0].builtScale;
-            if (!(built > 0f)) return;
-            float now = VectraUitk.Density(this);
+            if (m_Dirty) return;
+            float built = m_Layers.Count > 0 ? m_Layers[0].builtScale : 0f;
             bool alive = true;
             foreach (var l in m_Layers) alive &= l.IsAlive;
+            foreach (var g in m_Generated)
+                if (g is VectraSvgCompositeElement c)
+                {
+                    alive &= c.IsAlive;
+                    if (!(built > 0f)) built = c.builtScale;
+                }
+
+            if (!(built > 0f)) return;
+            float now = VectraUitk.Density(this);
             if (now > built * 1.25f || now < built * 0.8f || !alive) SetDirty();
         }
 
         void ClearGenerated()
         {
-            foreach (var g in m_Generated) g.RemoveFromHierarchy();
+            foreach (var g in m_Generated)
+            {
+                if (g is VectraSvgCompositeElement composite) composite.Release();
+                g.RemoveFromHierarchy();
+            }
+
             m_Generated.Clear();
             foreach (var l in m_Layers) l.Dispose();
             m_Layers.Clear();
@@ -214,6 +226,14 @@ namespace FirstSymbol.Vectra.UIToolkit
             for (int i = 0; i < m_Items.Count; i++)
             {
                 var item = m_Items[i];
+                if (item.composite)
+                {
+                    var composite = new VectraSvgCompositeElement();
+                    hierarchy.Add(composite);
+                    m_Generated.Add(composite);
+                    continue;
+                }
+
                 if (!item.overlay)
                 {
                     if (i == 0) continue;
@@ -269,6 +289,12 @@ namespace FirstSymbol.Vectra.UIToolkit
             for (int i = 0; i < m_Items.Count; i++)
             {
                 var item = m_Items[i];
+                if (item.composite)
+                {
+                    ((VectraSvgCompositeElement)m_Generated[childIndex++]).Render(m_Document, item.from, item.to, rect, cr, density, m_Quality, m_Overrides, align);
+                    continue;
+                }
+
                 if (!item.overlay)
                 {
                     var layer = m_Layers[layerIndex++];
