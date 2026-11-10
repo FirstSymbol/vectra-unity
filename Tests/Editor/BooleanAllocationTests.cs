@@ -47,10 +47,10 @@ namespace FirstSymbol.Vectra.Editor.Tests
             {
                 shape.operands[1].rect = new Rect(0.3f + (i % 7) * 0.01f, 0.3f, 0.7f, 0.7f);
                 r.Build(input);
-            }, 20);
+            }, 20, out string all);
             Debug.Log($"VECTRA-METRIC boolean smoothness {smoothness}: {bytes} bytes in {count} allocations over 20 rebuilds");
             Assert.Greater(r.buffer.VertexCount, 0);
-            Assert.AreEqual(0, bytes, "managed bytes");
+            Assert.AreEqual(0, bytes, "managed bytes on this thread (" + all + ")");
             Assert.AreEqual(0, count, "managed allocations");
         }
 

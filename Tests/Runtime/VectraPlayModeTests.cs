@@ -46,6 +46,55 @@ namespace FirstSymbol.Vectra.Tests
             m_Canvas.renderMode = RenderMode.ScreenSpaceCamera;
             m_Canvas.worldCamera = m_Camera;
             m_Canvas.planeDistance = 5f;
+            FixHdrpExposure();
+        }
+
+        // HDRP exposes and tone-maps even unlit shapes. Only under HDRP (found by reflection, no hard dependency), a global volume fixes
+        // the exposure so that an unlit colour comes out as written, and drops the tone map, bloom and vignette.
+        bool m_HdrpFixed;
+
+        void FixHdrpExposure()
+        {
+            string pipeline = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline != null ? UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.GetType().Name : "";
+            if (!pipeline.Contains("HDRenderPipeline")) return;
+            m_HdrpFixed = true;
+            System.Reflection.Assembly hd = Loaded("Unity.RenderPipelines.HighDefinition.Runtime"), core = Loaded("Unity.RenderPipelines.Core.Runtime");
+            Assert.IsTrue(hd != null && core != null, "the render pipeline assemblies are loaded");
+            System.Type profileType = core.GetType("UnityEngine.Rendering.VolumeProfile"), volumeType = core.GetType("UnityEngine.Rendering.Volume");
+            var profile = ScriptableObject.CreateInstance(profileType);
+            m_Owned.Add(profile);
+            SetParameters(profile, hd.GetType("UnityEngine.Rendering.HighDefinition.Exposure"), ("mode", "Fixed"), ("fixedExposure", -0.263034f));
+            SetParameters(profile, hd.GetType("UnityEngine.Rendering.HighDefinition.Tonemapping"), ("mode", "None"));
+            SetParameters(profile, hd.GetType("UnityEngine.Rendering.HighDefinition.VisualEnvironment"), ("skyType", 0));
+            SetParameters(profile, hd.GetType("UnityEngine.Rendering.HighDefinition.Bloom"), ("intensity", 0f));
+            SetParameters(profile, hd.GetType("UnityEngine.Rendering.HighDefinition.Vignette"), ("intensity", 0f));
+            var go = new GameObject("Vectra fixed exposure");
+            m_Owned.Add(go);
+            var volume = go.AddComponent(volumeType);
+            volumeType.GetProperty("isGlobal").SetValue(volume, true);
+            volumeType.GetField("priority").SetValue(volume, 1000f);
+            volumeType.GetField("sharedProfile").SetValue(volume, profile);
+        }
+
+        static System.Reflection.Assembly Loaded(string name)
+        {
+            foreach (var a in System.AppDomain.CurrentDomain.GetAssemblies())
+                if (a.GetName().Name == name) return a;
+            return null;
+        }
+
+        static void SetParameters(Object profile, System.Type type, params (string field, object value)[] values)
+        {
+            object component = profile.GetType().GetMethod("Add", new[] { typeof(System.Type), typeof(bool) }).Invoke(profile, new object[] { type, true });
+            foreach (var (field, value) in values)
+            {
+                object parameter = type.GetField(field).GetValue(component);
+                System.Type valueType = parameter.GetType();
+                while (!valueType.IsGenericType) valueType = valueType.BaseType;
+                valueType = valueType.GetGenericArguments()[0];
+                object converted = valueType.IsEnum ? System.Enum.Parse(valueType, (string)value) : value;
+                parameter.GetType().GetMethod("Override", new[] { valueType }).Invoke(parameter, new[] { converted });
+            }
         }
 
         [TearDown]
@@ -83,6 +132,16 @@ namespace FirstSymbol.Vectra.Tests
             RenderTexture.active = prev;
             var pixels = tex.GetPixels();
             Object.Destroy(tex);
+            if (m_HdrpFixed)
+            {
+                // HDRP does not write alpha to the colour buffer (it reads 1 everywhere): the background is black, so a pixel with colour is covered.
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    var c = pixels[i];
+                    pixels[i] = new Color(c.r, c.g, c.b, Mathf.Clamp01((c.r + c.g + c.b) * 4f) * (c.a > 0.99f ? 1f : c.a));
+                }
+            }
+
             return pixels;
         }
 
