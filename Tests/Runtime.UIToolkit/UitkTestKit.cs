@@ -25,6 +25,7 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             settings.targetTexture = target;
             settings.scaleMode = PanelScaleMode.ConstantPixelSize;
             settings.scale = scale;
+            settings.themeStyleSheet = Theme();
             settings.clearColor = true;
             settings.colorClearValue = new Color(0f, 0f, 0f, 1f);
             go = new GameObject("Vectra UITK test");
@@ -33,6 +34,23 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             document.panelSettings = settings;
             go.SetActive(true);
             Root.style.flexGrow = 1;
+        }
+
+        // Text needs the default runtime theme (it brings the font); a TSS that imports it is enough.
+        static ThemeStyleSheet Theme()
+        {
+#if UNITY_EDITOR
+            const string dir = "Assets/VectraUitkTestTheme";
+            const string path = dir + "/default.tss";
+            var theme = UnityEditor.AssetDatabase.LoadAssetAtPath<ThemeStyleSheet>(path);
+            if (theme != null) return theme;
+            if (!System.IO.Directory.Exists(dir)) System.IO.Directory.CreateDirectory(dir);
+            System.IO.File.WriteAllText(path, "@import url(\"unity-theme://default\");\n");
+            UnityEditor.AssetDatabase.ImportAsset(path);
+            return UnityEditor.AssetDatabase.LoadAssetAtPath<ThemeStyleSheet>(path);
+#else
+            return null;
+#endif
         }
 
         public VisualElement Root => document.rootVisualElement;
