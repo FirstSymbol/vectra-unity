@@ -172,14 +172,14 @@ Add the **Vectra Backdrop Feature** to the URP Renderer asset. It captures befor
 
 The main gaps are below; every SVG element, property and CSS feature is listed as Supported, Partial or Not supported in [SVG support](Documentation~/Vectra.md#svg-support).
 
-- `<mask>` is applied as a geometric clip; the mask's luminance is ignored.
+- A `<mask>` that is not made of plain opaque shapes is composited offscreen; `maskContentUnits="objectBoundingBox"` stays a geometric clip, and masks inside masks and text in masks are ignored.
 - Pattern fills are replaced by the colour of the pattern's first shape.
 - Of the filters, blur, drop shadow (including the offset + blur + merge chain), saturate and hueRotate are supported; the other primitives (`feTurbulence`, `feComposite`, `feBlend`, ...) are not.
-- No animation: SMIL (`<animate>`, `<animateTransform>`, `<set>`) and CSS `@keyframes` are ignored; the first frame is drawn. `<foreignObject>` and `<script>` are ignored.
-- No `mix-blend-mode`, `paint-order` or `@font-face`.
+- No animation: SMIL (`<animate>`, `<animateTransform>`, `<set>`) and CSS `@keyframes` are ignored; the first frame is drawn. `<foreignObject>` (except Figma's background blur, read from the shape after it) and `<script>` are ignored.
+- No `paint-order` or `@font-face`. A blend mode (`mix-blend-mode`) blends with the SVG's own content below it, not with the scene behind the component.
 - Text is one run per `<text>`: no per-glyph positions (`dx`, `dy`, `rotate`, `x` lists), `<textPath>`, `textLength` or `letter-spacing`.
 - `vector-effect` works for `non-scaling-stroke` only (Canvas, world space, UI Toolkit, baked sprites and PNG, and the SVG export; see the guide). `non-scaling-size`, `non-rotation` and `fixed-position` are ignored.
-- A group's `opacity` is applied to each child separately.
+- Text and images inside a group with opacity or a mask get the opacity but not the mask, and are drawn above the group.
 - External images by URL are not loaded; only embedded data URIs work.
 - Anything unsupported is written to the import report (the asset's inspector and Window → Vectra → SVG Import Report); every element that is not supported is named there (a test keeps the list and the guide equal).
 

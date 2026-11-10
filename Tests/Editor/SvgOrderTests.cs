@@ -355,10 +355,11 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         [Test]
-        public void GroupOpacity_IsReported()
+        public void GroupOpacity_IsALayer_NotAWarning()
         {
             var doc = Parse("<svg viewBox='0 0 100 100'><g opacity='0.5'><rect width='20' height='20'/><rect x='10' width='20' height='20'/></g></svg>");
-            Assert.That(doc.warnings.Any(w => w.Contains("Group opacity")), string.Join(" | ", doc.warnings));
+            Assert.That(!doc.warnings.Any(w => w.Contains("Group opacity")), string.Join(" | ", doc.warnings));
+            Assert.AreEqual(1, doc.layers.Count);
         }
 
         // --- z-order, in pixels ----------------------------------------------------------------------------

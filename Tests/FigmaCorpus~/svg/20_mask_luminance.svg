@@ -1,0 +1,19 @@
+<svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="160" height="160" fill="white"/>
+<mask id="mask0_9_70" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="10" y="10" width="140" height="140">
+<rect x="10" y="10" width="140" height="140" rx="20" fill="url(#paint0_radial_9_70)"/>
+</mask>
+<g mask="url(#mask0_9_70)">
+<rect width="32" height="160" fill="#E63946"/>
+<rect x="32" width="32" height="160" fill="#F4A261"/>
+<rect x="64" width="32" height="160" fill="#2A9D8F"/>
+<rect x="96" width="32" height="160" fill="#264653"/>
+<rect x="128" width="32" height="160" fill="#E9C46A"/>
+</g>
+<defs>
+<radialGradient id="paint0_radial_9_70" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(80 80) scale(70)">
+<stop stop-color="white"/>
+<stop offset="1"/>
+</radialGradient>
+</defs>
+</svg>

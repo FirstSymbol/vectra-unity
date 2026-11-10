@@ -77,6 +77,9 @@ namespace FirstSymbol.Vectra.Rendering
 
         static Material s_LayerMaterial;
 
+        /// <summary>How many times <see cref="RenderStep"/> has drawn since the domain loaded (diagnostics and tests).</summary>
+        public static int StepsRendered { get; private set; }
+
         /// <summary>The material that draws a composited texture as a quad (Canvas and world space): premultiplied alpha, with Canvas masking.</summary>
         public static Material LayerMaterial
         {
@@ -114,6 +117,7 @@ namespace FirstSymbol.Vectra.Rendering
                 texture = Allocate(w, h);
             }
 
+            StepsRendered++;
             using var compositor = new SvgCompositor();
             compositor.Render(doc, from, to, -1, new SvgCompositeSettings
             {

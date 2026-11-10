@@ -323,13 +323,27 @@ engine; assign it on the SVG Image (new images get the default from Project Sett
 fallback font (one per engine), then the engine's default font, is used. Lettera finds fonts only through the map in
 this version.
 
-**Limitations** (the full list is the SVG support table below): `<mask>` is applied as a geometric clip (luminance is ignored); pattern fills fall back to the colour
+**Limitations** (the full list is the SVG support table below): a `<mask>` is composited offscreen unless it is a plain opaque shape (then it is a geometric clip); pattern fills fall back to the colour
 of the first pattern shape; only blur, drop shadow, saturate and hue-rotate filters; external image URLs are not
-loaded; a group's `opacity` is applied to each child separately, so overlapping children show through each other (the
-import report says so); text and images are not clipped by `clip-path`; images are axis-aligned rectangles and
+loaded; text and images are not clipped by `clip-path`, and inside a group with a mask they ignore the mask; images are axis-aligned rectangles and
 `preserveAspectRatio` is ignored for them; of a `<switch>` only the first child whose `systemLanguage` /
 `requiredExtensions` conditions pass is drawn (the language list is `SvgParseOptions.languages`, default `en`). A `<use>`
 restyles its target for that copy only; the target keeps its own style where it stands.
+
+### Layers (opacity, masks, blend modes, background blur)
+
+Some SVG features need a picture of a part of the document, not just a mesh. Vectra draws such a part (a *layer*) offscreen at the pixel density of the output and composites it:
+
+- `opacity` on a `<g>`, `<svg>` or `<use>` with more than one shape, and on a shape that has both a fill and a stroke: the part is composited as one, as SVG says, so overlapping children do not show through each other. A single shape with only a fill or a stroke just gets the opacity in its colour.
+- `mask`: luminance (the default) or alpha (`mask-type`), with its `maskUnits` region. A mask that is only plain opaque white shapes (any opaque colour in an alpha mask) stays a geometric clip: exact and free. Figma's inside and outside stroke masks are of that kind.
+- `mix-blend-mode`, all CSS modes (the separable ones and hue, saturation, color, luminosity).
+- Figma's background blur (`data-figma-bg-blur-radius`).
+
+Only the parts that need it become layers; everything else stays in the mesh. The layers of a Canvas, UI Toolkit or world component are drawn into render textures that the component keeps, and drawn again only when the size, the pixel density or the overrides change; the sprite importer and `VectraRasterizer` draw the same layers into the PNG.
+
+**What blends with what.** The backdrop of a blend mode or of the background blur is the content of the same SVG drawn before it (back to the last text or image), never the scene behind the component: such a layer draws everything it needs into one texture, so a blend mode does not mix the picture with the UI behind it. Texts and images are separate objects above the layer; they do not take part in blending, and inside a group with a mask they ignore the mask.
+
+**Cost and limits.** A layer texture is as big as the component in device pixels (at most 4096 px a side); nested layers use temporary textures of that size, and a background blur wider than about 12 px is drawn on a smaller copy. The colours are blended as stored (the sRGB values, like browsers do); in a project with Linear colour space the result may differ slightly. Not supported: `VectraMask` soft masks on a composited part of a Canvas image, composited parts in world space under HDRP, masks inside masks, `maskContentUnits="objectBoundingBox"` as a luminance mask. The inspector preview and *Expand into objects* draw the shapes without layers.
 
 ### SVG support
 
@@ -338,7 +352,7 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | Element | Support | Notes |
 |---|---|---|
 | `<svg>` | Partial | The root's `viewBox`, `width`, `height` and `preserveAspectRatio` set the document. A nested `<svg>` takes `x`, `y`, `width`, `height`, `viewBox`; it does not clip its content (`overflow` is ignored, silently). |
-| `<g>` | Partial | A group. Its `opacity` is applied to each child separately, so overlapping children show through each other (reported). |
+| `<g>` | Partial | A group. `opacity`, `mask` and `mix-blend-mode` on a group (or on a shape that has both a fill and a stroke) make it a compositing layer: drawn offscreen and composited as one (see [Layers](#layers-opacity-masks-blend-modes-background-blur)). Text and images inside get the opacity but not the mask or the blend mode. |
 | `<defs>` | Supported | Content is kept for `<use>` and references, never drawn directly. |
 | `<symbol>` | Supported | Drawn through `<use>` with `viewBox`, `width`, `height`. |
 | `<use>` | Partial | `href` / `xlink:href` to an id in the same document, `x`, `y`, and `width` / `height` for a symbol; the target is restyled for that copy only. A reference to another file is not loaded and a missing id draws nothing (both reported). At most 10 000 copies. |
@@ -368,7 +382,7 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | `<meshrow>` | Not supported | SVG 2 draft. Reported. |
 | `<meshpatch>` | Not supported | SVG 2 draft. Reported. |
 | `<clipPath>` | Partial | The union of its shapes, groups and `<use>` (`clip-rule`, `clipPathUnits`, `transform`). A `<text>` inside is ignored (reported); text and images are not clipped by `clip-path`. |
-| `<mask>` | Partial | Applied as a geometric clip; the luminance is ignored (reported). |
+| `<mask>` | Partial | `mask-type` (luminance by default, or alpha, also as `style="mask-type:alpha"`), the `maskUnits="userSpaceOnUse"` region and any content (gradients, opacity) are drawn offscreen at the pixel density of the output. A mask of plain opaque white shapes (opaque shapes in an alpha mask), like Figma's inside-stroke masks, stays a geometric clip. `maskContentUnits="objectBoundingBox"` is applied as a geometric clip (reported); the default bounding-box region of `maskUnits` is not applied; a mask inside a mask is a geometric clip (reported); `<text>` in a mask is ignored (reported). |
 | `<marker>` | Supported | `marker-start`, `marker-mid`, `marker-end`, `marker`; `orient`, `markerUnits`, `refX`, `refY`, `viewBox`, `markerWidth`, `markerHeight`, `overflow`. Markers inside a marker are not drawn. |
 | `<text>` | Partial | One run placed at the first `x` / `y`, with `text-anchor`, `font-family`, `font-size`, `font-weight`, `font-style`, a solid `fill` and rotation from the transform. A list of `x` / `y` values, `dx`, `dy`, `rotate`, `textLength`, `lengthAdjust`, `letter-spacing`, `word-spacing`, `text-decoration`, `dominant-baseline`, `baseline-shift`, `writing-mode`, `direction` are ignored (reported); stroked text is not drawn and a gradient fill is drawn black. |
 | `<tspan>` | Partial | Own fill, font, weight and style per span; spans do not move the text (only the first `x` / `y` counts). |
@@ -380,7 +394,7 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | `<glyphRef>` | Not supported | SVG 1.1. Reported. |
 | `<textArea>` | Not supported | SVG Tiny 1.2 flowed text. Reported. |
 | `<image>` | Partial | Embedded `data:` URIs (PNG, JPG) as an axis-aligned rectangle with opacity; external URLs are not loaded (reported); `preserveAspectRatio` is ignored (reported). |
-| `<foreignObject>` | Not supported | HTML and other XML inside is not drawn. Reported. |
+| `<foreignObject>` | Partial | The HTML inside is not drawn. Figma's background blur (a `<foreignObject>` with `backdrop-filter`, then a shape with `data-figma-bg-blur-radius`) is read from that attribute (see [Layers](#layers-opacity-masks-blend-modes-background-blur)). |
 | `<video>` | Not supported | Reported. |
 | `<audio>` | Not supported | Reported. |
 | `<canvas>` | Not supported | Reported. |
@@ -445,7 +459,9 @@ Properties, CSS and units (a row marked "silent" is ignored without a report):
 | `fill-rule`, `clip-rule`, `opacity`, `fill-opacity`, `stroke-opacity`, `visibility`, `display` | Supported |  |
 | `stroke-width`, `stroke-linecap`, `stroke-linejoin`, `stroke-miterlimit`, `stroke-dasharray`, `stroke-dashoffset` | Supported | `miter-clip` and `arcs` joins are drawn as miter. |
 | `vector-effect` | Partial | `non-scaling-stroke` works (see below); `non-scaling-size`, `non-rotation` and `fixed-position` ("at risk" in SVG 2) are ignored and reported. Not inherited, as in browsers. |
-| `paint-order`, `mix-blend-mode`, `isolation`, `backdrop-filter` | Not supported | Ignored; reported. Strokes are always drawn over the fill. |
+| `paint-order`, `isolation` | Not supported | Ignored; reported. Strokes are always drawn over the fill. |
+| `mix-blend-mode` | Supported | All 16 modes of CSS Compositing (normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference, exclusion, hue, saturation, color, luminosity) and `plus-lighter`, on a group or a shape. It blends with the SVG's own content below, not with the scene behind the component (see Layers). Not inherited. |
+| `backdrop-filter` | Partial | Only as Figma writes it: the `data-figma-bg-blur-radius` of the shape that follows the `<foreignObject>` blurs the SVG's own content below, limited to that shape (sigma = radius / 2). Anywhere else it is ignored silently. |
 | `shape-rendering`, `text-rendering`, `color-rendering`, `image-rendering`, `color-interpolation`, `color-interpolation-filters` | Not supported | Rendering hints; ignored silently (everything is anti-aliased). |
 | `font-family`, `font-size`, `font-weight`, `font-style`, `text-anchor` | Supported | See the text engines and the font map. |
 | `font-variant`, `font-stretch`, `font` shorthand, `@font-face` | Not supported | Ignored; `font-variant`, `font-stretch` and `@font-face` are reported. |
