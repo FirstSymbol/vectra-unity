@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using FirstSymbol.Vectra.Svg;
 using Unity.Mathematics;
 using UnityEngine;
@@ -81,9 +82,15 @@ namespace FirstSymbol.Vectra.Rendering
             Vector2 size = aspect >= 1f ? new Vector2(options.resolution, options.resolution / aspect) : new Vector2(options.resolution * aspect, options.resolution);
             size = new Vector2(Mathf.Max(1f, Mathf.Round(size.x)), Mathf.Max(1f, Mathf.Round(size.y)));
             var rect = new Rect(0f, 0f, size.x, size.y);
-            using var renderer = new VectraShapeRenderer();
-            VectraSvgBuilder.Build(doc, renderer, rect, 1f, Color.white, true, options.quality);
-            return Finish(renderer, rect, 1f, options, size, null, SvgLayers.HasLayers(doc) ? doc : null);
+            var renderers = VectraRasterizer.BuildDocument(doc, rect, options.quality);
+            try
+            {
+                return Finish(renderers, rect, 1f, options, size, null, SvgLayers.HasLayers(doc) ? doc : null);
+            }
+            finally
+            {
+                foreach (var r in renderers) r.Dispose();
+            }
         }
 
         static bool ReachesOutside(VectraShapeContent content)
@@ -101,11 +108,15 @@ namespace FirstSymbol.Vectra.Rendering
             return o;
         }
 
-        static Sprite Finish(VectraShapeRenderer renderer, Rect rect, float px, VectraSpriteOptions o, Vector2 size, RectangleShape frame, VectraSvgDocument layered = null)
+        static Sprite Finish(VectraShapeRenderer renderer, Rect rect, float px, VectraSpriteOptions o, Vector2 size, RectangleShape frame) =>
+            Finish(new List<VectraShapeRenderer> { renderer }, rect, px, o, size, frame);
+
+        static Sprite Finish(List<VectraShapeRenderer> renderers, Rect rect, float px, VectraSpriteOptions o, Vector2 size, RectangleShape frame, VectraSvgDocument layered = null)
         {
             // The view covers the shape and whatever reaches outside it (shadows, glows, outside strokes) in whole pixels.
             var view = rect;
-            var b = renderer.buffer.bounds;
+            var b = Geometry.Bounds2.Empty;
+            foreach (var r in renderers) b.Encapsulate(r.buffer.bounds);
             if (o.includeOverflow && b.IsValid)
                 view = Rect.MinMaxRect(Mathf.Min(rect.xMin, b.min.x), Mathf.Min(rect.yMin, b.min.y), Mathf.Max(rect.xMax, b.max.x), Mathf.Max(rect.yMax, b.max.y));
             int padL = Mathf.CeilToInt((rect.xMin - view.xMin) / px - 1e-3f);
@@ -120,7 +131,7 @@ namespace FirstSymbol.Vectra.Rendering
             var mapped = new Rect(rect.xMin - padL * sx, rect.yMin - padB * sy, tw * sx, th * sy);
 
             // Documents with layers are composited; the plain build above only measured the overflow.
-            var raw = layered != null ? VectraRasterizer.RenderLayered(layered, rect, mapped, tw, th, o.quality) : VectraRasterizer.Render(renderer, mapped, tw, th);
+            var raw = layered != null ? VectraRasterizer.RenderLayered(layered, rect, mapped, tw, th, o.quality) : VectraRasterizer.Render(renderers, mapped, tw, th);
             if (raw == null) return null;
             var pixels = raw.GetPixels32();
             UnityEngine.Object.DestroyImmediate(raw);

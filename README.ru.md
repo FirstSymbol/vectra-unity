@@ -173,11 +173,11 @@ VectraSvg.Expand(svgImage);   // отдельный VectraShape на кажды�
 Главные пробелы ниже; каждый элемент SVG, свойство и возможность CSS с пометкой «Поддерживается», «Частично» или «Не поддерживается» перечислены в [поддержке SVG](Documentation~/Vectra.ru.md#поддержка-svg).
 
 - `<mask>` применяется как геометрический клип, яркость маски не учитывается.
-- Паттерн-заливки заменяются цветом первой фигуры паттерна.
-- Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate; остальные примитивы (`feTurbulence`, `feComposite`, `feBlend` ...) нет.
+- Текст внутри `<pattern>` не рисуется; остальное содержимое паттерна (картинки, фигуры, градиенты, вложенные паттерны) рисуется.
+- Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate, а цепочки, которые экспортирует Figma (внешние и внутренние тени, размытие слоя, шум), распознаются целиком; остальные применения `feTurbulence`, `feComposite`, `feBlend` ... попадают в отчёт, элемент рисуется без них.
 - Анимации нет: SMIL (`<animate>`, `<animateTransform>`, `<set>`) и CSS `@keyframes` игнорируются, рисуется первый кадр. `<foreignObject>` и `<script>` игнорируются.
 - Нет `mix-blend-mode`, `paint-order` и `@font-face`.
-- Текст — один фрагмент на `<text>`: нет позиций по глифам (`dx`, `dy`, `rotate`, списки `x`), `<textPath>`, `textLength` и `letter-spacing`.
+- Текст размещается по `<tspan>` (абсолютные `x` / `y`, списки, `dx` / `dy`), с `letter-spacing`, подчёркиванием и зачёркиванием в Lettera, TextMesh Pro и UI Toolkit (legacy uGUI Text игнорирует разрядку и подчёркивание). Не поддерживаются: `rotate`, `<textPath>` (рисуется прямо), `textLength`, `word-spacing`; спрайты и PNG текст не рисуют.
 - `vector-effect` работает только для `non-scaling-stroke` (Canvas, мировое пространство, UI Toolkit, запечённые спрайты и PNG, экспорт SVG; см. руководство). `non-scaling-size`, `non-rotation` и `fixed-position` игнорируются.
 - `opacity` группы применяется к каждому потомку отдельно.
 - Внешние картинки по URL не загружаются, работают только встроенные data-URI.

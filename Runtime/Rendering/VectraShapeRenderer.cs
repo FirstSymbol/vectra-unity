@@ -274,7 +274,20 @@ namespace FirstSymbol.Vectra.Rendering
                 needSdf = true;
             }
 
-            bool analytic = !input.forcePath && !input.clip.HasValue && geometry.TryGetAnalytic(m_Frame, out m_A);
+            // No fill but a stroke: shadows and other distance effects follow the stroke, as they do in Figma.
+            int strokeSilhouette = -1;
+            if (s_Before.Count + s_After.Count > 0 && s_Overlays.Count == 0 && input.strokes != null)
+            {
+                bool visibleFill = false;
+                if (input.fills != null)
+                    foreach (var f in input.fills)
+                        if (f != null && f.enabled && f.paint != null && f.paint.IsVisible) visibleFill = true;
+                if (!visibleFill)
+                    for (int i = 0; i < input.strokes.Count; i++)
+                        if (StrokeVisible(input.strokes[i])) { strokeSilhouette = i; break; }
+            }
+
+            bool analytic = strokeSilhouette < 0 && !input.forcePath && !input.clip.HasValue && geometry.TryGetAnalytic(m_Frame, out m_A);
             stats.analytic = analytic;
             if (analytic)
             {
@@ -318,6 +331,14 @@ namespace FirstSymbol.Vectra.Rendering
             float tol = m_Frame.pixelSize * QualityTolerance(input.quality);
             if (needPoly) EnsurePolylines(geometry, tol, input);
             if (needFillTraps) EnsureFillTraps(geometry, input, fillAmount);
+            if (needFillTraps && strokeSilhouette >= 0 && !smooth)
+            {
+                var st = EnsureStrokeTraps(strokeSilhouette, input.strokes[strokeSilhouette], geometry, tol);
+                m_Fill.Clear();
+                m_Fill.AddRange(st.AsArray());
+                m_FillKey = (m_StrokeKeys[strokeSilhouette] * 31 + 7) | 1;
+            }
+
             if (smooth) EnsureSmoothSdf((BooleanShape)geometry, sdfReach + m_Margin * 2f, tol, input.quality);
             else if (needSdf) EnsureSdf(sdfReach + m_Margin * 2f, input.quality);
             stats.usesSdf = needSdf && m_Sdf.IsValid;
@@ -956,7 +977,8 @@ namespace FirstSymbol.Vectra.Rendering
                     r.kind = PaintKind.Texture;
                     mainTexture = paint.texture;
                     r.color = ToVertex(m_Adjust.Apply(paint.ResolvedColor) * tint);
-                    r.toPaint = TextureMapping(paint, mn, size);
+                    // SVG patterns map document space straight to texture space (like SVG gradients).
+                    r.toPaint = paint.useCustomMapping ? paint.customMapping : TextureMapping(paint, mn, size);
                     r.spread = paint.textureFit == TextureFit.Tile ? 1 : 0;
                     return r;
                 }
@@ -1308,8 +1330,11 @@ namespace FirstSymbol.Vectra.Rendering
                 }
                 case GrainEffect gr:
                 {
-                    var rp = SolidPaint(Color.white, LayerBlend.Normal);
-                    var lp = new float2(gr.amount, gr.size);
+                    var rp = SolidPaint(gr.monotone ? gr.color : Color.white, LayerBlend.Normal);
+                    // Monotone: a negative y carries -(16 * size + density), see LAYER_GRAIN in VectraCore.hlsl.
+                    var lp = gr.monotone
+                        ? new float2(1f, -(math.max(math.round(gr.size * 16f), 1f) + math.min(math.saturate(gr.density), 0.999f)))
+                        : new float2(gr.amount, gr.size);
                     if (analytic) EmitAnalytic(LayerKind.Grain, rp, lp, 0f, float2.zero, false, false);
                     else EmitSdf(LayerKind.Grain, rp, lp, float2.zero, false, false);
                     break;

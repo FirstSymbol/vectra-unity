@@ -87,7 +87,7 @@ namespace FirstSymbol.Vectra.Editor.Tests
         [Test]
         public void EveryUnsupportedElement_IsReportedInsideOtherContainersToo()
         {
-            foreach (var name in new[] { "animate", "set", "feTurbulence", "video", "script" })
+            foreach (var name in new[] { "animate", "set", "feConvolveMatrix", "video", "script" })
             {
                 var w = Warnings(Wrap("<defs><filter id=\"f\"><" + name + "/></filter></defs><g><rect width=\"5\" height=\"5\"><" + name + "/></rect></g>"));
                 Assert.IsTrue(w.Any(x => x.Contains("<" + name + ">")), name + ": " + string.Join(" | ", w));
@@ -136,10 +136,10 @@ namespace FirstSymbol.Vectra.Editor.Tests
 
         [TestCase("<rect width=\"9\" height=\"9\" paint-order=\"stroke\"/>", "paint-order")]
         [TestCase("<rect width=\"9\" height=\"9\" style=\"isolation:isolate\"/>", "isolation")]
-        [TestCase("<text letter-spacing=\"2\">a</text>", "letter-spacing")]
+        [TestCase("<text word-spacing=\"2\">a</text>", "word-spacing")]
         [TestCase("<text dominant-baseline=\"middle\">a</text>", "dominant-baseline")]
         [TestCase("<text textLength=\"50\">a</text>", "textLength")]
-        [TestCase("<text dx=\"2\">a</text>", "dx, dy")]
+        [TestCase("<text rotate=\"10\">a</text>", "rotate")]
         [TestCase("<text><textPath href=\"#p\">a</textPath></text>", "textPath")]
         [TestCase("<rect width=\"9\" height=\"9\" style=\"transform:rotate(9deg)\"/>", "CSS transform")]
         [TestCase("<rect width=\"9\" height=\"9\" style=\"fill:var(--c)\"/>", "var()")]

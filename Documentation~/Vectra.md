@@ -300,9 +300,27 @@ The page shows which engines this project has and what Auto picks. A named engin
 back along the Auto order and the console says so once per document. Each SVG Image can override the project choice
 (**Text engine** in its inspector, or `image.TextEngine`). The engine is also carried into player builds.
 
-Text keeps its styling: a `<tspan>` with its own bold, italic, fill or size stays inside one text as markup (`<b>`,
-`<i>`, `<color>`, `<size>`) in every engine. Not drawn: per-`<tspan>` positions (`x`, `y`, `dx`, `dy`), `textPath`,
-`letter-spacing` and text decoration; a `<tspan>` with another `font-family` uses the font of the whole text.
+**Text layout.** Vectra places the text, the engine draws it. The parser cuts a `<text>` into pieces that start at an
+absolute `x` or `y` (a `<tspan x=".." y="..">` per line, as Figma exports text when "Outline text" is off; per-glyph lists
+`x="10 20 30"` make a piece per glyph, up to 512 pieces per `<text>`). Each piece is one text object at its own baseline
+position and `text-anchor`, so positions work with every engine. A relative `dy` / `dx` on the start of a piece is added to
+its position; `1.2em` follows the font size. White space follows `xml:space="preserve"` and `white-space: pre`
+(otherwise it collapses); a line break at the end of a piece draws nothing and moves nothing.
+
+Styling goes through the engine's markup. A `<tspan>` with its own bold, italic, fill or size stays inside one text
+(`<b>`, `<i>`, `<color>`, `<size>`); a `<tspan>` with another `font-family` uses the font of the whole text.
+
+| Style | Lettera | TextMesh Pro | UI Toolkit | Legacy uGUI Text |
+|---|---|---|---|---|
+| Position (`x`, `y`, lists, `dx`, `dy` at the start of a piece), `text-anchor` | Yes | Yes | Yes | Yes |
+| bold, italic, fill, size per `<tspan>` | Yes | Yes | Yes | Yes (size in whole pixels) |
+| `letter-spacing` (`em`, `px`, number) | Yes (`<tracking>`) | Yes (`<cspace>`) | Yes (`<cspace>`) | No |
+| `text-decoration` underline and line-through | Yes (`<u>`, `<s>`) | Yes | Yes | No |
+| `dx` / `dy` inside a line | No | Yes (`<space>`, `<voffset>`) | Yes | No |
+
+The underline sits where the engine puts it (the font's own metrics), a pixel or two from a browser's. Not drawn:
+`rotate`, `textLength`, `word-spacing`, `textPath` (drawn straight), `overline`. The sprite and PNG paths draw no text.
+A `y` without an `x` on a later piece continues from the start of the previous piece: Vectra does not measure glyphs.
 
 **Text in world space.** `VectraSvgRenderer` draws text through the same backends, with the engines' Canvas-free text:
 Lettera **World Text** (`LetteraWorldText`) or TextMesh Pro **3D** (`TextMeshPro`). The legacy uGUI `Text` only draws inside
@@ -323,8 +341,8 @@ engine; assign it on the SVG Image (new images get the default from Project Sett
 fallback font (one per engine), then the engine's default font, is used. Lettera finds fonts only through the map in
 this version.
 
-**Limitations** (the full list is the SVG support table below): a `<mask>` is composited offscreen unless it is a plain opaque shape (then it is a geometric clip); pattern fills fall back to the colour
-of the first pattern shape; only blur, drop shadow, saturate and hue-rotate filters; external image URLs are not
+**Limitations** (the full list is the SVG support table below): a `<mask>` is composited offscreen unless it is a plain opaque shape (then it is a geometric clip); text inside a `<pattern>` is not drawn;
+only blur, drop shadow, saturate and hue-rotate filters; external image URLs are not
 loaded; text and images are not clipped by `clip-path`, and inside a group with a mask they ignore the mask; images are axis-aligned rectangles and
 `preserveAspectRatio` is ignored for them; of a `<switch>` only the first child whose `systemLanguage` /
 `requiredExtensions` conditions pass is drawn (the language list is `SvgParseOptions.languages`, default `en`). A `<use>`
@@ -374,7 +392,7 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | `<linearGradient>` | Supported | `x1`..`y2`, `gradientUnits`, `gradientTransform`, `spreadMethod`, `href` inheritance. |
 | `<radialGradient>` | Partial | As the linear one plus `cx`, `cy`, `r`, `fx`, `fy`; the focal radius `fr` is ignored (reported). |
 | `<stop>` | Supported | `offset`, `stop-color`, `stop-opacity`. |
-| `<pattern>` | Partial | Replaced by the colour of the pattern's first shape (reported). |
+| `<pattern>` | Partial | Fills and strokes: `patternUnits`, `patternContentUnits`, `x`/`y`/`width`/`height`, `viewBox` with `preserveAspectRatio`, `patternTransform`, `href` inheritance, nested patterns, and an `<image>` inside (also through `<use>`; cropped, fitted or rotated pictures included). A pattern that is one picture filling its tile (Figma image fill and tile) uses the picture itself; other content is drawn into a tile texture (4 px per unit, at most 1024 px a side) the first time the document is drawn, and freed with the document. A mesh has one texture, so a pattern with another texture starts a new mesh (as text does). Text inside a pattern is not drawn (reported). |
 | `<solidcolor>` | Not supported | SVG 2 draft element that no browser ships. Reported. |
 | `<hatch>` | Not supported | SVG 2 draft, as above. Reported. |
 | `<hatchpath>` | Not supported | SVG 2 draft. Reported. |
@@ -384,8 +402,8 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | `<clipPath>` | Partial | The union of its shapes, groups and `<use>` (`clip-rule`, `clipPathUnits`, `transform`). A `<text>` inside is ignored (reported); text and images are not clipped by `clip-path`. |
 | `<mask>` | Partial | `mask-type` (luminance by default, or alpha, also as `style="mask-type:alpha"`), the `maskUnits="userSpaceOnUse"` region and any content (gradients, opacity) are drawn offscreen at the pixel density of the output. A mask of plain opaque white shapes (opaque shapes in an alpha mask), like Figma's inside-stroke masks, stays a geometric clip. `maskContentUnits="objectBoundingBox"` is applied as a geometric clip (reported); the default bounding-box region of `maskUnits` is not applied; a mask inside a mask is a geometric clip (reported); `<text>` in a mask is ignored (reported). |
 | `<marker>` | Supported | `marker-start`, `marker-mid`, `marker-end`, `marker`; `orient`, `markerUnits`, `refX`, `refY`, `viewBox`, `markerWidth`, `markerHeight`, `overflow`. Markers inside a marker are not drawn. |
-| `<text>` | Partial | One run placed at the first `x` / `y`, with `text-anchor`, `font-family`, `font-size`, `font-weight`, `font-style`, a solid `fill` and rotation from the transform. A list of `x` / `y` values, `dx`, `dy`, `rotate`, `textLength`, `lengthAdjust`, `letter-spacing`, `word-spacing`, `text-decoration`, `dominant-baseline`, `baseline-shift`, `writing-mode`, `direction` are ignored (reported); stroked text is not drawn and a gradient fill is drawn black. |
-| `<tspan>` | Partial | Own fill, font, weight and style per span; spans do not move the text (only the first `x` / `y` counts). |
+| `<text>` | Partial | Pieces at their own `x` / `y` (lists too), `dx`, `dy`, `text-anchor` per piece, `font-family`, `font-size`, `font-weight`, `font-style`, `letter-spacing`, `text-decoration` (underline, line-through), `xml:space="preserve"`, `white-space: pre`, a solid `fill` and rotation from the transform (see Text layout). `rotate`, `textLength`, `lengthAdjust`, `word-spacing`, `dominant-baseline`, `baseline-shift`, `writing-mode`, `direction` are ignored (reported); stroked text is not drawn and a gradient fill is drawn black. |
+| `<tspan>` | Partial | Own `x` / `y` / `dx` / `dy` (a new piece when `x` or `y` is set), fill, font, weight, style, `letter-spacing` and `text-decoration`; what an engine cannot style is in the table under Text layout. |
 | `<textPath>` | Partial | Drawn as ordinary straight text (reported). |
 | `<tref>` | Not supported | SVG 1.1, removed from SVG 2. Reported. |
 | `<altGlyph>` | Not supported | SVG 1.1. Reported. |
@@ -393,35 +411,35 @@ Every element of SVG 1.1 and SVG 2 that Vectra knows, and what happens to it. **
 | `<altGlyphItem>` | Not supported | SVG 1.1. Reported. |
 | `<glyphRef>` | Not supported | SVG 1.1. Reported. |
 | `<textArea>` | Not supported | SVG Tiny 1.2 flowed text. Reported. |
-| `<image>` | Partial | Embedded `data:` URIs (PNG, JPG) as an axis-aligned rectangle with opacity; external URLs are not loaded (reported); `preserveAspectRatio` is ignored (reported). |
-| `<foreignObject>` | Partial | The HTML inside is not drawn. Figma's background blur (a `<foreignObject>` with `backdrop-filter`, then a shape with `data-figma-bg-blur-radius`) is read from that attribute (see [Layers](#layers-opacity-masks-blend-modes-background-blur)). |
+| `<image>` | Partial | Embedded `data:` URIs (PNG, JPG); external URLs are not loaded (reported). On its own: an axis-aligned rectangle with opacity, `preserveAspectRatio` is ignored (reported). Inside a `<pattern>`: `preserveAspectRatio` (`meet`, `slice`) and any transform are honoured. |
+| `<foreignObject>` | Partial | The HTML and other XML inside is not drawn (reported). Skipped silently, because they are read from elsewhere: Figma's gradient fallbacks (`data-figma-skip-parse="true"` groups; the angular and diamond gradients are built from `data-figma-gradient-fill` / `-stroke` instead) and Figma's background blur (a `<foreignObject>` with `backdrop-filter`, then a shape with `data-figma-bg-blur-radius`; see [Layers](#layers-opacity-masks-blend-modes-background-blur)). |
 | `<video>` | Not supported | Reported. |
 | `<audio>` | Not supported | Reported. |
 | `<canvas>` | Not supported | Reported. |
 | `<iframe>` | Not supported | Reported. |
-| `<filter>` | Partial | Only through `filter="url(#id)"` (CSS filter functions such as `blur()` are reported). Filter regions, `in`, `in2` and `result` are not followed: the primitives of a filter are read as one effect, as listed below. |
-| `<feGaussianBlur>` | Partial | The first `stdDeviation` value; becomes a layer blur, or the blur of a drop shadow when an offset or a merge is present. |
+| `<filter>` | Partial | Only through `filter="url(#id)"` (CSS filter functions such as `blur()` are reported). Filter regions, `in`, `in2` and `result` are not followed: the primitives of a filter are read as one effect, as listed below. The chains Figma exports are recognised as a whole (drop shadows with spread, inner shadows with choke, layer blur, noise; several shadows stack in order); a primitive that cannot be placed is reported and left out, the element itself is always drawn. |
+| `<feGaussianBlur>` | Partial | The first `stdDeviation` value; becomes a layer blur, or the blur of a shadow (Figma's chains) or of a drop shadow when an offset or a merge is present. |
 | `<feOffset>` | Partial | `dx`, `dy` become the offset of a drop shadow. |
 | `<feFlood>` | Partial | `flood-color` and `flood-opacity` become the colour of the drop shadow. |
 | `<feMerge>` | Partial | Marks the offset / blur chain as a drop shadow; the merge order is not followed. |
 | `<feMergeNode>` | Partial | Not read on its own; `feMerge` is taken as a whole. |
 | `<feDropShadow>` | Partial | `dx`, `dy`, `stdDeviation`, `flood-color`, `flood-opacity`. |
-| `<feColorMatrix>` | Partial | `type="saturate"` and `type="hueRotate"`; `matrix` and `luminanceToAlpha` are reported. |
-| `<feBlend>` | Not supported | Reported. |
-| `<feComponentTransfer>` | Not supported | Reported. |
-| `<feComposite>` | Not supported | Reported. |
+| `<feColorMatrix>` | Partial | `type="saturate"` and `type="hueRotate"`; in a Figma shadow chain `type="matrix"` gives the shadow colour and opacity (last row) and `luminanceToAlpha` belongs to the noise; any other matrix is reported. |
+| `<feBlend>` | Partial | Closes a Figma shadow; `mode="normal"` only, other modes are reported and drawn as normal. |
+| `<feComponentTransfer>` | Partial | Only inside Figma's noise chain: the `feFuncA` table sets the noise density. |
+| `<feComposite>` | Partial | `operator="arithmetic"` with `k2=-1 k3=1` marks a Figma inner shadow, `operator="in"` is part of the noise chain; other operators are reported. |
 | `<feConvolveMatrix>` | Not supported | Reported. |
 | `<feDiffuseLighting>` | Not supported | Reported. |
 | `<feDisplacementMap>` | Not supported | Reported. |
 | `<feImage>` | Not supported | Reported. |
-| `<feMorphology>` | Not supported | Reported. |
+| `<feMorphology>` | Partial | In a Figma shadow chain: `dilate` is the spread of a drop shadow, `erode` the choke of an inner shadow; elsewhere reported. |
 | `<feSpecularLighting>` | Not supported | Reported. |
 | `<feTile>` | Not supported | Reported. |
-| `<feTurbulence>` | Not supported | Reported. |
+| `<feTurbulence>` | Partial | Only as Figma's noise effect: becomes a monotone grain (colour, density and size from the chain; an approximation, not the same pattern). |
 | `<feFuncR>` | Not supported | Reported. |
 | `<feFuncG>` | Not supported | Reported. |
 | `<feFuncB>` | Not supported | Reported. |
-| `<feFuncA>` | Not supported | Reported. |
+| `<feFuncA>` | Partial | `type="discrete"` table of Figma's noise chain (density); not read elsewhere. |
 | `<feDistantLight>` | Not supported | Reported. |
 | `<fePointLight>` | Not supported | Reported. |
 | `<feSpotLight>` | Not supported | Reported. |
@@ -465,7 +483,8 @@ Properties, CSS and units (a row marked "silent" is ignored without a report):
 | `shape-rendering`, `text-rendering`, `color-rendering`, `image-rendering`, `color-interpolation`, `color-interpolation-filters` | Not supported | Rendering hints; ignored silently (everything is anti-aliased). |
 | `font-family`, `font-size`, `font-weight`, `font-style`, `text-anchor` | Supported | See the text engines and the font map. |
 | `font-variant`, `font-stretch`, `font` shorthand, `@font-face` | Not supported | Ignored; `font-variant`, `font-stretch` and `@font-face` are reported. |
-| `xml:space`, `<?xml-stylesheet?>` | Not supported | Whitespace is always collapsed; external style sheets are not loaded. Silent. |
+| `letter-spacing`, `text-decoration`, `xml:space`, `white-space` | Supported | On text; see Text layout for what each engine draws. |
+| External style sheets (`<?xml-stylesheet?>`) | Not supported | External style sheets are not loaded. Silent. |
 | Units | Partial | `px`, `%`, `pt`, `pc`, `mm`, `cm`, `in`, `em` / `rem` (16 px), `ex` (8 px). Other units (`vw`, `vh`, `vmin`, `ch`) are read as plain numbers. Silent. |
 | CSS selectors | Partial | Type, `*`, `.class`, `#id`, `[attr]`, `[attr=value]`, descendant and `>` child combinators, comma lists, specificity, `!important`, the `style` attribute. Pseudo-classes, pseudo-elements, `+`, `~` and `[a^=b]`-style operators never match; the rule is skipped and reported. |
 | CSS at-rules and functions | Partial | `@media` rules apply always, whatever the condition (reported); `@import`, `@font-face`, `@keyframes`, `@supports`, `@namespace`, `@charset` are skipped (reported). `var()` and `calc()` are not evaluated (reported); `inherit` works, `initial`, `unset` and `revert` do not (silent). |

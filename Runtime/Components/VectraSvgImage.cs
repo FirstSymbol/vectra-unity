@@ -153,13 +153,32 @@ namespace FirstSymbol.Vectra
         protected override void OnEnable()
         {
             base.OnEnable();
-            var c = canvas;
-            if (c != null)
-                c.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 |
-                                              AdditionalCanvasShaderChannels.TexCoord2 |
-                                              AdditionalCanvasShaderChannels.TexCoord3;
+            EnsureChannels();
             VectraAtlases.Register(this);
             m_ChildrenDirty = true;
+        }
+
+        // A component added before it is parented under a Canvas (new GameObject + SetParent) has no canvas in OnEnable.
+        protected override void OnCanvasHierarchyChanged()
+        {
+            base.OnCanvasHierarchyChanged();
+            EnsureChannels();
+        }
+
+        protected override void OnTransformParentChanged()
+        {
+            base.OnTransformParentChanged();
+            EnsureChannels();
+        }
+
+        void EnsureChannels()
+        {
+            var c = canvas;
+            if (c == null) return;
+            const AdditionalCanvasShaderChannels needed = AdditionalCanvasShaderChannels.TexCoord1 |
+                                                          AdditionalCanvasShaderChannels.TexCoord2 |
+                                                          AdditionalCanvasShaderChannels.TexCoord3;
+            if ((c.additionalShaderChannels & needed) != needed) c.additionalShaderChannels |= needed;
         }
 
         protected override void OnDisable()
@@ -231,7 +250,25 @@ namespace FirstSymbol.Vectra
             SvgDrawOrder.MainRange(m_Items, out int from, out int to);
             BuildMesh(m_Renderer, m_Mesh, from, to);
             canvasRenderer.SetMesh(m_Mesh);
+            // A pattern paint draws with a texture; the mesh of a run that has none uses the white texture.
+            if (m_LastTexture != m_Renderer.mainTexture)
+            {
+                m_LastTexture = m_Renderer.mainTexture;
+                canvasRenderer.SetTexture(mainTexture);
+            }
+
             m_LayersDirty = m_Generated.Count > 0;
+        }
+
+        Texture m_LastTexture;
+
+        public override Texture mainTexture
+        {
+            get
+            {
+                var t = m_Renderer?.mainTexture;
+                return t != null ? t : s_WhiteTexture;
+            }
         }
 
         /// <summary>Builds the path elements in [from, to) of the document into <paramref name="mesh"/>.</summary>

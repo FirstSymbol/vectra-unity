@@ -509,10 +509,21 @@ float4 VectraShade(VectraFragmentInput i)
         else // LAYER_GRAIN: lp = (amount, grain size in pixels)
         {
             float inside = Coverage(d, 0.0, px);
-            float2 cell = floor(p / (px * max(lp.y, 1.0)));
-            float n = Hash21(cell) * 2.0 - 1.0;
-            alpha = inside * abs(n) * lp.x;
-            color = n >= 0.0 ? float4(1.0, 1.0, 1.0, color.a) : float4(0.0, 0.0, 0.0, color.a);
+            if (lp.y < 0.0)
+            {
+                // Monotone speckles in the paint colour, cells in local units: lp.y = -(16 * size + density)
+                float v = -lp.y;
+                float s16 = floor(v);
+                float2 mcell = floor(p / max(s16 * 0.0625, 1e-3));
+                alpha = inside * step(Hash21(mcell), v - s16);
+            }
+            else
+            {
+                float2 cell = floor(p / (px * max(lp.y, 1.0)));
+                float n = Hash21(cell) * 2.0 - 1.0;
+                alpha = inside * abs(n) * lp.x;
+                color = n >= 0.0 ? float4(1.0, 1.0, 1.0, color.a) : float4(0.0, 0.0, 0.0, color.a);
+            }
         }
 
         if (h.modifier == MOD_DISSOLVE)

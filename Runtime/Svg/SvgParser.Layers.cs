@@ -35,9 +35,9 @@ namespace FirstSymbol.Vectra.Svg
             // The content of a foreignObject is not drawn; Figma's background blur is read from the shape that follows it.
             if (n.name == "foreignObject") return null;
             var maskRef = Url(Style(n, "mask"));
-            if (ctx.sink != null)
+            if (ctx.sink != null || ctx.patterns.capture > 0)
             {
-                // Inside a mask: nested masks stay geometric, opacity goes to the paths.
+                // Inside a mask or a pattern tile: nested masks stay geometric, opacity goes to the paths.
                 if (maskRef != null)
                 {
                     ctx.Warn("SVG: a mask inside a mask is applied as a geometric clip.");
@@ -85,6 +85,16 @@ namespace FirstSymbol.Vectra.Svg
             ctx.textExtra *= scope.own;
             ctx.layerDepth++;
             return scope;
+        }
+
+        static bool HasBackdropFilter(SvgNode n, int depth)
+        {
+            if (depth > 4) return false;
+            var style = n.Attr("style");
+            if (style != null && style.IndexOf("backdrop-filter", System.StringComparison.Ordinal) >= 0) return true;
+            foreach (var c in n.children)
+                if (HasBackdropFilter(c, depth + 1)) return true;
+            return false;
         }
 
         /// <summary>Decides after the children are drawn whether the subtree becomes a layer, and records it.</summary>

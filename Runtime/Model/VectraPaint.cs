@@ -102,6 +102,11 @@ namespace FirstSymbol.Vectra
         public Vector2 textureScale = Vector2.one;
         public Vector2 textureOffset = Vector2.zero;
         public float textureRotation;
+        /// <summary>
+        /// Index of the SVG document pattern that supplies <see cref="texture"/> when it is empty (the document decodes or renders it on
+        /// first use, so saved documents hold bytes, not texture objects); -1 when the texture is assigned directly.
+        /// </summary>
+        public int textureSource = -1;
 
         // Patterns
         [ColorUsage(true, true)] public Color secondaryColor = new Color(0f, 0f, 0f, 1f);

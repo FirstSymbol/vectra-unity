@@ -216,6 +216,20 @@ namespace FirstSymbol.Vectra.Tests
             });
         }
 
+        [UnityTest]
+        public IEnumerator PatternFill_InsideAndOutsideAGroupWithOpacity()
+        {
+            const string pattern = "<defs><pattern id='p' width='20' height='20' patternUnits='userSpaceOnUse'><rect width='10' height='20' fill='#f00'/></pattern></defs>";
+            const string body = pattern + "<rect y='0' width='160' height='60' fill='url(#p)'/><g opacity='0.5'><rect y='80' width='160' height='60' fill='url(#p)'/><rect x='150' y='150' width='5' height='5' fill='#00f'/></g>";
+            yield return OnBothPaths(Svg(body), (path, s) =>
+            {
+                AssertNear(s, 5, 30, 255, 0, 0, 6, path + " pattern outside the layer");
+                AssertNear(s, 15, 30, 255, 255, 255, 6, path + " gap outside the layer");
+                AssertNear(s, 5, 110, 255, 128, 128, 8, path + " pattern inside the layer");
+                AssertNear(s, 15, 110, 255, 255, 255, 6, path + " gap inside the layer");
+            });
+        }
+
         // ---- masks ----
 
         [UnityTest]

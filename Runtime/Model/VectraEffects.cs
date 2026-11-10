@@ -87,7 +87,13 @@ namespace FirstSymbol.Vectra
     public sealed class GrainEffect : VectraEffect
     {
         [Range(0f, 1f)] public float amount = 0.12f;
-        [Min(1f)] public float size = 1f;
+        [Tooltip("Grain cell in pixels; monotone noise: in local units.")]
+        [Min(0.0625f)] public float size = 1f;
+        [Tooltip("One colour of random speckles instead of light and dark grain (what Figma's noise effect is).")]
+        public bool monotone;
+        [ColorUsage(true, true)] public Color color = new Color(0f, 0f, 0f, 0.25f);
+        [Tooltip("Monotone only: share of the area covered by speckles.")]
+        [Range(0f, 1f)] public float density = 0.25f;
 
         public override string DisplayName => "Noise / Grain";
     }

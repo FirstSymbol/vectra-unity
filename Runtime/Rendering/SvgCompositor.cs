@@ -304,7 +304,31 @@ namespace FirstSymbol.Vectra.Rendering
         }
 
         // Builds the path elements [from, to) (of the document, or of the mask content) and draws them into the target.
+        // A mesh draws with one pattern texture: the run is cut where the texture changes.
         void DrawRun(int from, int to, List<SvgElementData> source, RenderTexture target)
+        {
+            var list = source ?? m_Doc.elements;
+            to = Mathf.Min(to, list.Count);
+            int start = from, runKey = 0;
+            for (int i = from; i < to; i++)
+            {
+                var e = list[i];
+                if (e == null || e.isText || e.isImage) continue;
+                int key = SvgPatterns.TextureKey(e);
+                if (key != 0 && runKey != 0 && key != runKey)
+                {
+                    DrawMesh(start, i, source, target);
+                    start = i;
+                    runKey = 0;
+                }
+
+                if (key != 0) runKey = key;
+            }
+
+            DrawMesh(start, to, source, target);
+        }
+
+        void DrawMesh(int from, int to, List<SvgElementData> source, RenderTexture target)
         {
             if (to <= from) return;
             VectraSvgBuilder.Build(m_Doc, m_Renderer, m_S.localRect, m_S.localPixelSize, m_S.tint, true, m_S.quality,

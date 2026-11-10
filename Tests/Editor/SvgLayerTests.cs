@@ -245,6 +245,26 @@ namespace FirstSymbol.Vectra.Editor.Tests
             Assert.IsTrue(l.NeedsBackdrop);
         }
 
+        [Test]
+        public void ForeignObject_IsReported_ExceptFiguresBackgroundBlurAndSkipParseGroups()
+        {
+            var plain = Parse("<foreignObject width='9' height='9'><div xmlns='http://www.w3.org/1999/xhtml'>x</div></foreignObject>");
+            Assert.IsTrue(plain.warnings.Any(w => w.Contains("foreignObject")), string.Join(" | ", plain.warnings));
+            var blur = Parse("<foreignObject width='9' height='9'><div xmlns='http://www.w3.org/1999/xhtml' style='backdrop-filter:blur(6px)'></div></foreignObject>");
+            Assert.IsFalse(blur.warnings.Any(w => w.Contains("foreignObject")), string.Join(" | ", blur.warnings));
+            var skip = Parse("<g data-figma-skip-parse='true'><foreignObject width='9' height='9'><div xmlns='http://www.w3.org/1999/xhtml'>x</div></foreignObject></g>");
+            Assert.IsFalse(skip.warnings.Any(w => w.Contains("foreignObject")), string.Join(" | ", skip.warnings));
+        }
+
+        [Test]
+        public void TwoElementsFromOneShape_StayInsideTheLayer()
+        {
+            // The fill and the stroke of a shape may become two elements (patterns): the layer covers both.
+            var doc = Parse("<g opacity='0.5'><rect width='20' height='20' fill='#f00' stroke='#00f' stroke-width='4'/><rect x='5' width='20' height='20'/></g>");
+            Assert.AreEqual(1, doc.layers.Count);
+            Assert.AreEqual(doc.elements.Count, doc.layers[0].to);
+        }
+
         // ---- draw steps ----
 
         static List<SvgDrawItem> Steps(VectraSvgDocument doc, bool text = true)

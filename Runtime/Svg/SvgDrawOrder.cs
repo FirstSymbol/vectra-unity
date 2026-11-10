@@ -34,7 +34,7 @@ namespace FirstSymbol.Vectra.Svg
         {
             items.Clear();
             if (doc == null || doc.elements == null) return 17;
-            int runStart = -1;
+            int runStart = -1, runKey = 0;
             var list = doc.elements;
             bool layered = SvgLayers.HasLayers(doc);
             if (layered) SvgLayers.Children(doc, -1, 0, list.Count, s_Tops);
@@ -82,6 +82,7 @@ namespace FirstSymbol.Vectra.Svg
                 if (overlay)
                 {
                     Close(items, ref runStart, i);
+                    runKey = 0;
                     items.Add(new SvgDrawItem { from = i, to = i + 1, overlay = true });
                     segStart = i + 1;
                     segItems = items.Count;
@@ -89,6 +90,10 @@ namespace FirstSymbol.Vectra.Svg
                 }
 
                 if (e.isText || e.isImage || e.path == null || e.path.IsEmpty) continue;
+                // A mesh draws with one texture: a pattern with another texture starts a new run.
+                int key = SvgPatterns.TextureKey(e);
+                if (key != 0 && runKey != 0 && key != runKey) { Close(items, ref runStart, i); runKey = 0; }
+                if (key != 0) runKey = key;
                 if (runStart < 0) runStart = i;
             }
 
