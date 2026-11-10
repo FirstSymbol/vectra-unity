@@ -368,7 +368,7 @@ namespace FirstSymbol.Vectra.Rendering
         static void WriteKey(List<float> k, VectraPaint paint, in ColorAdjust adjust)
         {
             k.Clear();
-            k.Add(QualitySettings.activeColorSpace == ColorSpace.Linear ? 1f : 0f);
+            k.Add(VectraColorSpace.Linear ? 1f : 0f);
             k.Add(adjust.hue);
             k.Add(adjust.saturation);
             k.Add(adjust.brightness);
@@ -447,7 +447,7 @@ namespace FirstSymbol.Vectra.Rendering
 
         static void Bake(VectraPaint paint, in ColorAdjust adjust, int row, int count)
         {
-            bool linear = QualitySettings.activeColorSpace == ColorSpace.Linear;
+            bool linear = VectraColorSpace.Linear;
             if (paint.type == PaintType.Freeform)
             {
                 var pts = paint.freeformPoints;

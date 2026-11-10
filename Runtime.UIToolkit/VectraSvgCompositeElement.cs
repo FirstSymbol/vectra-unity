@@ -34,12 +34,12 @@ namespace FirstSymbol.Vectra.UIToolkit
 
         /// <summary><paramref name="rect"/> is the document's rectangle in local space (y up) and <paramref name="contentRect"/> the same area in element space.</summary>
         public void Render(VectraSvgDocument doc, int from, int to, Rect rect, Rect contentRect, float density, VectraQuality quality,
-            List<SvgOverride> overrides, SvgAlign? align)
+            List<SvgOverride> overrides, SvgAlign? align, bool gamma)
         {
             renderCount++;
             builtScale = density;
             m_Quad = contentRect;
-            SvgCompositor.RenderStep(doc, from, to, rect, 1f / Mathf.Max(density, 1e-3f), quality, overrides, align, density, ref m_Texture);
+            SvgCompositor.RenderStep(doc, from, to, rect, 1f / Mathf.Max(density, 1e-3f), quality, overrides, align, density, ref m_Texture, 4096, gamma);
             MarkDirtyRepaint();
         }
 

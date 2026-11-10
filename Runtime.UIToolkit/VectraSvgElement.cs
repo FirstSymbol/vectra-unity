@@ -45,6 +45,7 @@ namespace FirstSymbol.Vectra.UIToolkit
         bool m_PreserveAspect = true;
         VectraQuality m_Quality = VectraQuality.High;
         bool m_GenerateText = true;
+        SvgColorBlendingChoice m_ColorBlending;
         readonly List<SvgOverride> m_Overrides = new List<SvgOverride>();
         readonly List<SvgDrawItem> m_Items = new List<SvgDrawItem>();
         readonly List<VectraRasterLayer> m_Layers = new List<VectraRasterLayer>();
@@ -127,6 +128,21 @@ namespace FirstSymbol.Vectra.UIToolkit
 
         /// <summary>Colour and visibility overrides by selector; call <see cref="SetDirty"/> after editing.</summary>
         public List<SvgOverride> Overrides => m_Overrides;
+
+        /// <summary>In a Linear colour space project: blend like browsers and Figma (sRGB) or in linear light; follows the project setting by default.</summary>
+        public SvgColorBlendingChoice ColorBlending
+        {
+            get => m_ColorBlending;
+            set
+            {
+                if (m_ColorBlending == value) return;
+                m_ColorBlending = value;
+                m_Structure = true;
+                SetDirty();
+            }
+        }
+
+        bool Gamma => VectraColorSpace.UseGamma(m_ColorBlending);
 
         /// <summary>Call after changing the document's content or the overrides from code.</summary>
         public void SetDirty()
@@ -283,7 +299,7 @@ namespace FirstSymbol.Vectra.UIToolkit
                 return;
             }
 
-            int signature = SvgDrawOrder.Split(m_Document, m_GenerateText, false, m_Items);
+            int signature = SvgDrawOrder.Split(m_Document, m_GenerateText, false, m_Items, Gamma);
             if (signature != m_Signature || m_Structure)
             {
                 BuildStructure();
@@ -301,7 +317,7 @@ namespace FirstSymbol.Vectra.UIToolkit
                 var item = m_Items[i];
                 if (item.composite)
                 {
-                    ((VectraSvgCompositeElement)m_Generated[childIndex++]).Render(m_Document, item.from, item.to, rect, cr, density, m_Quality, m_Overrides, align);
+                    ((VectraSvgCompositeElement)m_Generated[childIndex++]).Render(m_Document, item.from, item.to, rect, cr, density, m_Quality, m_Overrides, align, Gamma);
                     continue;
                 }
 

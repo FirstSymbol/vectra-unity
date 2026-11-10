@@ -181,7 +181,7 @@ namespace FirstSymbol.Vectra
         static float Cbrt(float x) => math.sign(x) * math.pow(math.abs(x), 1f / 3f);
 
         /// <summary>Converts an authored colour to the project's working colour space.</summary>
-        public static Color ToWorking(Color c) => QualitySettings.activeColorSpace == ColorSpace.Linear ? c.linear : c;
+        public static Color ToWorking(Color c) => Rendering.VectraColorSpace.Linear ? c.linear : c;
 
         public static Color AdjustHsv(Color c, float hueShift, float saturation, float brightness, float contrast)
         {

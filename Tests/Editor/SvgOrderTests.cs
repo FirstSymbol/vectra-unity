@@ -27,9 +27,21 @@ namespace FirstSymbol.Vectra.Editor.Tests
 
         readonly List<Object> m_Objects = new List<Object>();
 
+        // These tests look at the objects of a mesh-based document; in a Linear project the default draws shapes into pictures instead
+        // (see SvgColorBlendingTests), so they ask for linear blending there.
+        Rendering.SvgColorBlending m_SavedBlending;
+
+        [SetUp]
+        public void SetUp()
+        {
+            m_SavedBlending = Rendering.VectraColorSpace.ProjectBlending;
+            Rendering.VectraColorSpace.ProjectBlending = Rendering.SvgColorBlending.Linear;
+        }
+
         [TearDown]
         public void TearDown()
         {
+            Rendering.VectraColorSpace.ProjectBlending = m_SavedBlending;
             foreach (var o in m_Objects)
                 if (o != null) Object.DestroyImmediate(o);
             m_Objects.Clear();

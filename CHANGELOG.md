@@ -4,9 +4,22 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] - 2026-11-11
+
+SVG documents look like Figma and browsers in Linear colour space projects. With 0.7.0 only 28 of the 42 Figma frames matched in Linear (translucent shapes, shadows, gradients and group opacity were paler); with 0.7.1 the same 39 of 42 match as in Gamma, on the rasterizer and on a Canvas.
+
+### Changed
+- **SVG colour blending** (Project Settings > FirstSymbol > Vectra > Rendering, default **Browsers and Figma (sRGB)**). In a Linear project an SVG document is drawn into a texture in sRGB space (colours, gradient stops and alpha blending as in a Gamma project; layers composite inside it) and the finished picture is shown once on a Canvas, in UI Toolkit and in world space, and is what sprites and PNGs contain. **Linear (Unity)** keeps the old behaviour. `VectraSvgImage`, `VectraSvgRenderer` and `VectraSvgElement` have a `ColorBlending` override. Gamma projects are not affected; native Vectra shapes are not changed.
+- Texts and embedded `<image>` elements stay separate objects above the picture (not blended in sRGB space with it).
+- New API: `SvgColorBlending`, `SvgColorBlendingChoice`, `VectraColorSpace`, `VectraRuntimeSettings.SvgColorBlending`, `SvgDrawOrder.Split(..., gamma)`.
+
+### Fixed
+- Linear colour space: group opacity, masks, blend modes, background blur, shadows, translucent fills over fills, strokes with opacity and gradients no longer look paler than in Figma.
+- A Canvas picture was not redrawn when only the non-scaling-stroke scale (Canvas scale factor) changed.
+
 ## [0.7.0] - 2026-11-10
 
-Figma parity: SVGs exported from Figma render like Figma. Checked on a corpus of 42 Figma frames (shadows, blurs, every gradient type, image fills, blend modes, group opacity, masks, live and outlined text, strokes, booleans, noise), each compared with Figma's own PNG: 39 of 42 match (under 2 % of pixels off) in both Gamma and Linear colour space. The other three: the two live-text frames match on a Canvas, but sprites and PNGs draw no text; noise is close in density and colour but not pixel-exact.
+Figma parity: SVGs exported from Figma render like Figma. Checked on a corpus of 42 Figma frames (shadows, blurs, every gradient type, image fills, blend modes, group opacity, masks, live and outlined text, strokes, booleans, noise), each compared with Figma's own PNG: 39 of 42 match (under 2 % of pixels off) in Gamma colour space (in Linear colour space 28 of 42 matched; that is fixed in 0.7.1). The other three: the two live-text frames match on a Canvas, but sprites and PNGs draw no text; noise is close in density and colour but not pixel-exact.
 
 ### Added
 - **Layers: group opacity, masks, blend modes, background blur.** SVG parts that need a picture of a subtree are composited offscreen instead of being approximated per shape:

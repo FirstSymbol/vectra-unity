@@ -28,6 +28,8 @@ namespace FirstSymbol.Vectra
         [SerializeField] VectraQuality m_Quality = VectraQuality.High;
         [SerializeField] int m_SortingOrder;
         [SerializeField] List<SvgOverride> m_Overrides = new List<SvgOverride>();
+        [Tooltip("Only in a Linear colour space project: blend colours like browsers and Figma (sRGB) or in linear light. Use Project Setting to follow Project Settings > FirstSymbol > Vectra.")]
+        [SerializeField] SvgColorBlendingChoice m_ColorBlending;
         [SerializeField] bool m_GenerateText = true;
         [Tooltip("Which engine draws the text of this document. Use Project Setting to follow Project Settings > FirstSymbol > Vectra.")]
         [SerializeField] VectraTextEngineChoice m_TextEngine;
@@ -84,6 +86,20 @@ namespace FirstSymbol.Vectra
         }
 
         public List<SvgOverride> Overrides => m_Overrides;
+
+        /// <summary>In a Linear colour space project: blend like browsers and Figma (sRGB) or in linear light; follows the project setting by default.</summary>
+        public SvgColorBlendingChoice ColorBlending
+        {
+            get => m_ColorBlending;
+            set
+            {
+                if (m_ColorBlending == value) return;
+                m_ColorBlending = value;
+                m_Dirty = m_StructureDirty = true;
+            }
+        }
+
+        bool Gamma => VectraColorSpace.UseGamma(m_ColorBlending);
 
         /// <summary>Sorting order of the first step of the document; each later step (text, shapes after text) adds one.</summary>
         public int SortingOrder
@@ -265,7 +281,7 @@ namespace FirstSymbol.Vectra
             m_Dirty = false;
             m_BuiltPixelSize = px;
             m_BuiltVersion = m_Document != null ? m_Document.contentVersion : 0;
-            int signature = SvgDrawOrder.Split(m_Document, m_GenerateText, false, m_Items);
+            int signature = SvgDrawOrder.Split(m_Document, m_GenerateText, false, m_Items, Gamma);
             if (signature != m_BuiltSignature)
             {
                 m_BuiltSignature = signature;
@@ -396,7 +412,7 @@ namespace FirstSymbol.Vectra
         // Draws the layers of the step into its texture at the current pixel size and puts the texture on a quad covering the document.
         void RenderComposite(WorldLayer layer, Rect rect, float px)
         {
-            if (!SvgCompositor.RenderStep(m_Document, layer.from, layer.to, rect, px, m_Quality, m_Overrides, null, 1f, ref layer.texture, 2048)) return;
+            if (!SvgCompositor.RenderStep(m_Document, layer.from, layer.to, rect, px, m_Quality, m_Overrides, null, 1f, ref layer.texture, 2048, Gamma)) return;
             var m = layer.mesh;
             m.Clear();
             m.SetVertices(new[] { new Vector3(rect.xMin, rect.yMin), new Vector3(rect.xMin, rect.yMax), new Vector3(rect.xMax, rect.yMax), new Vector3(rect.xMax, rect.yMin) });

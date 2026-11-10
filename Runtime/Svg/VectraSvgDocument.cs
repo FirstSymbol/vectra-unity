@@ -154,6 +154,7 @@ namespace FirstSymbol.Vectra.Svg
         [NonSerialized] internal Texture2D[] patternTextures;
         [NonSerialized] internal VectraSvgDocument patternOwner;
         [NonSerialized] internal int patternDepth;
+        [NonSerialized] internal bool patternGamma;
 
         void OnDisable() => SvgPatterns.Release(this);
 

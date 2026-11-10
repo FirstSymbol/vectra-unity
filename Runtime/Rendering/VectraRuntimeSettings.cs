@@ -20,6 +20,9 @@ namespace FirstSymbol.Vectra.Rendering
         [SerializeField, Tooltip("Which engine draws SVG text. Auto is Lettera when installed, else TextMesh Pro, else the legacy uGUI Text.")]
         VectraTextEngine m_TextEngine = VectraTextEngine.Auto;
 
+        [SerializeField, Tooltip("How SVG documents blend colours in a Linear project: like browsers and Figma (sRGB) or in linear light.")]
+        SvgColorBlending m_SvgColorBlending = SvgColorBlending.Browser;
+
         /// <summary>
         /// The engine SVG components use when they follow the project. The editor sets it from the project settings;
         /// a player takes it from this asset (Auto when the project has none).
@@ -32,6 +35,16 @@ namespace FirstSymbol.Vectra.Rendering
             set
             {
                 m_TextEngine = value;
+                Apply();
+            }
+        }
+
+        public SvgColorBlending SvgColorBlending
+        {
+            get => m_SvgColorBlending;
+            set
+            {
+                m_SvgColorBlending = value;
                 Apply();
             }
         }
@@ -49,11 +62,12 @@ namespace FirstSymbol.Vectra.Rendering
         /// <summary>Nearest power of two between 512 and 8192.</summary>
         public static int NormalizeAtlasSize(int size) => Mathf.ClosestPowerOfTwo(Mathf.Clamp(size, MinAtlasSize, MaxAtlasSize));
 
-        public static VectraRuntimeSettings Create(int sdfAtlasMaxSize, VectraTextEngine textEngine = VectraTextEngine.Auto)
+        public static VectraRuntimeSettings Create(int sdfAtlasMaxSize, VectraTextEngine textEngine = VectraTextEngine.Auto, SvgColorBlending blending = SvgColorBlending.Browser)
         {
             var s = CreateInstance<VectraRuntimeSettings>();
             s.name = "Vectra Runtime Settings";
             s.m_TextEngine = textEngine;
+            s.m_SvgColorBlending = blending;
             s.SdfAtlasMaxSize = sdfAtlasMaxSize;
             return s;
         }
@@ -62,6 +76,7 @@ namespace FirstSymbol.Vectra.Rendering
         {
             VectraSdfAtlas.MaxSize = SdfAtlasMaxSize;
             ProjectTextEngine = m_TextEngine;
+            VectraColorSpace.ProjectBlending = m_SvgColorBlending;
         }
 
         // Preloaded assets are enabled before the first scene loads, ahead of the first shape.

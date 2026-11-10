@@ -28,13 +28,14 @@ namespace FirstSymbol.Vectra.Editor
             Remove();
             int size = VectraRuntimeSettings.NormalizeAtlasSize(VectraProjectSettings.instance.sdfAtlasMaxSize);
             var engine = VectraProjectSettings.instance.textEngine;
-            if (size == VectraRuntimeSettings.DefaultAtlasSize && engine == TextEngines.VectraTextEngine.Auto) return false;
+            var blending = VectraProjectSettings.instance.svgColorBlending;
+            if (size == VectraRuntimeSettings.DefaultAtlasSize && engine == TextEngines.VectraTextEngine.Auto && blending == SvgColorBlending.Browser) return false;
             var preloaded = new List<Object>(PlayerSettings.GetPreloadedAssets());
             foreach (var o in preloaded)
                 if (o is VectraRuntimeSettings) return false; // the project supplies its own
 
             if (!AssetDatabase.IsValidFolder(Folder)) AssetDatabase.CreateFolder("Assets", "Vectra Build Temp");
-            var asset = VectraRuntimeSettings.Create(size, engine);
+            var asset = VectraRuntimeSettings.Create(size, engine, blending);
             AssetDatabase.CreateAsset(asset, AssetPath);
             preloaded.Add(asset);
             PlayerSettings.SetPreloadedAssets(preloaded.ToArray());

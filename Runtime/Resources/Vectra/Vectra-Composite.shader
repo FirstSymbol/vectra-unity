@@ -63,6 +63,14 @@ Shader "Hidden/Vectra/Composite"
         return res;
     }
 
+    // Gamma picture (premultiplied sRGB values) into linear light, premultiplied, for an sRGB target.
+    float4 FragDecode(v2f_img i) : SV_Target
+    {
+        float4 c = tex2D(_MainTex, i.uv);
+        float3 straight = c.a > 1e-5 ? saturate(c.rgb / c.a) : float3(0, 0, 0);
+        return float4(GammaToLinearSpace(straight) * c.a, c.a);
+    }
+
     // ---- blend modes: Compositing and Blending Level 1 ----
 
     float Lum(float3 c) { return dot(c, float3(0.3, 0.59, 0.11)); }
@@ -197,6 +205,17 @@ Shader "Hidden/Vectra/Composite"
             CGPROGRAM
             #pragma vertex vert_img
             #pragma fragment FragBlur
+            #pragma target 3.5
+            ENDCG
+        }
+
+        Pass
+        {
+            Name "Decode"
+            Blend Off
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment FragDecode
             #pragma target 3.5
             ENDCG
         }

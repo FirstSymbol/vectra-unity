@@ -37,7 +37,7 @@ a few other shapes still builds a small point array).
 ## Installation
 
 Package Manager → **+** → **Add package from git URL…** →
-`https://github.com/FirstSymbol/vectra-unity.git` (a specific version: append `#0.7.0`).
+`https://github.com/FirstSymbol/vectra-unity.git` (a specific version: append `#0.7.1`).
 
 Samples: **Package Manager → Vectra Vector Graphics → Samples**.
 
@@ -363,7 +363,9 @@ Only the parts that need it become layers; everything else stays in the mesh. Th
 
 **Cost and limits.** A layer texture is as big as the component in device pixels (at most 4096 px a side); nested layers use temporary textures of that size (a document may have 256 layers, nested 8 deep; the import report names what is beyond that, which is then drawn without the group effect), and a background blur wider than about 12 px is drawn on a smaller copy. The colours are blended as stored (the sRGB values, like browsers do); in a project with Linear colour space the result may differ slightly. Not supported: `VectraMask` soft masks on a composited part of a Canvas image, composited parts in world space under HDRP, masks inside masks, `maskContentUnits="objectBoundingBox"` as a luminance mask. *Expand into objects* draws the shapes without layers.
 
-**Linear colour space.** Ordinary translucency and anti-aliasing blend in linear light, as all Unity UI does, so soft edges and semi-transparent overlaps look slightly lighter than in Figma; layers (group opacity, masks, blend modes, background blur) are computed as in Figma, on sRGB values. A translucent layer is then blended with the scene behind the component in linear light like any other UI.
+**SVG colour blending (Linear colour space projects).** Browsers and Figma blend translucency, anti-aliased edges and gradients on sRGB values; Unity in a Linear project blends in linear light, which makes soft edges, semi-transparent overlaps and group opacity look paler. Project Settings > FirstSymbol > Vectra > Rendering > **SVG colour blending** chooses: **Browsers and Figma (sRGB)**, the default, or **Linear (Unity)**. With the first, an SVG document is drawn into a texture in sRGB space (colours, gradient stops and blending are the same as in a Gamma project) and the finished picture is shown once on the Canvas, in UI Toolkit or in world space, and written to sprites and PNGs, so every SVG looks as in Figma. `VectraSvgImage`, `VectraSvgRenderer` and `VectraSvgElement` have a **Color blending** override (`ColorBlending`). A Gamma project is not affected and pays nothing; native Vectra shapes (`VectraShape` and the others) are not changed.
+
+The picture is drawn again only when the size, the pixel density, the overrides or the document change, like layers. It costs a render texture the size of the component. What is not in the picture: texts and embedded `<image>` elements are separate objects drawn above it, so a text engine blends its glyph edges in linear light, and an image does not blend with the shapes below it in sRGB space; the picture itself is blended with the scene behind the component in linear light, like all UI (the edges of a translucent document over a scene are slightly paler than in a browser; an opaque document has no such edge).
 
 ### SVG support
 

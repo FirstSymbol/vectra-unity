@@ -33,6 +33,8 @@ namespace FirstSymbol.Vectra
         [Tooltip("Lettera font asset or font stack used when the font map has no match (empty = Lettera default).")]
         [SerializeField] Object m_LetteraFont;
         [SerializeField] List<SvgOverride> m_Overrides = new List<SvgOverride>();
+        [Tooltip("Only in a Linear colour space project: blend colours like browsers and Figma (sRGB) or in linear light. Use Project Setting to follow Project Settings > FirstSymbol > Vectra.")]
+        [SerializeField] SvgColorBlendingChoice m_ColorBlending;
 
         VectraShapeRenderer m_Renderer;
         Mesh m_Mesh;
@@ -70,6 +72,21 @@ namespace FirstSymbol.Vectra
         }
 
         public List<SvgOverride> Overrides => m_Overrides;
+
+        /// <summary>In a Linear colour space project: blend like browsers and Figma (sRGB) or in linear light; follows the project setting by default.</summary>
+        public SvgColorBlendingChoice ColorBlending
+        {
+            get => m_ColorBlending;
+            set
+            {
+                if (m_ColorBlending == value) return;
+                m_ColorBlending = value;
+                m_ChildrenDirty = true;
+                SetAllDirty();
+            }
+        }
+
+        bool Gamma => VectraColorSpace.UseGamma(m_ColorBlending);
         internal ShapeBlendMode BlendMode => m_BlendMode;
         public VectraBuildStats Stats => m_Renderer?.stats ?? default;
 
@@ -247,7 +264,7 @@ namespace FirstSymbol.Vectra
         {
             m_Renderer ??= new VectraShapeRenderer();
             if (m_Mesh == null) m_Mesh = new Mesh { name = "Vectra SVG", hideFlags = HideFlags.HideAndDontSave };
-            m_Signature = SvgDrawOrder.Split(m_Document, m_GenerateText, true, m_Items);
+            m_Signature = SvgDrawOrder.Split(m_Document, m_GenerateText, true, m_Items, Gamma);
             SvgDrawOrder.MainRange(m_Items, out int from, out int to);
             BuildMesh(m_Renderer, m_Mesh, from, to);
             canvasRenderer.SetMesh(m_Mesh);
@@ -352,7 +369,7 @@ namespace FirstSymbol.Vectra
         void RebuildChildren()
         {
             ClearGenerated();
-            m_BuiltSignature = SvgDrawOrder.Split(m_Document, m_GenerateText, true, m_Items);
+            m_BuiltSignature = SvgDrawOrder.Split(m_Document, m_GenerateText, true, m_Items, Gamma);
             m_Signature = m_BuiltSignature;
             m_BuiltVersion = m_Document != null ? m_Document.contentVersion : 0;
             if (m_Document == null) return;
@@ -467,13 +484,13 @@ namespace FirstSymbol.Vectra
             var rect = rectTransform.rect;
             float px = PixelSize();
             var align = m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None;
-            int k = System.HashCode.Combine(rect.width, rect.height, px, (int)m_Quality, m_PreserveAspect, from, to, m_Document.contentVersion);
+            int k = System.HashCode.Combine(System.HashCode.Combine(rect.width, rect.height, px, (int)m_Quality, m_PreserveAspect, from, to), m_Document.contentVersion, Gamma, PointScale());
             foreach (var o in m_Overrides)
                 if (o != null) k = System.HashCode.Combine(k, o.selector, o.hide, o.overrideFill, o.fill, o.overrideStroke, o.stroke);
             if (texture != null && texture.IsCreated() && k == key) return true;
             key = k;
             m_CompositePixelSize = px;
-            return SvgCompositor.RenderStep(m_Document, from, to, rect, px, m_Quality, m_Overrides, align, PointScale(), ref texture);
+            return SvgCompositor.RenderStep(m_Document, from, to, rect, px, m_Quality, m_Overrides, align, PointScale(), ref texture, 4096, Gamma);
         }
 
         /// <summary>Sets up a text object of <paramref name="backend"/> for an SVG text element placed in a rect of this image's size.</summary>

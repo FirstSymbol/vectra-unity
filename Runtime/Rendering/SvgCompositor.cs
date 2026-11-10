@@ -22,6 +22,11 @@ namespace FirstSymbol.Vectra.Rendering
         public SvgAlign? align;
         public bool? slice;
         public float pointScale;
+        /// <summary>
+        /// Draw in the gamma scope (<see cref="VectraColorSpace"/>): colours stay sRGB-encoded and blend on sRGB values in a Linear project. A
+        /// target that is not sRGB receives the sRGB-encoded picture as it is; an sRGB target receives it decoded to linear light.
+        /// </summary>
+        public bool gamma;
     }
 
     /// <summary>
@@ -31,7 +36,7 @@ namespace FirstSymbol.Vectra.Rendering
     /// </summary>
     public sealed class SvgCompositor : IDisposable
     {
-        const int PassOver = 0, PassBlend = 1, PassMask = 2, PassBlur = 3;
+        const int PassOver = 0, PassBlend = 1, PassMask = 2, PassBlur = 3, PassDecode = 4;
         const int MaxBlurTaps = 40;
 
         static Shader s_Shader;
@@ -102,7 +107,7 @@ namespace FirstSymbol.Vectra.Rendering
         /// resized to cover <paramref name="rect"/> at <paramref name="pixelSize"/> local units per device pixel. The caller owns the texture.
         /// </summary>
         public static bool RenderStep(VectraSvgDocument doc, int from, int to, Rect rect, float pixelSize, VectraQuality quality,
-            List<SvgOverride> overrides, SvgAlign? align, float pointScale, ref RenderTexture texture, int maxSize = 4096)
+            List<SvgOverride> overrides, SvgAlign? align, float pointScale, ref RenderTexture texture, int maxSize = 4096, bool gamma = false)
         {
             if (doc == null || rect.width <= 0f || rect.height <= 0f) return false;
             float ps = Mathf.Max(pixelSize, 1e-6f);
@@ -123,7 +128,7 @@ namespace FirstSymbol.Vectra.Rendering
             compositor.Render(doc, from, to, -1, new SvgCompositeSettings
             {
                 localRect = rect, view = rect, width = w, height = h, localPixelSize = Mathf.Max(rect.width / w, rect.height / h),
-                tint = Color.white, quality = quality, overrides = overrides, align = align, pointScale = pointScale
+                tint = Color.white, quality = quality, overrides = overrides, align = align, pointScale = pointScale, gamma = gamma
             }, texture);
             return true;
         }
@@ -154,7 +159,7 @@ namespace FirstSymbol.Vectra.Rendering
 
         static RenderTextureDescriptor Descriptor(int w, int h) => new RenderTextureDescriptor(w, h, RenderTextureFormat.ARGB32, 0)
         {
-            sRGB = QualitySettings.activeColorSpace == ColorSpace.Linear,
+            sRGB = VectraColorSpace.Linear,
             msaaSamples = 1
         };
 
@@ -167,17 +172,24 @@ namespace FirstSymbol.Vectra.Rendering
             if (doc == null || target == null || Mat == null) return;
             m_Doc = doc;
             m_S = settings;
+            using var scope = settings.gamma && QualitySettings.activeColorSpace == ColorSpace.Linear ? VectraColorSpace.EnterGamma() : default;
             m_Desc = Descriptor(target.width, target.height);
-            Mat.SetFloat(s_Linear, QualitySettings.activeColorSpace == ColorSpace.Linear ? 1f : 0f);
+            Mat.SetFloat(s_Linear, VectraColorSpace.Linear ? 1f : 0f);
             m_Depth = 0;
             var prev = RenderTexture.active;
+            RenderTexture work = null;
             try
             {
-                Clear(target);
-                RenderRange(from, Mathf.Min(to, doc.elements.Count), parent, target);
+                // An sRGB target would encode what is written to it: the gamma picture is drawn into a plain texture and decoded into it.
+                if (VectraColorSpace.InGammaScope && target.sRGB) work = RenderTexture.GetTemporary(m_Desc);
+                var into = work != null ? work : target;
+                Clear(into);
+                RenderRange(from, Mathf.Min(to, doc.elements.Count), parent, into);
+                if (work != null) Graphics.Blit(work, target, Mat, PassDecode);
             }
             finally
             {
+                if (work != null) RenderTexture.ReleaseTemporary(work);
                 RenderTexture.active = prev;
                 m_Doc = null;
             }
@@ -228,7 +240,7 @@ namespace FirstSymbol.Vectra.Rendering
             var mat = Mat;
             mat.SetFloat(s_Opacity, Mathf.Clamp01(layer.opacity));
             // In a Linear project every translucent edge or opacity inside a layer is mixed on sRGB values (as Figma does), which needs the backdrop pass.
-            if (layer.blend == SvgBlendMode.Normal && QualitySettings.activeColorSpace != ColorSpace.Linear) Graphics.Blit(content, target, mat, PassOver);
+            if (layer.blend == SvgBlendMode.Normal && !VectraColorSpace.Linear) Graphics.Blit(content, target, mat, PassOver);
             else
             {
                 var back = RenderTexture.GetTemporary(m_Desc);

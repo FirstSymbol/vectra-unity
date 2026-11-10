@@ -21,6 +21,8 @@ namespace FirstSymbol.Vectra.Editor
         public Svg.VectraFontMap defaultFontMap;
         [Tooltip("Which engine draws SVG text. Auto is Lettera when installed, else TextMesh Pro, else the legacy uGUI Text.")]
         public VectraTextEngine textEngine = VectraTextEngine.Auto;
+        [Tooltip("How SVG documents blend colours in a Linear project: like browsers and Figma (sRGB) or in linear light.")]
+        public SvgColorBlending svgColorBlending = SvgColorBlending.Browser;
         [SerializeField, HideInInspector] int settingsVersion;
 
         /// <summary>0 for settings saved before the text engines existed (Vectra 0.2); see <see cref="VectraUpgrade"/>.</summary>
@@ -47,6 +49,7 @@ namespace FirstSymbol.Vectra.Editor
         {
             VectraSdfAtlas.MaxSize = VectraRuntimeSettings.NormalizeAtlasSize(sdfAtlasMaxSize);
             VectraRuntimeSettings.ProjectTextEngine = textEngine;
+            VectraColorSpace.ProjectBlending = svgColorBlending;
         }
     }
 
@@ -99,6 +102,8 @@ namespace FirstSymbol.Vectra.Editor
                 var atlas = new SliderInt(512, 8192) { showInputField = true };
                 atlas.BindProperty(so.FindProperty("sdfAtlasMaxSize"));
                 render.Add(VxUI.Row("Distance atlas max", atlas, "Largest size of the shared signed-distance atlas (power of two)"));
+                render.Add(VxUI.Row("SVG colour blending", VxSegmented.ForEnum(so.FindProperty("svgColorBlending"), new[] { "Browsers and Figma (sRGB)", "Linear (Unity)" }, changed: Save),
+                    "Only in a Linear colour space project: SVG documents blend and interpolate colours on sRGB values like browsers and Figma, or in linear light like the rest of Unity. Components can override it."));
                 render.Add(VxUI.Text("The distance atlas only holds tessellated shapes that use effects. Analytic shapes need no textures. Player builds use the same size: the build adds a small settings asset to the Preloaded Assets and removes it afterwards.", "vx-hint"));
                 render.Add(VxUI.AddButton("Reset shared atlases", () => VectraSdfAtlas.Reset()));
                 page.Add(VxUI.TitledCard("vectra.settings.render", VxIcon.Kind.Settings, "Rendering", render));

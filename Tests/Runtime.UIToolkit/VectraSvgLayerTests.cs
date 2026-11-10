@@ -32,11 +32,6 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             return d;
         }
 
-        // In Linear colour space the translucent result of a layer is blended with the panel in linear light (as all Unity UI blends):
-        // checks of translucent results use a wide tolerance there; the composite inside the layer follows Figma.
-        static bool Near(Color32 c, int r, int g, int b, int tol) =>
-            UitkHarness.Near(c, r, g, b, QualitySettings.activeColorSpace == ColorSpace.Linear && tol > 3 ? 70 : tol);
-
         const string TwoCircles = "<circle cx='60' cy='75' r='35' fill='#E63946'/><circle cx='100' cy='75' r='35' fill='#264653'/>";
 
         [UnityTest]
@@ -45,10 +40,10 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             // The element sits at (40, 40) and is 160 x 160 points: document (x, y) is panel (40 + x, 40 + y).
             m_H.Place(new VectraSvgElement { Document = Parse("<g opacity='0.5'>" + TwoCircles + "</g>") }, 40, 40, 160, 160);
             yield return m_H.Frames();
-            Assert.IsTrue(Near(m_H.Px(40 + 80, 40 + 75), 146, 162, 169, 8), "overlap " + UitkHarness.Hex(m_H.Px(120, 115)));
-            Assert.IsTrue(Near(m_H.Px(40 + 40, 40 + 75), 243, 156, 163, 8), "left circle " + UitkHarness.Hex(m_H.Px(80, 115)));
-            Assert.IsTrue(Near(m_H.Px(40 + 5, 40 + 5), 255, 255, 255, 3), "the page rectangle at the top-left corner " + UitkHarness.Hex(m_H.Px(45, 45)));
-            Assert.IsTrue(Near(m_H.Px(10, 10), 0, 0, 0, 3), "outside the element");
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 80, 40 + 75), 146, 162, 169, 8), "overlap " + UitkHarness.Hex(m_H.Px(120, 115)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 40, 40 + 75), 243, 156, 163, 8), "left circle " + UitkHarness.Hex(m_H.Px(80, 115)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 5, 40 + 5), 255, 255, 255, 3), "the page rectangle at the top-left corner " + UitkHarness.Hex(m_H.Px(45, 45)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(10, 10), 0, 0, 0, 3), "outside the element");
         }
 
         [UnityTest]
@@ -57,10 +52,10 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             var doc = Parse("<g opacity='0.5'><rect x='0' y='0' width='100' height='50' fill='#f00'/><rect x='20' y='0' width='60' height='50' fill='#00f'/></g>");
             m_H.Place(new VectraSvgElement { Document = doc }, 40, 40, 160, 160);
             yield return m_H.Frames();
-            Assert.IsTrue(Near(m_H.Px(40 + 50, 40 + 25), 128, 128, 255, 8), "blue over red at the top " + UitkHarness.Hex(m_H.Px(90, 65)));
-            Assert.IsTrue(Near(m_H.Px(40 + 10, 40 + 25), 255, 128, 128, 8), "red only " + UitkHarness.Hex(m_H.Px(50, 65)));
-            Assert.IsTrue(Near(m_H.Px(40 + 130, 40 + 25), 255, 255, 255, 3), "top right is empty " + UitkHarness.Hex(m_H.Px(170, 65)));
-            Assert.IsTrue(Near(m_H.Px(40 + 50, 40 + 135), 255, 255, 255, 3), "bottom is empty " + UitkHarness.Hex(m_H.Px(90, 175)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 50, 40 + 25), 128, 128, 255, 8), "blue over red at the top " + UitkHarness.Hex(m_H.Px(90, 65)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 10, 40 + 25), 255, 128, 128, 8), "red only " + UitkHarness.Hex(m_H.Px(50, 65)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 130, 40 + 25), 255, 255, 255, 3), "top right is empty " + UitkHarness.Hex(m_H.Px(170, 65)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 50, 40 + 135), 255, 255, 255, 3), "bottom is empty " + UitkHarness.Hex(m_H.Px(90, 175)));
         }
 
         [UnityTest]
@@ -69,8 +64,8 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             var doc = Parse("<rect x='20' y='20' width='120' height='120' fill='#C86432'/><rect x='40' y='40' width='80' height='80' fill='#3366CC' style='mix-blend-mode:multiply'/>");
             m_H.Place(new VectraSvgElement { Document = doc }, 40, 40, 160, 160);
             yield return m_H.Frames();
-            Assert.IsTrue(Near(m_H.Px(40 + 80, 40 + 80), 40, 40, 40, 8), "blended " + UitkHarness.Hex(m_H.Px(120, 120)));
-            Assert.IsTrue(Near(m_H.Px(40 + 30, 40 + 30), 200, 100, 50, 4), "backdrop " + UitkHarness.Hex(m_H.Px(70, 70)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 80, 40 + 80), 40, 40, 40, 8), "blended " + UitkHarness.Hex(m_H.Px(120, 120)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 30, 40 + 30), 200, 100, 50, 4), "backdrop " + UitkHarness.Hex(m_H.Px(70, 70)));
         }
 
         [UnityTest]
@@ -80,8 +75,8 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
                             "<mask id='m'><rect width='160' height='160' fill='url(#g)'/></mask><rect width='160' height='160' fill='#00f' mask='url(#m)'/>");
             m_H.Place(new VectraSvgElement { Document = doc }, 40, 40, 160, 160);
             yield return m_H.Frames();
-            Assert.IsTrue(Near(m_H.Px(40 + 80, 40 + 80), 128, 128, 255, 12), "middle " + UitkHarness.Hex(m_H.Px(120, 120)));
-            Assert.IsTrue(Near(m_H.Px(40 + 5, 40 + 80), 8, 8, 255, 16), "left " + UitkHarness.Hex(m_H.Px(45, 120)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 80, 40 + 80), 128, 128, 255, 12), "middle " + UitkHarness.Hex(m_H.Px(120, 120)));
+            Assert.IsTrue(UitkHarness.Near(m_H.Px(40 + 5, 40 + 80), 8, 8, 255, 16), "left " + UitkHarness.Hex(m_H.Px(45, 120)));
         }
     }
 }

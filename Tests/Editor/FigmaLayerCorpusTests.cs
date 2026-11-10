@@ -47,11 +47,7 @@ namespace FirstSymbol.Vectra.Editor.Tests
                 Assert.AreEqual(layered, doc.layers.Count > 0, name + (layered ? " should be composited" : " should stay a geometric clip"));
                 ours = VectraRasterizer.Render(doc, reference.width, reference.height);
                 double bad = WrongFraction(ours, reference);
-                // In Linear colour space ordinary translucency and anti-aliasing blend in linear light (all Unity UI does), so soft edges and
-                // semi-transparent overlaps are lighter than in Figma: the layer maths matches, the plain blending around it does not.
-                bool linear = QualitySettings.activeColorSpace == ColorSpace.Linear;
-                double limit = linear ? (layered ? 0.03 : 0.12) : 0.02;
-                Assert.Less(bad, limit, $"{name}: {bad * 100:0.00} % of the pixels differ from Figma");
+                Assert.Less(bad, 0.02, $"{name}: {bad * 100:0.00} % of the pixels differ from Figma");
             }
             finally
             {

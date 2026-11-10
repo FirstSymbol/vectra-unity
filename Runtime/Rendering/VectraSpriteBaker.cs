@@ -85,7 +85,7 @@ namespace FirstSymbol.Vectra.Rendering
             var renderers = VectraRasterizer.BuildDocument(doc, rect, options.quality);
             try
             {
-                return Finish(renderers, rect, 1f, options, size, null, SvgLayers.HasLayers(doc) ? doc : null);
+                return Finish(renderers, rect, 1f, options, size, null, SvgLayers.HasLayers(doc) || VectraColorSpace.UseGamma() ? doc : null);
             }
             finally
             {

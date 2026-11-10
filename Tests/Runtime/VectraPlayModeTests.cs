@@ -447,6 +447,7 @@ namespace FirstSymbol.Vectra.Tests
             ((RectTransform)go.transform).sizeDelta = new Vector2(200, 200);
             go.AddComponent<CanvasRenderer>();
             var img = go.AddComponent<VectraSvgImage>();
+            img.ColorBlending = Rendering.SvgColorBlendingChoice.Linear; // this test looks at the meshes; the default in a Linear project draws pictures
             img.Document = doc;
             yield return null;
             yield return null;

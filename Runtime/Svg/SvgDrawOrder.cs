@@ -29,8 +29,12 @@ namespace FirstSymbol.Vectra.Svg
     {
         static readonly List<int> s_Tops = new List<int>();
 
-        /// <summary>Fills <paramref name="items"/> (cleared first) and returns a hash of its layout.</summary>
-        public static int Split(VectraSvgDocument doc, bool includeText, bool includeImages, List<SvgDrawItem> items)
+        /// <summary>
+        /// Fills <paramref name="items"/> (cleared first) and returns a hash of its layout. With <paramref name="gamma"/> (a Linear project that
+        /// blends SVG like browsers, see <see cref="Rendering.VectraColorSpace"/>) every run of shapes is a composite step too, so the
+        /// shapes are drawn into a texture in sRGB space; neighbouring composite steps are merged. Texts and images stay separate objects.
+        /// </summary>
+        public static int Split(VectraSvgDocument doc, bool includeText, bool includeImages, List<SvgDrawItem> items, bool gamma = false)
         {
             items.Clear();
             if (doc == null || doc.elements == null) return 17;
@@ -98,9 +102,36 @@ namespace FirstSymbol.Vectra.Svg
             }
 
             Close(items, ref runStart, list.Count);
+            if (gamma) ToComposite(items);
             int hash = 17;
             foreach (var it in items) hash = hash * 31 + it.from * 2 + it.to * 7 + (it.overlay ? 1 : 0) + (it.composite ? 5 : 0);
             return hash;
+        }
+
+        static void ToComposite(List<SvgDrawItem> items)
+        {
+            int w = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var it = items[i];
+                if (!it.overlay)
+                {
+                    it.overlay = true;
+                    it.composite = true;
+                }
+
+                if (it.composite && w > 0 && items[w - 1].composite && items[w - 1].to == it.from)
+                {
+                    var prev = items[w - 1];
+                    prev.to = it.to;
+                    items[w - 1] = prev;
+                    continue;
+                }
+
+                items[w++] = it;
+            }
+
+            items.RemoveRange(w, items.Count - w);
         }
 
         static void Close(List<SvgDrawItem> items, ref int runStart, int end)

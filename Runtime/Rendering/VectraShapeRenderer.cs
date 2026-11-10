@@ -968,7 +968,7 @@ namespace FirstSymbol.Vectra.Rendering
                         c.b /= intensity;
                     }
 
-                    r.param = QualitySettings.activeColorSpace == ColorSpace.Linear ? math.pow(intensity, 2.2f) : intensity;
+                    r.param = VectraColorSpace.Linear ? math.pow(intensity, 2.2f) : intensity;
                     r.color = ToVertex(c * tint);
                     return r;
                 }
@@ -1119,7 +1119,7 @@ namespace FirstSymbol.Vectra.Rendering
 
         Color32 ToVertex(Color c)
         {
-            if (m_World && QualitySettings.activeColorSpace == ColorSpace.Linear)
+            if (m_World && VectraColorSpace.Linear)
             {
                 float a = c.a;
                 c = c.linear;
@@ -1140,7 +1140,7 @@ namespace FirstSymbol.Vectra.Rendering
                 c.b /= intensity;
             }
 
-            if (QualitySettings.activeColorSpace == ColorSpace.Linear) intensity = math.pow(intensity, 2.2f);
+            if (VectraColorSpace.Linear) intensity = math.pow(intensity, 2.2f);
             var t = m_Tint;
             return ToVertex(c * new Color(t.r, t.g, t.b, t.a));
         }

@@ -53,6 +53,14 @@ namespace FirstSymbol.Vectra.Svg
         {
             var list = source ?? doc.elements;
             if (list == null) return;
+            // Textures made for one colour space are wrong in the other (a gamma scope reads them as they are): make them again.
+            var owner = doc.patternOwner != null ? doc.patternOwner : doc;
+            if (owner.patternGamma != VectraColorSpace.InGammaScope)
+            {
+                Release(owner);
+                owner.patternGamma = VectraColorSpace.InGammaScope;
+            }
+
             to = Mathf.Min(to, list.Count);
             for (int i = Mathf.Max(from, 0); i < to; i++)
             {
@@ -167,7 +175,7 @@ namespace FirstSymbol.Vectra.Svg
         static Texture2D FromImage(byte[] bytes, int index)
         {
             if (ImageTooLarge(bytes)) return null;
-            var t = new Texture2D(2, 2, TextureFormat.RGBA32, true, false) { hideFlags = HideFlags.HideAndDontSave };
+            var t = new Texture2D(2, 2, TextureFormat.RGBA32, true, VectraColorSpace.InGammaScope) { hideFlags = HideFlags.HideAndDontSave };
             if (!t.LoadImage(bytes, false))
             {
                 Destroy(t);
@@ -192,7 +200,7 @@ namespace FirstSymbol.Vectra.Svg
             Texture2D raw;
             try
             {
-                raw = VectraRasterizer.Render(tile, w, h);
+                using (VectraColorSpace.KeepCurrent()) raw = VectraRasterizer.Render(tile, w, h);
             }
             finally
             {
@@ -214,7 +222,7 @@ namespace FirstSymbol.Vectra.Svg
             Texture2D result = source;
             if (bled || !source.isReadable || source.mipmapCount <= 1 && mips)
             {
-                result = new Texture2D(w, h, TextureFormat.RGBA32, mips, false) { hideFlags = HideFlags.HideAndDontSave };
+                result = new Texture2D(w, h, TextureFormat.RGBA32, mips, VectraColorSpace.InGammaScope) { hideFlags = HideFlags.HideAndDontSave };
                 result.SetPixels32(px);
                 result.Apply(mips, true);
                 Destroy(source);

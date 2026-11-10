@@ -37,7 +37,7 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
         [UnityTest]
         public IEnumerator ShapesKeepTheirPlaceAndOrientation()
         {
-            var e = m_H.Place(new VectraSvgElement { Document = Parse(TopHalf) }, 40, 40, 100, 100);
+            var e = m_H.Place(new VectraSvgElement { Document = Parse(TopHalf), ColorBlending = Rendering.SvgColorBlendingChoice.Linear }, 40, 40, 100, 100);
             yield return m_H.Frames();
             Assert.IsTrue(UitkHarness.Near(m_H.Px(90, 60), 255, 0, 0), "top half is red " + UitkHarness.Hex(m_H.Px(90, 60)));
             Assert.IsTrue(UitkHarness.Near(m_H.Px(90, 120), 0, 0, 0), "bottom half is empty " + UitkHarness.Hex(m_H.Px(90, 120)));
@@ -78,7 +78,8 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
         [UnityTest]
         public IEnumerator ShapesAfterTextPaintOverIt()
         {
-            var e = m_H.Place(new VectraSvgElement { Document = Parse(Sandwich) }, 10, 10, 200, 200);
+            // These tests look at the meshes and children; the default in a Linear project draws pictures.
+            var e = m_H.Place(new VectraSvgElement { Document = Parse(Sandwich), ColorBlending = Rendering.SvgColorBlendingChoice.Linear }, 10, 10, 200, 200);
             yield return m_H.Frames(6);
             Assert.AreEqual(2, e.GeneratedCount, "a label and a layer for the shapes after it");
             // The red block starts at x = 10 + 40 * 2 = 90; no white may show inside it.

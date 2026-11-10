@@ -15,7 +15,8 @@ namespace FirstSymbol.Vectra.Rendering
         {
             if (doc == null) return null;
             var rect = new Rect(0, 0, width, height);
-            if (SvgLayers.HasLayers(doc)) return RenderLayered(doc, rect, rect, width, height, quality, overrides);
+            // Documents with layers, and every document in a Linear project that blends like browsers, go through the compositor.
+            if (SvgLayers.HasLayers(doc) || VectraColorSpace.UseGamma()) return RenderLayered(doc, rect, rect, width, height, quality, overrides);
             var renderers = BuildDocument(doc, rect, quality, overrides);
             try
             {
@@ -60,6 +61,8 @@ namespace FirstSymbol.Vectra.Rendering
         {
             width = Mathf.Clamp(width, 1, 8192);
             height = Mathf.Clamp(height, 1, 8192);
+            bool gamma = VectraColorSpace.UseGamma();
+            using var scope = gamma ? VectraColorSpace.EnterGamma() : default;
             var rt = SvgCompositor.Allocate(width, height);
             try
             {
@@ -67,7 +70,7 @@ namespace FirstSymbol.Vectra.Rendering
                 compositor.Render(doc, 0, doc.elements.Count, -1, new SvgCompositeSettings
                 {
                     localRect = rect, view = view, width = width, height = height, localPixelSize = Mathf.Max(view.width / width, view.height / height),
-                    tint = Color.white, quality = quality, overrides = overrides, pointScale = 1f
+                    tint = Color.white, quality = quality, overrides = overrides, pointScale = 1f, gamma = gamma
                 }, rt);
                 return Read(rt, width, height);
             }
@@ -111,7 +114,7 @@ namespace FirstSymbol.Vectra.Rendering
 
             var rt = RenderTexture.GetTemporary(new RenderTextureDescriptor(width, height, RenderTextureFormat.ARGB32, 0)
             {
-                sRGB = QualitySettings.activeColorSpace == ColorSpace.Linear,
+                sRGB = VectraColorSpace.Linear,
                 msaaSamples = 1
             });
             var cmd = new CommandBuffer { name = "Vectra Rasterize" };

@@ -196,7 +196,8 @@ namespace FirstSymbol.Vectra.Tests
             yield return Settle();
             float normalFar = 0f;
             Measure("world_zoom_far_normal", Capture(), ref normalFar);
-            Assert.AreEqual(2f, normalFar, 0.6f, "a normal stroke shrinks with the zoom (the image is 50 px: 4 x 50 / 100)");
+            // The sum of the pixel values counts a thin line's anti-aliased pixels brighter in a Linear project (the scene is blended in linear light).
+            Assert.AreEqual(2f, normalFar, QualitySettings.activeColorSpace == ColorSpace.Linear ? 0.9f : 0.6f, "a normal stroke shrinks with the zoom (the image is 50 px: 4 x 50 / 100)");
         }
 
         [UnityTest]
