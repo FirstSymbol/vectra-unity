@@ -214,8 +214,9 @@ namespace FirstSymbol.Vectra.UIToolkit
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
         {
-            s_Pages.Clear();
-            s_Cmd = null;
+            // Without a domain reload (Enter Play Mode options) the pages of the last session are still alive; elements that
+            // still hold a region notice the lost texture in their next poll and draw again.
+            DestroyAll();
             s_Block = null;
             DrawCount = 0;
         }
