@@ -16,7 +16,12 @@ namespace FirstSymbol.Vectra.Editor.Tests
             @"^\|\s*`<(?<name>[^>`]+)>`\s*\|\s*(?<level>Supported|Partial|Not supported|Поддерживается|Частично|Не поддерживается)\s*\|",
             RegexOptions.Compiled);
 
-        static string Root() => UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(VectraShape).Assembly).resolvedPath;
+        static string Root()
+        {
+            var info = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(VectraShape).Assembly);
+            if (info == null) Assert.Ignore("Vectra is a folder under Assets in this project: the guide tests read the package folder");
+            return info.resolvedPath;
+        }
 
         static SvgSupportLevel Level(string text)
         {
