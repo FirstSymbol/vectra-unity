@@ -56,6 +56,11 @@
       "path": "Samples~/WorldSpace"
     },
     {
+      "displayName": "UI Toolkit",
+      "description": "A UXML panel with VectraElements styled from USS, a code-built star and an SVG element.",
+      "path": "Samples~/UiToolkit"
+    },
+    {
       "displayName": "URP Backdrop",
       "description": "Frosted glass and advanced blend modes over moving UI (needs the Vectra Backdrop Feature on the URP renderer).",
       "path": "Samples~/UrpBackdrop"
