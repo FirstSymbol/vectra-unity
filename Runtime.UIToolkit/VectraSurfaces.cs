@@ -46,6 +46,8 @@ namespace FirstSymbol.Vectra.UIToolkit
         static readonly List<SurfacePage> s_Pages = new List<SurfacePage>();
         static CommandBuffer s_Cmd;
         static MaterialPropertyBlock s_Block;
+        static Material s_ClearMaterial;
+        static Mesh s_Quad;
         static readonly int s_MainTex = Shader.PropertyToID("_MainTex");
 
         /// <summary>Number of render textures alive (shared pages and dedicated ones).</summary>
@@ -165,50 +167,77 @@ namespace FirstSymbol.Vectra.UIToolkit
             page.texture = null;
         }
 
+        static void DestroyHelper(Object o)
+        {
+            if (o == null) return;
+            if (Application.isPlaying) Object.Destroy(o);
+            else Object.DestroyImmediate(o);
+        }
+
         public static void DestroyAll()
         {
             for (int i = s_Pages.Count - 1; i >= 0; i--) DestroyPage(s_Pages[i]);
             s_Pages.Clear();
             s_Cmd?.Release();
             s_Cmd = null;
+            DestroyHelper(s_Quad);
+            DestroyHelper(s_ClearMaterial);
+            s_Quad = null;
+            s_ClearMaterial = null;
         }
 
         /// <summary>
         /// Draws <paramref name="mesh"/> into the region. <paramref name="area"/> is the local-space rectangle (y up) that
-        /// the region's pixels cover.
+        /// the region's pixels cover. The region is cleared by drawing a transparent quad into its viewport and the shape is
+        /// drawn straight into the page: no scissor clear and no texture copy, which some platforms (WebGL 2) do not offer
+        /// for render textures.
         /// </summary>
         public static void Draw(in SurfaceRegion region, Mesh mesh, Material material, Texture main, Rect area)
         {
             if (!region.IsValid || mesh == null || material == null) return;
+            var clear = ClearMaterial;
+            if (clear == null) return;
             VectraAtlases.Flush();
             s_Cmd ??= new CommandBuffer { name = "Vectra UI Toolkit" };
             s_Block ??= new MaterialPropertyBlock();
+            s_Quad ??= MakeQuad();
             var cmd = s_Cmd;
             var page = region.page;
-            RenderTexture target;
-            RenderTexture temp = null;
-            if (page.dedicated) target = page.texture;
-            else
-            {
-                temp = RenderTexture.GetTemporary(region.w, region.h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-                target = temp;
-            }
-
             var previous = RenderTexture.active;
-            cmd.SetRenderTarget(target);
-            cmd.ClearRenderTarget(false, true, Color.clear);
+            cmd.SetRenderTarget(page.texture);
+            cmd.SetViewport(new Rect(region.x, region.y, region.w, region.h));
+            cmd.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.identity);
+            cmd.DrawMesh(s_Quad, Matrix4x4.identity, clear, 0, 0);
             var proj = Matrix4x4.Ortho(area.xMin, area.xMax, area.yMin, area.yMax, -1f, 1f);
             cmd.SetViewProjectionMatrices(Matrix4x4.identity, GL.GetGPUProjectionMatrix(proj, true));
             s_Block.Clear();
             s_Block.SetTexture(s_MainTex, main != null ? main : Texture2D.whiteTexture);
             cmd.DrawMesh(mesh, Matrix4x4.identity, material, 0, 0, s_Block);
-            if (temp != null)
-                cmd.CopyTexture(temp, 0, 0, 0, 0, region.w, region.h, page.texture, 0, 0, region.x, region.y);
             Graphics.ExecuteCommandBuffer(cmd);
             cmd.Clear();
             Graphics.SetRenderTarget(previous);
-            if (temp != null) RenderTexture.ReleaseTemporary(temp);
             DrawCount++;
+        }
+
+        static Material ClearMaterial
+        {
+            get
+            {
+                if (s_ClearMaterial != null) return s_ClearMaterial;
+                var shader = Resources.Load<Shader>("Vectra/Vectra-UitkClear") ?? Shader.Find("Hidden/Vectra/UitkClear");
+                if (shader == null) return null;
+                s_ClearMaterial = new Material(shader) { name = "Vectra UI Toolkit clear", hideFlags = HideFlags.HideAndDontSave };
+                return s_ClearMaterial;
+            }
+        }
+
+        static Mesh MakeQuad()
+        {
+            var m = new Mesh { name = "Vectra UI Toolkit quad", hideFlags = HideFlags.HideAndDontSave };
+            m.vertices = new[] { new Vector3(-1f, -1f, 0f), new Vector3(1f, -1f, 0f), new Vector3(1f, 1f, 0f), new Vector3(-1f, 1f, 0f) };
+            m.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+            m.bounds = new Bounds(Vector3.zero, new Vector3(4f, 4f, 4f));
+            return m;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
