@@ -51,6 +51,23 @@ namespace FirstSymbol.Vectra.TextEngines
                 bool colored = !SameColor(r.color, e.textColor);
                 float ratio = e.fontSize > 1e-4f ? r.fontSize / e.fontSize : 1f;
                 bool sized = r.fontSize > 0f && Mathf.Abs(ratio - 1f) > 0.005f;
+                // Legacy uGUI Text has no tag for these; Lettera has no baseline shift or gap tag.
+                bool spaced = r.letterSpacing != 0f && r.fontSize > 1e-4f && dialect != VectraMarkupDialect.Legacy;
+                bool under = r.underline && dialect != VectraMarkupDialect.Legacy;
+                bool strike = r.lineThrough && dialect != VectraMarkupDialect.Legacy;
+                bool rich = dialect == VectraMarkupDialect.TextMeshPro;
+                if (rich && r.dx != 0f) sb.Append("<space=").Append((r.dx * scale).ToString("0.###", CultureInfo.InvariantCulture)).Append('>');
+                bool shifted = rich && r.dy != 0f;
+                if (shifted) sb.Append("<voffset=").Append((-r.dy * scale).ToString("0.###", CultureInfo.InvariantCulture)).Append('>');
+                if (spaced)
+                {
+                    // em, so the gap follows the size the run is drawn at.
+                    sb.Append(dialect == VectraMarkupDialect.Lettera ? "<tracking=" : "<cspace=")
+                        .Append((r.letterSpacing / r.fontSize).ToString("0.####", CultureInfo.InvariantCulture)).Append("em>");
+                }
+
+                if (under) sb.Append("<u>");
+                if (strike) sb.Append("<s>");
                 if (bold) sb.Append("<b>");
                 if (italic) sb.Append("<i>");
                 if (colored) sb.Append("<color=#").Append(ColorUtility.ToHtmlStringRGBA(r.color * tint)).Append('>');
@@ -67,15 +84,23 @@ namespace FirstSymbol.Vectra.TextEngines
                 if (colored) sb.Append("</color>");
                 if (italic) sb.Append("</i>");
                 if (bold) sb.Append("</b>");
+                if (strike) sb.Append("</s>");
+                if (under) sb.Append("</u>");
+                if (spaced) sb.Append(dialect == VectraMarkupDialect.Lettera ? "</tracking>" : "</cspace>");
+                if (shifted) sb.Append("</voffset>");
             }
 
             return sb.ToString();
         }
 
-        /// <summary>True when the text has more than one style, so markup is worth the cost.</summary>
+        /// <summary>True when the text has more than one style, or letter spacing, decoration or an offset, so markup is worth the cost.</summary>
         public static bool HasStyledRuns(SvgElementData e)
         {
-            if (e.runs == null || e.runs.Count < 2) return false;
+            if (e.runs == null || e.runs.Count == 0) return false;
+            foreach (var r in e.runs)
+                if (r.letterSpacing != 0f || r.underline || r.lineThrough || r.dx != 0f || r.dy != 0f)
+                    return true;
+            if (e.runs.Count < 2) return false;
             foreach (var r in e.runs)
                 if (r.bold != e.bold || r.italic != e.italic || !SameColor(r.color, e.textColor) || Mathf.Abs(r.fontSize - e.fontSize) > 0.005f * e.fontSize)
                     return true;
