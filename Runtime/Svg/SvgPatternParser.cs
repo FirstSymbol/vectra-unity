@@ -158,8 +158,13 @@ namespace FirstSymbol.Vectra.Svg
         {
             var st = ctx.patterns;
             var saved = ctx.doc.elements;
+            // A tile is read on its own: not into a mask being read, and without the opacity of the groups around the pattern user.
+            var savedSink = ctx.sink;
+            float savedExtra = ctx.textExtra;
             var list = new List<SvgElementData>();
             ctx.doc.elements = list;
+            ctx.sink = null;
+            ctx.textExtra = 1f;
             st.active.Add(p);
             st.capture++;
             try
@@ -171,6 +176,8 @@ namespace FirstSymbol.Vectra.Svg
                 st.capture--;
                 st.active.Remove(p);
                 ctx.doc.elements = saved;
+                ctx.sink = savedSink;
+                ctx.textExtra = savedExtra;
             }
 
             if (list.RemoveAll(e => e.isText) > 0) ctx.Warn("SVG: text inside a pattern is not drawn.");
@@ -204,6 +211,12 @@ namespace FirstSymbol.Vectra.Svg
 
         static int ImageEntry(byte[] bytes, Context ctx)
         {
+            if (SvgPatterns.ImageTooLarge(bytes))
+            {
+                ctx.Warn($"SVG limit reached: an embedded picture is larger than {SvgPatterns.MaxImageSide} px a side or {SvgPatterns.MaxImagePixels / 1048576} megapixels; it is not decoded.");
+                return -1;
+            }
+
             unchecked
             {
                 uint h = 2166136261;
@@ -281,6 +294,7 @@ namespace FirstSymbol.Vectra.Svg
                 opacity = Mathf.Clamp01(opacity),
                 customMapping = s_FlipV * Affine2.Scale(new float2(1f / cw, 1f / ch)) * Affine2.Translate(new float2(-cx, -cy)) * ctm.Inverse()
             };
+            if (e.fill.textureSource < 0) return;
             e.hasFill = e.fill.opacity > 0f;
             if (!e.hasFill) return;
             if (clips != null) e.clips.AddRange(clips);

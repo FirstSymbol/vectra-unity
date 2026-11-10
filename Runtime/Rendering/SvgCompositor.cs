@@ -41,6 +41,7 @@ namespace FirstSymbol.Vectra.Rendering
         static readonly int s_MaskKind = Shader.PropertyToID("_MaskKind");
         static readonly int s_Blur = Shader.PropertyToID("_Blur");
         static readonly int s_BackTex = Shader.PropertyToID("_BackTex");
+        static readonly int s_Linear = Shader.PropertyToID("_Linear");
 
         readonly VectraShapeRenderer m_Renderer = new VectraShapeRenderer();
         readonly CommandBuffer m_Cmd = new CommandBuffer { name = "Vectra Composite" };
@@ -167,6 +168,7 @@ namespace FirstSymbol.Vectra.Rendering
             m_Doc = doc;
             m_S = settings;
             m_Desc = Descriptor(target.width, target.height);
+            Mat.SetFloat(s_Linear, QualitySettings.activeColorSpace == ColorSpace.Linear ? 1f : 0f);
             m_Depth = 0;
             var prev = RenderTexture.active;
             try
@@ -225,7 +227,8 @@ namespace FirstSymbol.Vectra.Rendering
 
             var mat = Mat;
             mat.SetFloat(s_Opacity, Mathf.Clamp01(layer.opacity));
-            if (layer.blend == SvgBlendMode.Normal) Graphics.Blit(content, target, mat, PassOver);
+            // In a Linear project every translucent edge or opacity inside a layer is mixed on sRGB values (as Figma does), which needs the backdrop pass.
+            if (layer.blend == SvgBlendMode.Normal && QualitySettings.activeColorSpace != ColorSpace.Linear) Graphics.Blit(content, target, mat, PassOver);
             else
             {
                 var back = RenderTexture.GetTemporary(m_Desc);
@@ -243,6 +246,7 @@ namespace FirstSymbol.Vectra.Rendering
         // The blurred content below, limited to the silhouette of the layer, is drawn into the target before the layer itself.
         void DrawBackdropBlur(SvgLayerData layer, RenderTexture target)
         {
+            if (layer.maskTo <= layer.maskFrom) return; // no silhouette: nothing to show the blur in
             var toLocal = m_Doc.DocumentToLocal(m_S.localRect, m_S.align, m_S.slice);
             float pixelsPerLocal = m_S.view.width > 0f ? m_S.width / m_S.view.width : 1f;
             float sigma = layer.blurSigma * toLocal.UniformScale * pixelsPerLocal;

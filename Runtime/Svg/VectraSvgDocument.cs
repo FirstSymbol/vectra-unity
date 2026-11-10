@@ -133,7 +133,7 @@ namespace FirstSymbol.Vectra.Svg
 
     /// <summary>An SVG document converted to Vectra data (created by the importer or <see cref="SvgParser"/>).</summary>
     [CreateAssetMenu(menuName = "Vectra/SVG Document (empty)", fileName = "SvgDocument", order = 21)]
-    public class VectraSvgDocument : ScriptableObject
+    public class VectraSvgDocument : ScriptableObject, ISerializationCallbackReceiver
     {
         public Rect viewBox = new Rect(0, 0, 100, 100);
         /// <summary>Intrinsic size (width/height attributes, or the viewBox size).</summary>
@@ -156,6 +156,37 @@ namespace FirstSymbol.Vectra.Svg
         [NonSerialized] internal int patternDepth;
 
         void OnDisable() => SvgPatterns.Release(this);
+
+        // Pattern paints hold generated textures (HideAndDontSave) while the document is drawn; a saved asset must not keep references to them.
+        void ISerializationCallbackReceiver.OnBeforeSerialize()
+        {
+            StripPatternTextures(elements);
+            StripPatternTextures(maskElements);
+            if (patterns != null)
+                foreach (var p in patterns)
+                    if (p != null) StripPatternTextures(p.elements);
+        }
+
+        void ISerializationCallbackReceiver.OnAfterDeserialize() { }
+
+        static void StripPatternTextures(List<SvgElementData> list)
+        {
+            if (list == null) return;
+            foreach (var e in list)
+            {
+                if (e == null) continue;
+                Strip(e.fill);
+                Strip(e.stroke?.paint);
+            }
+        }
+
+        static void Strip(VectraPaint p)
+        {
+            if (p != null && p.type == PaintType.Texture && p.textureSource >= 0) p.texture = null;
+        }
+
+        /// <summary>Changes every time the document is parsed again; components compare it to notice a document that changed in place.</summary>
+        [NonSerialized] public int contentVersion;
 
         public float AspectRatio => viewBox.height > 0f ? viewBox.width / viewBox.height : 1f;
 
@@ -260,7 +291,7 @@ namespace FirstSymbol.Vectra.Svg
             bool? slice = null, int from = 0, int to = int.MaxValue, float pointScale = 1f, List<SvgElementData> source = null)
         {
             // Pattern textures are made before the batch starts: drawing a tile needs a renderer of its own.
-            if (doc != null && doc.patterns != null && doc.patterns.Count > 0) SvgPatterns.Prepare(doc, from, to);
+            if (doc != null && doc.patterns != null && doc.patterns.Count > 0) SvgPatterns.Prepare(doc, from, to, source);
             renderer.BeginBatch();
             var list = source ?? doc?.elements;
             if (doc == null || list == null)

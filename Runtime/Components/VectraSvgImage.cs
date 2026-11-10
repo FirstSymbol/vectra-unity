@@ -216,6 +216,7 @@ namespace FirstSymbol.Vectra
 
         float m_BuiltPixelSize;
         float m_CompositePixelSize;
+        int m_BuiltVersion;
 
         /// <summary>Device pixels in one SVG px of a non-scaling stroke: the scale factor of the screen-space Canvas (one reference point).</summary>
         float PointScale()
@@ -287,6 +288,14 @@ namespace FirstSymbol.Vectra
         {
             // The layout of the document changed (elements added or reordered): the generated objects no longer match it.
             if (m_Signature != m_BuiltSignature) m_ChildrenDirty = true;
+            if (m_Document != null && m_Document.contentVersion != m_BuiltVersion)
+            {
+                // The document was parsed again in place: its meshes and layer pictures are out of date.
+                m_BuiltVersion = m_Document.contentVersion;
+                m_ChildrenDirty = true;
+                SetAllDirty();
+            }
+
             if (rectTransform.rect.size != m_LaidOutSize) m_LayoutDirty = true;
             if (m_Document != null && m_Document.HasPixelStrokes && m_BuiltPixelSize > 0f)
             {
@@ -345,6 +354,7 @@ namespace FirstSymbol.Vectra
             ClearGenerated();
             m_BuiltSignature = SvgDrawOrder.Split(m_Document, m_GenerateText, true, m_Items);
             m_Signature = m_BuiltSignature;
+            m_BuiltVersion = m_Document != null ? m_Document.contentVersion : 0;
             if (m_Document == null) return;
             VectraTextChoice choice = default;
             bool chosen = false;
@@ -457,7 +467,7 @@ namespace FirstSymbol.Vectra
             var rect = rectTransform.rect;
             float px = PixelSize();
             var align = m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None;
-            int k = System.HashCode.Combine(rect.width, rect.height, px, (int)m_Quality, m_PreserveAspect, from, to);
+            int k = System.HashCode.Combine(rect.width, rect.height, px, (int)m_Quality, m_PreserveAspect, from, to, m_Document.contentVersion);
             foreach (var o in m_Overrides)
                 if (o != null) k = System.HashCode.Combine(k, o.selector, o.hide, o.overrideFill, o.fill, o.overrideStroke, o.stroke);
             if (texture != null && texture.IsCreated() && k == key) return true;

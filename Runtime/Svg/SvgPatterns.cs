@@ -49,13 +49,14 @@ namespace FirstSymbol.Vectra.Svg
         }
 
         /// <summary>Makes the textures the elements in [from, to) need. Call before <c>BeginBatch</c>: drawing a tile builds meshes of its own.</summary>
-        internal static void Prepare(VectraSvgDocument doc, int from, int to)
+        internal static void Prepare(VectraSvgDocument doc, int from, int to, List<SvgElementData> source = null)
         {
-            if (doc.elements == null) return;
-            to = Mathf.Min(to, doc.elements.Count);
+            var list = source ?? doc.elements;
+            if (list == null) return;
+            to = Mathf.Min(to, list.Count);
             for (int i = Mathf.Max(from, 0); i < to; i++)
             {
-                var e = doc.elements[i];
+                var e = list[i];
                 if (e == null) continue;
                 if (e.hasFill) Fill(doc, e.fill);
                 if (e.hasStroke && e.stroke != null) Fill(doc, e.stroke.paint);
@@ -127,8 +128,45 @@ namespace FirstSymbol.Vectra.Svg
             }
         }
 
+        /// <summary>Largest side and pixel count of an embedded picture that is decoded (a PNG or JPEG header is read first).</summary>
+        public const int MaxImageSide = 4096, MaxImagePixels = 16 * 1024 * 1024;
+
+        /// <summary>True when the PNG or JPEG header says the picture is bigger than the limits (unknown formats pass; the decoder decides).</summary>
+        public static bool ImageTooLarge(byte[] b)
+        {
+            if (b == null) return false;
+            long w = 0, h = 0;
+            if (b.Length > 24 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47)
+            {
+                w = ((long)b[16] << 24) | ((long)b[17] << 16) | ((long)b[18] << 8) | b[19];
+                h = ((long)b[20] << 24) | ((long)b[21] << 16) | ((long)b[22] << 8) | b[23];
+            }
+            else if (b.Length > 4 && b[0] == 0xFF && b[1] == 0xD8)
+            {
+                int i = 2;
+                while (i + 9 < b.Length)
+                {
+                    if (b[i] != 0xFF) { i++; continue; }
+                    int m = b[i + 1];
+                    if (m == 0xFF) { i++; continue; }
+                    if (m >= 0xC0 && m <= 0xCF && m != 0xC4 && m != 0xC8 && m != 0xCC)
+                    {
+                        h = (b[i + 5] << 8) | b[i + 6];
+                        w = (b[i + 7] << 8) | b[i + 8];
+                        break;
+                    }
+
+                    if (m == 0xD8 || (m >= 0xD0 && m <= 0xD7) || m == 0x01) { i += 2; continue; }
+                    i += 2 + ((b[i + 2] << 8) | b[i + 3]);
+                }
+            }
+
+            return w > MaxImageSide || h > MaxImageSide || w * h > MaxImagePixels;
+        }
+
         static Texture2D FromImage(byte[] bytes, int index)
         {
+            if (ImageTooLarge(bytes)) return null;
             var t = new Texture2D(2, 2, TextureFormat.RGBA32, true, false) { hideFlags = HideFlags.HideAndDontSave };
             if (!t.LoadImage(bytes, false))
             {

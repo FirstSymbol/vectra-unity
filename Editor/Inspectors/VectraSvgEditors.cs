@@ -59,14 +59,8 @@ namespace FirstSymbol.Vectra.Editor
                     float aspect = doc.AspectRatio;
                     int w = aspect >= 1f ? 168 : Mathf.Max(8, Mathf.RoundToInt(168 * aspect));
                     int h = aspect >= 1f ? Mathf.Max(8, Mathf.RoundToInt(168 / aspect)) : 168;
-                    using var r = new VectraShapeRenderer();
-                    var rect = new Rect(0, 0, w, h);
-                    if (SvgLayers.HasLayers(doc)) tex = VectraRasterizer.Render(doc, w, h, VectraQuality.High, getOverrides?.Invoke());
-                    else
-                    {
-                        VectraSvgBuilder.Build(doc, r, rect, 1f, Color.white, true, VectraQuality.High, getOverrides?.Invoke());
-                        tex = VectraRasterizer.Render(r, rect, w, h);
-                    }
+                    // Layers and several pattern textures need more than one pass: the rasterizer knows how.
+                    tex = VectraRasterizer.Render(doc, w, h, VectraQuality.High, getOverrides?.Invoke());
 
                     tex.hideFlags = HideFlags.HideAndDontSave;
                     image.image = tex;

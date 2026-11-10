@@ -69,6 +69,7 @@ namespace FirstSymbol.Vectra
         bool m_TextDirty = true;
         int m_BuiltSignature;
         float m_BuiltPixelSize;
+        int m_BuiltVersion;
         VectraTextEngine m_WarnedFor = (VectraTextEngine)(-1);
         VectraSvgDocument m_WarnedDocument;
 
@@ -242,6 +243,12 @@ namespace FirstSymbol.Vectra
                     if (l.go != null && !l.composite && l.go.TryGetComponent(out MeshRenderer lr)) lr.sharedMaterial = VectraMaterials.GetWorld(ShapeBlendMode.Normal, l.renderer?.mainTexture);
             }
 
+            if (m_Document != null && m_Document.contentVersion != m_BuiltVersion)
+            {
+                m_BuiltVersion = m_Document.contentVersion;
+                m_Dirty = m_StructureDirty = m_TextDirty = true;
+            }
+
             float px = PixelSize();
             if (!m_Dirty && m_BuiltPixelSize > 0f && (px > m_BuiltPixelSize * Band || px < m_BuiltPixelSize / Band)) m_Dirty = true;
             if (!m_Dirty) return;
@@ -257,6 +264,7 @@ namespace FirstSymbol.Vectra
         {
             m_Dirty = false;
             m_BuiltPixelSize = px;
+            m_BuiltVersion = m_Document != null ? m_Document.contentVersion : 0;
             int signature = SvgDrawOrder.Split(m_Document, m_GenerateText, false, m_Items);
             if (signature != m_BuiltSignature)
             {
@@ -388,12 +396,13 @@ namespace FirstSymbol.Vectra
         // Draws the layers of the step into its texture at the current pixel size and puts the texture on a quad covering the document.
         void RenderComposite(WorldLayer layer, Rect rect, float px)
         {
-            if (!SvgCompositor.RenderStep(m_Document, layer.from, layer.to, rect, px, m_Quality, m_Overrides, null, 1f, ref layer.texture)) return;
+            if (!SvgCompositor.RenderStep(m_Document, layer.from, layer.to, rect, px, m_Quality, m_Overrides, null, 1f, ref layer.texture, 2048)) return;
             var m = layer.mesh;
             m.Clear();
             m.SetVertices(new[] { new Vector3(rect.xMin, rect.yMin), new Vector3(rect.xMin, rect.yMax), new Vector3(rect.xMax, rect.yMax), new Vector3(rect.xMax, rect.yMin) });
             m.SetUVs(0, new[] { new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(1f, 0f) });
-            m.SetColors(new[] { m_Color, m_Color, m_Color, m_Color });
+            var tint = QualitySettings.activeColorSpace == ColorSpace.Linear ? m_Color.linear : m_Color; // like the vertex colours of the meshes
+            m.SetColors(new[] { tint, tint, tint, tint });
             m.SetTriangles(new[] { 0, 1, 2, 2, 3, 0 }, 0);
             m.RecalculateBounds();
             layer.block.SetTexture("_MainTex", layer.texture);

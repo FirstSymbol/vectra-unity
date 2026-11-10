@@ -149,6 +149,11 @@ namespace FirstSymbol.Vectra.Svg
                 }
 
                 layer.maskTo = doc.maskElements.Count;
+                if (layer.maskTo <= layer.maskFrom)
+                {
+                    layer.blurSigma = 0f;
+                    layer.mask = SvgMaskKind.None;
+                }
             }
 
             int index = doc.layers.Count;

@@ -54,6 +54,7 @@ namespace FirstSymbol.Vectra.UIToolkit
         bool m_Dirty = true, m_Scheduled, m_Structure = true;
         int m_Signature;
         Vector2 m_BuiltSize;
+        int m_BuiltVersion;
 
         public int RasterCount { get; private set; }
 
@@ -180,6 +181,14 @@ namespace FirstSymbol.Vectra.UIToolkit
         void Poll()
         {
             if (m_Dirty) return;
+            if (m_Document != null && m_Document.contentVersion != m_BuiltVersion)
+            {
+                m_BuiltVersion = m_Document.contentVersion;
+                m_Structure = true;
+                SetDirty();
+                return;
+            }
+
             float built = m_Layers.Count > 0 ? m_Layers[0].builtScale : 0f;
             bool alive = true;
             foreach (var l in m_Layers) alive &= l.IsAlive;
@@ -266,6 +275,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             if (panel == null) return;
             var cr = contentRect;
             m_BuiltSize = cr.size;
+            m_BuiltVersion = m_Document != null ? m_Document.contentVersion : 0;
             if (m_Document == null || !VectraUitk.Usable(cr))
             {
                 foreach (var l in m_Layers) l.Release();

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using FirstSymbol.Vectra.Rendering;
 using FirstSymbol.Vectra.Svg;
 using NUnit.Framework;
 using UnityEngine;
@@ -263,6 +264,51 @@ namespace FirstSymbol.Vectra.Editor.Tests
             var doc = Parse("<g opacity='0.5'><rect width='20' height='20' fill='#f00' stroke='#00f' stroke-width='4'/><rect x='5' width='20' height='20'/></g>");
             Assert.AreEqual(1, doc.layers.Count);
             Assert.AreEqual(doc.elements.Count, doc.layers[0].to);
+        }
+
+        [Test]
+        public void HugePictures_AreRefusedByTheirHeader()
+        {
+            byte[] Png(int w, int h)
+            {
+                var b = new byte[33];
+                new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }.CopyTo(b, 0);
+                for (int i = 0; i < 4; i++) { b[16 + i] = (byte)(w >> (24 - 8 * i)); b[20 + i] = (byte)(h >> (24 - 8 * i)); }
+                return b;
+            }
+
+            Assert.IsFalse(SvgPatterns.ImageTooLarge(Png(512, 512)));
+            Assert.IsTrue(SvgPatterns.ImageTooLarge(Png(5000, 10)), "a side over 4096");
+            Assert.IsTrue(SvgPatterns.ImageTooLarge(Png(4096, 4096) .Length > 0 ? Png(4000, 4200) : null), "over 4096 on the other side");
+            var jpeg = new byte[] { 0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, 0x4E, 0x20, 0x00, 0x10, 3, 0, 0, 0, 0, 0, 0, 0 };
+            Assert.IsTrue(SvgPatterns.ImageTooLarge(jpeg), "a JPEG 16 x 20000");
+            var doc = Parse("<image width='9' height='9' href='data:image/png;base64," + System.Convert.ToBase64String(Png(5000, 5000)) + "'/>");
+            Assert.AreEqual(0, doc.elements.Count);
+            Assert.IsTrue(doc.warnings.Any(w => w.Contains("larger than")), string.Join(" | ", doc.warnings));
+        }
+
+        [Test]
+        public void PatternTextures_AreNotKeptInTheSerializedDocument()
+        {
+            var doc = Parse("<defs><pattern id='p' width='20' height='20' patternUnits='userSpaceOnUse'><rect width='10' height='20' fill='#00f'/></pattern></defs><rect width='100' height='100' fill='url(#p)'/>");
+            var tex = VectraRasterizer.Render(doc, 32, 32);
+            Object.DestroyImmediate(tex);
+            Assert.IsNotNull(doc.elements[0].fill.texture, "the texture is made when the document is drawn");
+            UnityEditor.EditorJsonUtility.ToJson(doc);
+            Assert.IsNull(doc.elements[0].fill.texture, "and dropped before saving, so a saved asset has no dangling reference");
+        }
+
+        [Test]
+        public void ABackgroundBlurWithoutASilhouette_DoesNotBlurTheStep()
+        {
+            var doc = Parse("<rect width='50' height='100' fill='#000'/><rect x='50' width='50' height='100' fill='#fff'/><rect x='60' width='5' height='5' fill='#fff' fill-opacity='0.01'/>");
+            doc.layers.Add(new SvgLayerData { from = 2, to = 3, blurSigma = 10f });
+            var tex = VectraRasterizer.Render(doc, 100, 100);
+            var a = tex.GetPixel(48, 50);
+            var c = tex.GetPixel(52, 50);
+            Object.DestroyImmediate(tex);
+            Assert.Less(a.r, 0.02f, "the edge is still sharp");
+            Assert.Greater(c.r, 0.98f);
         }
 
         // ---- draw steps ----

@@ -98,6 +98,7 @@ namespace FirstSymbol.Vectra.Svg
             options ??= new SvgParseOptions();
             doc.elements.Clear();
             doc.layers.Clear();
+            doc.contentVersion++;
             doc.maskElements.Clear();
             doc.warnings.Clear();
             SvgPatterns.Reset(doc);
@@ -1059,6 +1060,12 @@ namespace FirstSymbol.Vectra.Svg
             else ctx.Warn("External image references are not loaded: " + href);
 
             if (bytes == null) return;
+            if (SvgPatterns.ImageTooLarge(bytes))
+            {
+                ctx.Warn($"SVG limit reached: an embedded picture is larger than {SvgPatterns.MaxImageSide} px a side or {SvgPatterns.MaxImagePixels / 1048576} megapixels; it is not decoded.");
+                return;
+            }
+
             var p0 = ctm.Apply(new float2(x, y));
             var p1 = ctm.Apply(new float2(x + w, y + h));
             ctx.doc.elements.Add(new SvgElementData

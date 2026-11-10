@@ -278,10 +278,11 @@ namespace FirstSymbol.Vectra.Editor.Tests
         {
             var t = Render("01_drop_shadow");
             Assert.Greater(Px(t, 150, 150).r, 0.99f);   // far corner stays white
-            Assert.Less(Px(t, 80, 126).r, 0.85f);        // below the box: shadow
+            // A soft shadow edge is lighter in Linear colour space (translucency blends in linear light, as in all Unity UI).
+            Assert.Less(Px(t, 80, 126).r, QualitySettings.activeColorSpace == ColorSpace.Linear ? 0.93f : 0.85f); // below the box: shadow
             Assert.Greater(Px(t, 80, 34).r, 0.97f);      // above the box: none (offset down, blur 10 reaches 4 px up)
             var s = Render("03_inner_shadow");
-            Assert.Less(Px(s, 34, 80).r, Px(s, 126, 80).r - 0.1f); // inner shadow offset (4,4): darker on the left than the right
+            Assert.Less(Px(s, 34, 80).r, Px(s, 126, 80).r - (QualitySettings.activeColorSpace == ColorSpace.Linear ? 0.05f : 0.1f)); // inner shadow offset (4,4): darker on the left than the right
         }
 
         [Test]

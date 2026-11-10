@@ -77,6 +77,7 @@ Shader "Vectra/Layer"
             sampler2D _MainTex;
             fixed4 _Color;
             float4 _ClipRect;
+            int _UIVertexColorAlwaysGammaSpace;
 
             v2f vert(appdata_t v)
             {
@@ -86,7 +87,10 @@ Shader "Vectra/Layer"
                 o.worldPosition = v.vertex;
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.texcoord = v.texcoord;
-                o.color = v.color * _Color;
+                float4 c = v.color;
+                if (_UIVertexColorAlwaysGammaSpace && !IsGammaSpace())
+                    c.rgb = UIGammaToLinear(c.rgb);
+                o.color = c * _Color;
                 return o;
             }
 

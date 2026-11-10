@@ -10,6 +10,7 @@ Shader "Hidden/Vectra/Composite"
         _Opacity ("Opacity", Float) = 1
         _Mode ("Blend mode", Float) = 0
         _MaskKind ("Mask kind (0 alpha, 1 luminance)", Float) = 0
+        _Linear ("Linear colour space (textures are sRGB, maths on sRGB values)", Float) = 0
         _Blur ("Blur (step uv x, step uv y, sigma in taps, radius in taps)", Vector) = (0,0,1,3)
     }
 
@@ -21,6 +22,11 @@ Shader "Hidden/Vectra/Composite"
     float _Opacity;
     float _Mode;
     float _MaskKind;
+    float _Linear;
+
+    // In a Linear project the textures are sRGB and read as linear values; browsers and Figma blend and mask on the sRGB-encoded values.
+    float3 ToBlendSpace(float3 c) { return _Linear > 0.5 ? LinearToGammaSpace(c) : c; }
+    float3 FromBlendSpace(float3 c) { return _Linear > 0.5 ? GammaToLinearSpace(c) : c; }
     float4 _Blur;
 
     float4 FragOver(v2f_img i) : SV_Target
@@ -32,7 +38,8 @@ Shader "Hidden/Vectra/Composite"
     {
         float4 m = tex2D(_MainTex, i.uv);
         // Premultiplied colour: its luminance already includes the alpha.
-        float v = _MaskKind > 0.5 ? saturate(dot(m.rgb, float3(0.2125, 0.7154, 0.0721))) : m.a;
+        float3 straight = m.a > 1e-5 ? ToBlendSpace(saturate(m.rgb / m.a)) : float3(0, 0, 0);
+        float v = _MaskKind > 0.5 ? saturate(dot(straight, float3(0.2125, 0.7154, 0.0721)) * m.a) : m.a;
         return float4(v, v, v, v);
     }
 
@@ -45,11 +52,15 @@ Shader "Hidden/Vectra/Composite"
         [loop] for (int k = -r; k <= r; k++)
         {
             float w = exp(k * k * inv);
-            sum += tex2Dlod(_MainTex, float4(i.uv + _Blur.xy * k, 0, 0)) * w;
+            float4 c = tex2Dlod(_MainTex, float4(i.uv + _Blur.xy * k, 0, 0));
+            c.rgb = ToBlendSpace(c.rgb);
+            sum += c * w;
             wsum += w;
         }
 
-        return sum / wsum;
+        float4 res = sum / wsum;
+        res.rgb = FromBlendSpace(res.rgb);
+        return res;
     }
 
     // ---- blend modes: Compositing and Blending Level 1 ----
@@ -119,13 +130,24 @@ Shader "Hidden/Vectra/Composite"
         float4 s = tex2D(_MainTex, i.uv) * _Opacity;
         float4 b = tex2D(_BackTex, i.uv);
         int mode = (int)(_Mode + 0.5);
-        if (mode == 16) return min(s + b, 1.0);
-        float ar = s.a + b.a - s.a * b.a;
-        float3 cs = s.a > 1e-5 ? s.rgb / s.a : float3(0, 0, 0);
-        float3 cb = b.a > 1e-5 ? b.rgb / b.a : float3(0, 0, 0);
-        float3 mixed = BlendColors(mode, saturate(cb), saturate(cs));
-        float3 rgb = (1.0 - b.a) * s.rgb + (1.0 - s.a) * b.rgb + s.a * b.a * mixed;
-        return float4(rgb, ar);
+        // In a Linear project the whole composite runs on sRGB-encoded values, like browsers and Figma, then goes back to linear.
+        float3 cs = s.a > 1e-5 ? ToBlendSpace(saturate(s.rgb / s.a)) : float3(0, 0, 0);
+        float3 cb = b.a > 1e-5 ? ToBlendSpace(saturate(b.rgb / b.a)) : float3(0, 0, 0);
+        float4 r;
+        if (mode == 16)
+        {
+            r = min(float4(cs * s.a, s.a) + float4(cb * b.a, b.a), 1.0);
+        }
+        else
+        {
+            float ar = s.a + b.a - s.a * b.a;
+            float3 mixed = BlendColors(mode, cb, cs);
+            float3 rgb = (1.0 - b.a) * cs * s.a + (1.0 - s.a) * cb * b.a + s.a * b.a * mixed;
+            r = float4(rgb, ar);
+        }
+
+        float3 straight = r.a > 1e-5 ? saturate(r.rgb / r.a) : float3(0, 0, 0);
+        return float4(FromBlendSpace(straight) * r.a, r.a);
     }
     ENDCG
 

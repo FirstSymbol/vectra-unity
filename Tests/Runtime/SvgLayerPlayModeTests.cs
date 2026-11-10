@@ -98,6 +98,12 @@ namespace FirstSymbol.Vectra.Tests
             public Color32 this[int x, int y] => m_Pixels[(m_H - 1 - y) * m_W + x];
         }
 
+        // In Linear colour space the translucent result of a layer is blended with the scene in linear light, as all Unity UI blends
+        // (the composite inside the layer follows Figma, the blend with what is behind it does not): such checks use a wide tolerance there.
+        static int Soft(int tol) => QualitySettings.activeColorSpace == ColorSpace.Linear ? Math.Max(tol, 70) : tol;
+
+        static void AssertSoft(Shot s, int x, int y, int r, int g, int b, int tol, string what) => AssertNear(s, x, y, r, g, b, Soft(tol), what);
+
         static void AssertNear(Shot s, int x, int y, int r, int g, int b, int tol, string what)
         {
             var c = s[x, y];
@@ -166,11 +172,11 @@ namespace FirstSymbol.Vectra.Tests
         {
             yield return OnBothPaths(Svg("<g opacity='0.5'>" + TwoCircles + "</g>"), (path, s) =>
             {
-                AssertNear(s, 40, 75, 243, 156, 163, 8, path + " left circle");
+                AssertSoft(s, 40, 75, 243, 156, 163, 8, path + " left circle");
                 // Where the circles overlap the top one hides the other, then the whole group is half transparent.
-                AssertNear(s, 80, 75, 146, 162, 169, 8, path + " overlap");
-                AssertNear(s, 120, 75, 146, 162, 169, 8, path + " right circle");
-                AssertNear(s, 10, 10, 255, 255, 255, 2, path + " outside");
+                AssertSoft(s, 80, 75, 146, 162, 169, 8, path + " overlap");
+                AssertSoft(s, 120, 75, 146, 162, 169, 8, path + " right circle");
+                AssertSoft(s, 10, 10, 255, 255, 255, 2, path + " outside");
             });
         }
 
@@ -179,10 +185,10 @@ namespace FirstSymbol.Vectra.Tests
 
         static void AssertTopLeft(Shot s, string path)
         {
-            AssertNear(s, 50, 25, 128, 128, 255, 6, path + " top, blue over red");
-            AssertNear(s, 10, 25, 255, 128, 128, 6, path + " top left, red only");
-            AssertNear(s, 130, 25, 255, 255, 255, 2, path + " top right");
-            AssertNear(s, 50, 135, 255, 255, 255, 2, path + " bottom");
+            AssertSoft(s, 50, 25, 128, 128, 255, 6, path + " top, blue over red");
+            AssertSoft(s, 10, 25, 255, 128, 128, 6, path + " top left, red only");
+            AssertSoft(s, 130, 25, 255, 255, 255, 2, path + " top right");
+            AssertSoft(s, 50, 135, 255, 255, 255, 2, path + " bottom");
         }
 
         [UnityTest]
@@ -200,9 +206,9 @@ namespace FirstSymbol.Vectra.Tests
         {
             yield return OnBothPaths(Svg("<circle opacity='0.5' cx='80' cy='80' r='42' fill='#E63946' stroke-width='16' stroke='#264653'/>"), (path, s) =>
             {
-                AssertNear(s, 80, 80, 243, 156, 163, 8, path + " fill only");
-                AssertNear(s, 118, 80, 146, 162, 169, 8, path + " fill under the stroke");
-                AssertNear(s, 34, 80, 146, 162, 169, 8, path + " stroke only");
+                AssertSoft(s, 80, 80, 243, 156, 163, 8, path + " fill only");
+                AssertSoft(s, 118, 80, 146, 162, 169, 8, path + " fill under the stroke");
+                AssertSoft(s, 34, 80, 146, 162, 169, 8, path + " stroke only");
             });
         }
 
@@ -212,7 +218,7 @@ namespace FirstSymbol.Vectra.Tests
             yield return OnBothPaths(Svg("<g opacity='0.5'><g opacity='0.5'>" + TwoCircles + "</g></g>"), (path, s) =>
             {
                 // 0.25 of the dark circle over white.
-                AssertNear(s, 120, 75, 200, 209, 212, 8, path);
+                AssertSoft(s, 120, 75, 200, 209, 212, 8, path);
             });
         }
 
@@ -223,11 +229,49 @@ namespace FirstSymbol.Vectra.Tests
             const string body = pattern + "<rect y='0' width='160' height='60' fill='url(#p)'/><g opacity='0.5'><rect y='80' width='160' height='60' fill='url(#p)'/><rect x='150' y='150' width='5' height='5' fill='#00f'/></g>";
             yield return OnBothPaths(Svg(body), (path, s) =>
             {
-                AssertNear(s, 5, 30, 255, 0, 0, 6, path + " pattern outside the layer");
-                AssertNear(s, 15, 30, 255, 255, 255, 6, path + " gap outside the layer");
-                AssertNear(s, 5, 110, 255, 128, 128, 8, path + " pattern inside the layer");
-                AssertNear(s, 15, 110, 255, 255, 255, 6, path + " gap inside the layer");
+                AssertSoft(s, 5, 30, 255, 0, 0, 6, path + " pattern outside the layer");
+                AssertSoft(s, 15, 30, 255, 255, 255, 6, path + " gap outside the layer");
+                AssertSoft(s, 5, 110, 255, 128, 128, 8, path + " pattern inside the layer");
+                AssertSoft(s, 15, 110, 255, 255, 255, 6, path + " gap inside the layer");
             });
+        }
+
+        [UnityTest]
+        public IEnumerator PatternFill_InsideAMask_DrawsInTheMask_AndTheTileIsStillGoodOutside()
+        {
+            const string pattern = "<defs><pattern id='p' width='20' height='20' patternUnits='userSpaceOnUse'><rect width='10' height='20' fill='#00f'/></pattern></defs>";
+            const string body = pattern + "<mask id='m' style='mask-type:alpha' maskUnits='userSpaceOnUse' x='0' y='0' width='160' height='160'><rect width='160' height='100' fill='url(#p)' fill-opacity='0.99'/></mask>" +
+                                "<rect width='160' height='100' fill='#f00' mask='url(#m)'/><rect y='120' width='160' height='30' fill='url(#p)'/>";
+            yield return OnBothPaths(Svg(body), (path, s) =>
+            {
+                AssertSoft(s, 5, 50, 255, 0, 0, 8, path + " red where the pattern stripe masks");
+                AssertSoft(s, 15, 50, 255, 255, 255, 8, path + " nothing in the gap");
+                AssertSoft(s, 5, 135, 0, 0, 255, 8, path + " the same pattern outside the mask");
+                AssertSoft(s, 15, 135, 255, 255, 255, 8, path + " gap outside the mask");
+            });
+        }
+
+        [UnityTest]
+        public IEnumerator ImagePattern_InsideAnOpacityGroup_IsNotDimmedTwice_AndNotInTheCache()
+        {
+            const string image = "<defs><pattern id='p' width='20' height='20' patternUnits='userSpaceOnUse'><image width='20' height='20' href='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC'/></pattern></defs>";
+            const string body = image + "<g opacity='0.5'><rect width='160' height='60' fill='url(#p)'/><rect y='70' width='20' height='20' fill='#00f'/></g><rect y='100' width='160' height='40' fill='url(#p)'/>";
+            yield return OnBothPaths(Svg(body), (path, s) =>
+            {
+                AssertSoft(s, 30, 30, 255, 128, 128, 10, path + " the group halves it once");
+                AssertSoft(s, 30, 120, 255, 0, 0, 8, path + " the same pattern outside is full");
+            });
+        }
+
+        [UnityTest]
+        public IEnumerator Canvas_DrawsTheNewContent_WhenTheDocumentIsParsedAgainInPlace()
+        {
+            var image = CanvasImage(Svg("<g opacity='0.5'><rect width='160' height='160' fill='#f00'/><rect width='80' height='80' fill='#f00'/></g>"));
+            yield return Settle();
+            AssertSoft(Capture(), 120, 120, 255, 128, 128, 8, "before");
+            SvgParser.Parse(Svg("<g opacity='0.5'><rect width='160' height='160' fill='#00f'/><rect width='80' height='80' fill='#00f'/></g>"), image.Document);
+            yield return Settle();
+            AssertSoft(Capture(), 120, 120, 128, 128, 255, 8, "after the parse");
         }
 
         // ---- masks ----
@@ -238,8 +282,8 @@ namespace FirstSymbol.Vectra.Tests
             const string mask = "<mask id='m' maskUnits='userSpaceOnUse' x='0' y='0' width='160' height='160'><rect width='80' height='160' fill='#fff'/><rect x='80' width='80' height='160' fill='#000'/></mask>";
             yield return OnBothPaths(Svg(mask + "<rect width='160' height='160' fill='#f00' mask='url(#m)'/>"), (path, s) =>
             {
-                AssertNear(s, 40, 80, 255, 0, 0, 4, path + " white part of the mask");
-                AssertNear(s, 120, 80, 255, 255, 255, 4, path + " black part of the mask");
+                AssertSoft(s, 40, 80, 255, 0, 0, 4, path + " white part of the mask");
+                AssertSoft(s, 120, 80, 255, 255, 255, 4, path + " black part of the mask");
             });
         }
 
@@ -248,7 +292,7 @@ namespace FirstSymbol.Vectra.Tests
         {
             const string mask = "<mask id='m'><rect width='160' height='160' fill='#808080'/></mask>";
             yield return OnBothPaths(Svg(mask + "<rect width='160' height='160' fill='#f00' mask='url(#m)'/>"), (path, s) =>
-                AssertNear(s, 80, 80, 255, 127, 127, 6, path));
+                AssertSoft(s, 80, 80, 255, 127, 127, 6, path));
         }
 
         [UnityTest]
@@ -259,9 +303,9 @@ namespace FirstSymbol.Vectra.Tests
                 "<mask id='m'><rect width='160' height='160' fill='url(#g)'/></mask>";
             yield return OnBothPaths(Svg(mask + "<rect width='160' height='160' fill='#00f' mask='url(#m)'/>"), (path, s) =>
             {
-                AssertNear(s, 4, 80, 8, 8, 255, 14, path + " left");
-                AssertNear(s, 80, 80, 128, 128, 255, 10, path + " middle");
-                AssertNear(s, 156, 80, 250, 250, 255, 14, path + " right");
+                AssertSoft(s, 4, 80, 8, 8, 255, 14, path + " left");
+                AssertSoft(s, 80, 80, 128, 128, 255, 10, path + " middle");
+                AssertSoft(s, 156, 80, 250, 250, 255, 14, path + " right");
             });
         }
 
@@ -271,9 +315,9 @@ namespace FirstSymbol.Vectra.Tests
             const string content = "<rect width='160' height='160' fill='#000' fill-opacity='0.5'/></mask>";
             const string use = "<rect width='160' height='160' fill='#f00' mask='url(#m)'/>";
             yield return OnBothPaths(Svg("<mask id='m' style='mask-type:alpha'>" + content + use), (path, s) =>
-                AssertNear(s, 80, 80, 255, 127, 127, 6, path + " alpha mask: half"));
+                AssertSoft(s, 80, 80, 255, 127, 127, 6, path + " alpha mask: half"));
             yield return OnBothPaths(Svg("<mask id='m' mask-type='luminance'>" + content + use), (path, s) =>
-                AssertNear(s, 80, 80, 255, 255, 255, 4, path + " luminance mask of black: nothing"));
+                AssertSoft(s, 80, 80, 255, 255, 255, 4, path + " luminance mask of black: nothing"));
         }
 
         [UnityTest]
@@ -282,8 +326,8 @@ namespace FirstSymbol.Vectra.Tests
             const string mask = "<mask id='m' maskUnits='userSpaceOnUse' x='0' y='0' width='80' height='160'><rect width='160' height='160' fill='#808080'/></mask>";
             yield return OnBothPaths(Svg(mask + "<rect width='160' height='160' fill='#f00' mask='url(#m)'/>"), (path, s) =>
             {
-                AssertNear(s, 40, 80, 255, 127, 127, 6, path + " inside the region");
-                AssertNear(s, 120, 80, 255, 255, 255, 4, path + " outside the region");
+                AssertSoft(s, 40, 80, 255, 127, 127, 6, path + " inside the region");
+                AssertSoft(s, 120, 80, 255, 255, 255, 4, path + " outside the region");
             });
         }
 
@@ -419,9 +463,9 @@ namespace FirstSymbol.Vectra.Tests
             World(Svg("<g opacity='0.5'>" + TwoCircles + "</g>"));
             yield return Settle();
             var s = Capture();
-            AssertNear(s, 80, 75, 146, 162, 169, 8, "overlap");
-            AssertNear(s, 40, 75, 243, 156, 163, 8, "left circle");
-            AssertNear(s, 10, 10, 255, 255, 255, 2, "outside");
+            AssertSoft(s, 80, 75, 146, 162, 169, 8, "overlap");
+            AssertSoft(s, 40, 75, 243, 156, 163, 8, "left circle");
+            AssertSoft(s, 10, 10, 255, 255, 255, 2, "outside");
         }
 
         [UnityTest]
@@ -431,8 +475,8 @@ namespace FirstSymbol.Vectra.Tests
             World(Svg("<g opacity='0.5'>" + TwoCircles + "</g>"));
             yield return Settle();
             var s = Capture();
-            AssertNear(s, 80, 75, 146, 162, 169, 8, "overlap");
-            AssertNear(s, 10, 10, 255, 255, 255, 2, "outside");
+            AssertSoft(s, 80, 75, 146, 162, 169, 8, "overlap");
+            AssertSoft(s, 10, 10, 255, 255, 255, 2, "outside");
         }
 
         [UnityTest]
