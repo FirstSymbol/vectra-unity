@@ -69,23 +69,39 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             Debug.Log("DUMP small " + m_H.Dump("tri_small"));
         }
 
+        // What "half transparent" looks like depends on the project's colour space, so the Vectra element is compared with
+        // a plain UI Toolkit element given the same colour.
         [UnityTest]
-        public IEnumerator TranslucentFillBlendsOverTheBackground()
+        public IEnumerator TranslucentFillBlendsLikeAPlainElement()
         {
-            m_H.Place(Rect(new Color(1f, 0f, 0f, 0.5f)), 40, 40, 80, 80);
+            m_H.Place(Rect(new Color(1f, 0f, 0f, 0.5f)), 20, 40, 80, 80);
+            var plain = new VisualElement();
+            plain.style.backgroundColor = new Color(1f, 0f, 0f, 0.5f);
+            m_H.Place(plain, 140, 40, 80, 80);
             yield return m_H.Frames();
-            var c = m_H.Px(80, 80);
-            Assert.IsTrue(UitkHarness.Near(c, 128, 0, 0, 12), "half-transparent red over black: " + UitkHarness.Hex(c));
+            var v = m_H.Px(60, 80);
+            var p = m_H.Px(180, 80);
+            Assert.Greater(v.r, 100, "translucent, not empty " + UitkHarness.Hex(v));
+            Assert.Less(v.r, 230, "translucent, not opaque " + UitkHarness.Hex(v));
+            Assert.AreEqual(p.r, v.r, 8, $"vectra {UitkHarness.Hex(v)} plain {UitkHarness.Hex(p)}");
+            Assert.AreEqual(0, v.g, 4);
         }
 
         [UnityTest]
-        public IEnumerator ElementOpacityApplies()
+        public IEnumerator ElementOpacityAppliesLikeToAPlainElement()
         {
-            var e = m_H.Place(Rect(Color.white), 40, 40, 80, 80);
+            var e = m_H.Place(Rect(Color.white), 20, 40, 80, 80);
             e.style.opacity = 0.5f;
+            var plain = new VisualElement();
+            plain.style.backgroundColor = Color.white;
+            plain.style.opacity = 0.5f;
+            m_H.Place(plain, 140, 40, 80, 80);
             yield return m_H.Frames();
-            var c = m_H.Px(80, 80);
-            Assert.IsTrue(UitkHarness.Near(c, 128, 128, 128, 14), "opacity 0.5 white over black: " + UitkHarness.Hex(c));
+            var v = m_H.Px(60, 80);
+            var p = m_H.Px(180, 80);
+            Assert.Greater(v.r, 100, UitkHarness.Hex(v));
+            Assert.Less(v.r, 230, UitkHarness.Hex(v));
+            Assert.AreEqual(p.r, v.r, 8, $"vectra {UitkHarness.Hex(v)} plain {UitkHarness.Hex(p)}");
         }
 
         [UnityTest]

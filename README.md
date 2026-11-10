@@ -2,7 +2,7 @@
 
 *Русская версия: [README.ru.md](README.ru.md).*
 
-Vector shapes for the **uGUI Canvas** and **world space**. Includes:
+Vector shapes for the **uGUI Canvas**, **world space** and **UI Toolkit**. Includes:
 - analytic SDF primitives and arbitrary paths;
 - boolean operations, including smooth ones;
 - gradients, patterns, strokes with dashes and trim;
@@ -44,6 +44,7 @@ Vectra and Lettera work as packages or as plain folders under `Assets`: when Let
   - Boolean Operations;
   - Animation;
   - World Space;
+  - UI Toolkit;
   - URP Backdrop.
 
 ## Components
@@ -52,6 +53,7 @@ Vectra and Lettera work as packages or as plain folders under `Assets`: when Let
 |---|---|
 | `VectraShape` | A uGUI shape (`MaskableGraphic`). Works with Mask, RectMask2D (with softness), layout and exact raycast. |
 | `VectraRenderer` | A shape in the world: MeshRenderer, sorting layer and order, an optional `PolygonCollider2D`. |
+| `VectraElement` / `VectraSvgElement` | The same shapes and SVG documents in UI Toolkit (UXML, USS, runtime and editor panels), drawn into a shared render texture so every effect is kept. |
 | `VectraSvgImage` / `VectraSvgRenderer` | An SVG document as one mesh per run of shapes. Text is drawn by the chosen text engine (Lettera, TextMesh Pro or Legacy; in world space Lettera or TextMesh Pro), embedded images through RawImage. Colour overrides by `#id`, `.class` and tag, and expanding into a hierarchy of shapes. |
 | `VectraBooleanGroup` (+ `VectraBooleanOperand`) | Child shapes become the operands of a boolean operation. The hierarchy sets the order. |
 | `VectraMask` | A mask that follows a shape's outline. Stencil works for any UI. Soft has feather and invert, for Vectra children. |

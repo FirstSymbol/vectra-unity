@@ -2,7 +2,7 @@
 
 *English version: [README.md](README.md).*
 
-Векторные фигуры для **uGUI Canvas** и **world space**. Включает:
+Векторные фигуры для **uGUI Canvas**, **world space** и **UI Toolkit**. Включает:
 - аналитические SDF-примитивы и произвольные пути;
 - булевы операции, в том числе плавные;
 - градиенты, паттерны, обводки с dash и trim;
@@ -44,6 +44,7 @@ Vectra и Lettera работают и как пакеты, и как обычн�
   - Boolean Operations;
   - Animation;
   - World Space;
+  - UI Toolkit;
   - URP Backdrop.
 
 ## Компоненты
@@ -52,6 +53,7 @@ Vectra и Lettera работают и как пакеты, и как обычн�
 |---|---|
 | `VectraShape` | Фигура uGUI (`MaskableGraphic`). Работает с Mask, RectMask2D (с softness), layout, точным raycast. |
 | `VectraRenderer` | Фигура в мире: MeshRenderer, sorting layer и order, опциональный `PolygonCollider2D`. |
+| `VectraElement` / `VectraSvgElement` | Те же фигуры и SVG-документы в UI Toolkit (UXML, USS, рантайм и окна редактора); рисуются в общую render texture, поэтому все эффекты сохраняются. |
 | `VectraSvgImage` / `VectraSvgRenderer` | SVG-документ: один меш на серию фигур. Текст рисуется выбранным движком текста (Lettera, TextMeshPro или Legacy; в мировом пространстве — Lettera или TextMeshPro), встроенные картинки — через RawImage. Есть override цвета по `#id`, `.class` и тегу, а также разворачивание в иерархию фигур. |
 | `VectraBooleanGroup` (+ `VectraBooleanOperand`) | Дочерние фигуры становятся операндами булевой операции. Порядок задаётся иерархией. |
 | `VectraMask` | Маска по контуру фигуры. Stencil — для любого UI. Soft — с пером и инверсией, для дочерних фигур Vectra. |

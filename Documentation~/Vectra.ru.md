@@ -1,6 +1,6 @@
 # Vectra — векторная графика для Unity
 
-Vectra рисует векторные фигуры в **uGUI Canvas** и в **world space**. Поддерживаются:
+Vectra рисует векторные фигуры в **uGUI Canvas**, в **world space** и в **UI Toolkit**. Поддерживаются:
 - аналитические примитивы и произвольные пути;
 - булевы операции, градиенты, обводки, эффекты и маски;
 - SVG-документы.
@@ -19,18 +19,19 @@ Vectra рисует векторные фигуры в **uGUI Canvas** и в **w
 1. [Установка](#установка)
 2. [Как это устроено](#как-это-устроено)
 3. [Компоненты](#компоненты)
-4. [Фигуры](#фигуры)
-5. [Заливки, обводки и палитры](#заливки-обводки-и-палитры)
-6. [Эффекты](#эффекты)
-7. [Маски](#маски)
-8. [Булевы операции](#булевы-операции)
-9. [SVG](#svg)
-10. [Анимация](#анимация)
-11. [URP backdrop](#urp-backdrop)
-12. [Инструменты редактора](#инструменты-редактора)
-13. [Командная строка](#командная-строка)
-14. [Производительность](#производительность)
-15. [Частые проблемы](#частые-проблемы)
+4. [UI Toolkit](#ui-toolkit)
+5. [Фигуры](#фигуры)
+6. [Заливки, обводки и палитры](#заливки-обводки-и-палитры)
+7. [Эффекты](#эффекты)
+8. [Маски](#маски)
+9. [Булевы операции](#булевы-операции)
+10. [SVG](#svg)
+11. [Анимация](#анимация)
+12. [URP backdrop](#urp-backdrop)
+13. [Инструменты редактора](#инструменты-редактора)
+14. [Командная строка](#командная-строка)
+15. [Производительность](#производительность)
+16. [Частые проблемы](#частые-проблемы)
 
 ## Установка
 
@@ -46,6 +47,7 @@ Package Manager → **+** → **Add package from git URL…** → `https://githu
 | Boolean Operations | Группы с движущимися операндами, smooth union (метаболы), BooleanShape из кода |
 | Animation | Твины, AnimationClip через Animated Properties, морфинг, бегущий пунктир |
 | World Space | Карточки VectraRenderer в 3D, сгенерированные коллайдеры, обработка кликов |
+| UI Toolkit | UXML-панель с `VectraElement`, стилизованными из USS, SVG-элемент и звезда из кода (см. [UI Toolkit](#ui-toolkit)) |
 | URP Backdrop | Frosted glass и 15 blend-режимов поверх движущегося UI (см. [URP backdrop](#urp-backdrop)) |
 
 ## Как это устроено
@@ -68,6 +70,7 @@ Package Manager → **+** → **Add package from git URL…** → `https://githu
 | `VectraShape` | Фигура uGUI (`MaskableGraphic`): Mask, RectMask2D (с softness), layout, точный raycast |
 | `VectraRenderer` | Фигура в мире (MeshRenderer): sorting layer и order, опциональный `PolygonCollider2D` |
 | `VectraSvgImage` / `VectraSvgRenderer` | SVG-документ одним мешем (UI / мир) с переопределениями по элементам |
+| `VectraElement` / `VectraSvgElement` | Те же фигуры и SVG-документы для UI Toolkit (UXML, USS, рантайм и окна редактора): [UI Toolkit](#ui-toolkit) |
 | `VectraBooleanGroup` + `VectraBooleanOperand` | Дочерние фигуры становятся операндами булевой операции |
 | `VectraMask` | Маскирует детей по контуру фигуры: stencil или soft (с пером, с инверсией) |
 | `VectraTheme` | Делает `VectraPalette` активной и выбирает тему |
@@ -96,6 +99,58 @@ shape.AddEffect<DropShadowEffect>().blur = 12f;
 shape.Strokes[0].trimEnd = 0.5f;
 shape.SetShapeDirty();
 ```
+
+## UI Toolkit
+
+`VectraElement` и `VectraSvgElement` (пространство имён `FirstSymbol.Vectra.UIToolkit`, сборка `FirstSymbol.Vectra.UIToolkit`) рисуют Vectra в панелях UI Toolkit: в рантайм-`UIDocument` и в окнах редактора. Оба — `[UxmlElement]`, поэтому UI Builder показывает их в **Library → Project → Custom Controls (C#)**.
+
+| Элемент | Назначение |
+|---|---|
+| `VectraElement` | Любой примитив или путь с заливками, обводками, эффектами, булевыми операциями, палитрами и стилями. Берёт тот же `VectraShapeContent`, что и `VectraShape`, поэтому код для uGUI переносится без изменений. |
+| `VectraSvgElement` | `VectraSvgDocument`: фигуры, переопределения цветов по селектору, порядок рисования, текст SVG (см. ограничения ниже). |
+
+```xml
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:vf="FirstSymbol.Vectra.UIToolkit">
+    <vf:VectraElement shape="Star" sides="6" fill="#ffcc00" stroke="#222222" stroke-width="3" class="badge" />
+    <vf:VectraSvgElement document="project://database/Assets/Icons/logo.svg" />
+</ui:UXML>
+```
+
+Атрибуты `VectraElement`: `shape` (Rectangle, Ellipse, Triangle, Polygon, Star, Heart, Squircle, Custom), `sides`, `fill`, `stroke`, `stroke-width`, `corner-radius`, `shape-asset` и `style-asset` (общая геометрия и внешний вид). Атрибуты `VectraSvgElement`: `document`, `preserve-aspect`, `quality`, `generate-text`. Размер задают обычные `width` и `height`; без них элемент 100 на 100 пунктов.
+
+Свойства USS переопределяют атрибуты и меняются вместе с `:hover`, `:active` и другими псевдосостояниями:
+
+```css
+.badge { --vectra-fill: #ffcc00; --vectra-stroke: #222222; --vectra-stroke-width: 3; --vectra-corner-radius: 8; }
+.badge:hover { --vectra-fill: #ffe680; }
+```
+
+Из кода фигура описывается так же, как у `VectraShape`:
+
+```csharp
+using FirstSymbol.Vectra.UIToolkit;
+using UnityEngine.UIElements;
+
+var root = new VisualElement();
+var star = new VectraElement { Shape = VectraElementShape.Star, Fill = Color.yellow, StrokeWidth = 3f };
+star.style.width = 120;
+star.style.height = 120;
+star.SetGeometry<StarShape>().points = 7;
+star.AddEffect<DropShadowEffect>().blur = 10f;
+star.Fills[0].paint = VectraPaint.Linear(Color.yellow, Color.red, 90f);
+star.SetShapeDirty();   // после изменения геометрии, заливок, обводок или эффектов
+root.Add(star);
+```
+
+**Как это устроено.** Меш UI Toolkit несёт только позицию, цвет и один uv, а `MeshGenerationContext` принимает текстуру, а не материал; вершина Vectra несёт четыре float4. Поэтому элемент строит тот же меш, что и `VectraShape`, рисует его тем же материалом и шейдером в render texture, а UI Toolkit показывает эту текстуру квадом. Сглаженные SDF-края, градиенты, штрихи, тени, свечения, фаски и все остальные эффекты выглядят так же, как в Canvas. Маленькие элементы делят страницы по 2048 пикселей, поэтому UI Toolkit батчит их квады в один draw call; элемент больше 512 пикселей получает свою текстуру. Картинка перерисовывается только когда меняются фигура, размер элемента или плотность экрана (на 25 %); неподвижный элемент ничего не стоит, а перерисовка после прогрева не выделяет управляемую память.
+
+**Ограничения.**
+- Элемент — растр той плотности, для которой он нарисован. Масштаб (transform) растягивает его, пока плотность не ушла на 25 %, затем он перерисовывается. Повёрнутый элемент пересэмплируется и мягче.
+- Режимы смешивания кроме Normal, `VectraMask`, состояния взаимодействия, URP backdrop и текст через Lettera относятся к uGUI и миру и здесь не работают. Фигура не может смешиваться с тем, что находится за элементом.
+- Текст SVG рисуют метки (label) UI Toolkit шрифтом панели (у Lettera и TextMesh Pro нет элемента для UI Toolkit). Чтобы был виден какой-либо шрифт, у панели должна быть тема (theme style sheet). Базовая линия и выравнивание считаются по размеру шрифта, поэтому шрифт с необычными метриками может сидеть на пункт-два выше или ниже.
+- Элементы SVG `<image>` пропускаются.
+- Текстура не больше 4096 пикселей по стороне; элемент больше рисуется с меньшей плотностью.
+- Попадание курсора определяется по контуру (`ContainsPoint`), с учётом дыр и обводок.
 
 ## Фигуры
 
@@ -393,6 +448,7 @@ unity command vectra expand_svg --target "SVG Image"
 - По возможности оставляйте фигуры аналитическими. Path-фигуры с эффектами запекают поле расстояний, его размер задаёт Quality.
 - Фигуры пересобираются только при изменениях. Анимируемые параметры пересобираются каждый кадр без управляемых аллокаций.
 - Текстурные заливки, backdrop-фигуры и дети soft-маски используют отдельные материалы, но батчатся между собой.
+- В UI Toolkit фигура растеризуется в общую страницу только при изменении; маленькие элементы делят страницы, поэтому их квады батчатся (см. [UI Toolkit](#ui-toolkit)).
 - Лимит SDF-атласа задаётся в Project Settings и попадает в сборки (сборка добавляет в Preloaded Assets небольшой ассет настроек и потом убирает его), заполненность видна в Atlas Debugger. При изменении в видеопамять уходят только изменившиеся блоки атласа, а не вся текстура.
 - Атлас градиентов (ширина 256, до 4096 строк, не больше 8 МиБ в half) отдаёт одну строку заливкам с одинаковыми цветами и стопами. Строки сравниваются по содержимому, поэтому две разные заливки никогда не окажутся на одной строке. Строка, которой больше никто не пользуется, остаётся запечённой; когда атлас полон, вытесняются наименее недавно использованные. Если одновременно живы 4095 разных градиентов, остальные рисуются белыми, а консоль один раз предупреждает.
 - Что собрано и запущено на каких платформах: [Platforms.ru.md](Platforms.ru.md).
@@ -405,4 +461,5 @@ unity command vectra expand_svg --target "SVG Image"
 | Backdrop-фигуры рисуются без эффекта | Добавьте Vectra Backdrop Feature в активный URP Renderer |
 | Стекло не размывает другой UI | Фоновый UI рисуйте базовой камерой, стекло — overlay-камерой |
 | Нет текста из SVG | Проверьте **Project Settings → Vectra → Text engine**. Для TextMesh Pro импортируйте TMP Essential Resources или назначьте шрифт / font map; Lettera нужен как пакет; если движок пришлось заменить, консоль один раз предупреждает |
+| Элемент Vectra в UI Toolkit ничего не показывает | Ему нужны размер (width и height) и панель; для текста SVG у панели ещё должна быть тема (theme style sheet) со шрифтом |
 | `.svg` импортируется другим импортёром | Выберите Vectra Svg Importer на файле или включите его в Project Settings |
