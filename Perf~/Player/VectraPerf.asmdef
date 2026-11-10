@@ -1,0 +1,21 @@
+{
+    "name": "FirstSymbol.VectraPerf",
+    "rootNamespace": "FirstSymbol.VectraPerf",
+    "references": [
+        "FirstSymbol.Vectra",
+        "FirstSymbol.Vectra.UIToolkit",
+        "Unity.Mathematics",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "VECTRA_PERF"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

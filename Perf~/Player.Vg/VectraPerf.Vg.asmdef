@@ -1,0 +1,20 @@
+{
+    "name": "FirstSymbol.VectraPerf.Vg",
+    "rootNamespace": "FirstSymbol.VectraPerf",
+    "references": [
+        "FirstSymbol.VectraPerf",
+        "Unity.VectorGraphics",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "VECTRA_PERF"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,19 @@
+{
+    "name": "FirstSymbol.VectraPerf.EditorImport",
+    "rootNamespace": "FirstSymbol.VectraPerf.Editor",
+    "references": [
+        "FirstSymbol.Vectra",
+        "FirstSymbol.Vectra.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
