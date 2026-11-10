@@ -4,7 +4,7 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.6.2] - 2026-11-10
 
 ### Added
 - **Non-scaling strokes in UI Toolkit, in baked sprites and PNG, and in the SVG export.** In `VectraSvgElement` one SVG px of a `vector-effect="non-scaling-stroke"` stroke (and of its dashes) is one panel pixel, so it is `stroke-width` x the panel's density in device pixels. In `VectraSpriteBaker`, `VectraRasterizer` and the importer's Sprite mode it is one pixel of the baked texture. A pixel-mode stroke is written to SVG as `vector-effect="non-scaling-stroke"` and reads back as the same stroke.
