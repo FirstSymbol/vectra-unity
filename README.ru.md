@@ -172,10 +172,14 @@ VectraSvg.Expand(svgImage);   // отдельный VectraShape на кажды�
 
 - `<mask>` применяется как геометрический клип, яркость маски не учитывается.
 - Паттерн-заливки заменяются цветом первой фигуры паттерна.
-- Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate.
+- Из фильтров поддерживаются blur, drop shadow (включая цепочку offset + blur + merge), saturate и hueRotate; остальные примитивы (`feTurbulence`, `feComposite`, `feBlend` ...) нет.
+- Анимации нет: SMIL (`<animate>`, `<animateTransform>`, `<set>`) и CSS `@keyframes` игнорируются, рисуется первый кадр. `<foreignObject>` и `<script>` игнорируются.
+- Нет `mix-blend-mode`, `paint-order` и `@font-face`.
+- Текст — один фрагмент на `<text>`: нет позиций по глифам (`dx`, `dy`, `rotate`, списки `x`), `<textPath>`, `textLength` и `letter-spacing`.
+- `vector-effect` работает только для `non-scaling-stroke` (на Canvas и в мировом пространстве; см. руководство). `non-scaling-size`, `non-rotation` и `fixed-position` игнорируются.
 - `opacity` группы применяется к каждому потомку отдельно.
 - Внешние картинки по URL не загружаются, работают только встроенные data-URI.
-- Обо всём неподдержанном пишется в отчёт импорта (инспектор ассета и Window → Vectra → SVG Import Report).
+- Обо всём неподдержанном пишется в отчёт импорта (инспектор ассета и Window → Vectra → SVG Import Report); пока не обо всём перечисленном выше.
 
 ## Производительность
 

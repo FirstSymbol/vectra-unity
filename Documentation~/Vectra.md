@@ -180,7 +180,7 @@ relative lengths, offset); trim path; width profile (`AnimationCurve`); drawn be
 
 **Hairlines.** A stroke's **Unit** is Local (the width follows the scale of the shape) or **Pixels**: the stroke stays N
 device pixels wide at any scale or zoom, anti-aliased, in a Canvas and in world space. The mesh follows the pixel size
-(a change of 1% rebuilds it), so a camera zoom or a Canvas Scaler change keeps the line crisp.
+(a change of 1% rebuilds it), so a camera zoom or a Canvas Scaler change keeps the line crisp. SVG's `vector-effect="non-scaling-stroke"` becomes such a stroke (see the SVG section).
 
 ```csharp
 shape.SetStroke(Color.white, 1f, StrokeAlignment.Center);
@@ -330,6 +330,8 @@ import report says so); text and images are not clipped by `clip-path`; images a
 `preserveAspectRatio` is ignored for them; of a `<switch>` only the first child whose `systemLanguage` /
 `requiredExtensions` conditions pass is drawn (the language list is `SvgParseOptions.languages`, default `en`). A `<use>`
 restyles its target for that copy only; the target keeps its own style where it stands.
+
+**Non-scaling strokes.** `vector-effect="non-scaling-stroke"` keeps a stroke the same width on screen whatever transforms apply, as in browsers: `stroke-width` is in screen units and is not scaled by the element's `transform`, the `viewBox` fit, the Canvas, the object's scale or the camera. `stroke-dasharray` and `stroke-dashoffset` of such a stroke are screen units too. The parser makes it a pixel-mode stroke (`StrokeWidthMode.Pixels` with `dashInPixels`). One SVG px is one reference point on a screen-space Canvas (`stroke-width="2"` is 2 x the Canvas scale factor device pixels; one device pixel on a world-space Canvas) and one device pixel in world space (`VectraSvgRenderer`). The property is not inherited (SVG 2; Chrome draws it so): set it on the element, in its `style` or in a CSS rule; a `<use>` of a marked element is non-scaling, a `<g>` or `<use>` that carries it is not. `non-scaling-size`, `non-rotation` and `fixed-position` are ignored and named in the import report. Not yet in UI Toolkit (`VectraSvgElement`), in baked sprites and PNG, or written by the SVG export.
 
 **Untrusted files.** The parser stops at budgets instead of crashing or hanging: nesting depth 256, 200 000 elements,
 200 000 elements drawn (every `<use>` copy counts), 10 000 `<use>` copies, 1 000 000 characters of path data, 32 million

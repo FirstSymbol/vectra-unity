@@ -4,6 +4,20 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **`vector-effect="non-scaling-stroke"` works as in browsers on a Canvas (`VectraSvgImage`) and in world space (`VectraSvgRenderer`).** The stroke keeps its authored width on screen whatever transforms apply (the element's own `transform`, the `viewBox` fit, the Canvas, the object's scale, the camera), and so do its dashes (`stroke-dasharray`, `stroke-dashoffset`). Before, only the element's own scale was skipped and the document's scale still grew or shrank the stroke. The parser makes such a stroke a pixel-mode stroke (`StrokeWidthMode.Pixels` plus the new `StrokeLayer.dashInPixels`). One SVG px is one reference point on a screen-space Canvas (`stroke-width="2"` is 2 x the Canvas scale factor device pixels; one device pixel on a world-space Canvas) and one device pixel in world space. `StrokeWidthMode.Pixels` on an ordinary shape still counts device pixels. The mesh follows the screen scale (1% rebuilds it). `VectraSvgBuilder.Build` takes the new `pointScale` argument and `ShapeFrame` the field of the same name. `non-scaling-size`, `non-rotation` and `fixed-position` are ignored and named in the import report.
+- Tests: 5 EditMode (parsing: attribute, style, class, transforms, dashes, `<use>`, other values) and 5 PlayMode (world at image sizes 50 to 400 px, camera zoom and object scale, dashes, group and `<use>`, Canvas at scale factors 1 and 2) compared with a normal stroke that scales.
+- README: the SVG limits list names the main gaps (SMIL animation, `<foreignObject>`, `<script>`, other filter primitives, `mix-blend-mode`, `paint-order`, `@font-face`, `<textPath>` and glyph positions, `letter-spacing`, mask luminance, patterns, external images).
+
+### Fixed
+- `vector-effect` was treated as an inherited property, so a `<g vector-effect="non-scaling-stroke">` changed its children. It is not inherited (SVG 2; Chrome agrees): the element itself, its `style` or a CSS rule sets it, and a `<use>` of a marked element is non-scaling.
+
+### Limits
+- Non-scaling strokes are not done in UI Toolkit (`VectraSvgElement`), in baked sprites and PNG, or in the SVG export; there they are drawn as N device pixels (UI Toolkit, sprites) or as an ordinary stroke (export). Planned for 0.6.2 with the full SVG support table.
+- With a non-uniform fit (`preserveAspectRatio="none"` into a box of another aspect ratio) the stretched mesh makes a non-scaling stroke a little thicker along one axis than the other; a browser keeps it even.
+
 ## [0.6.0] - 2026-11-10
 
 ### Added
