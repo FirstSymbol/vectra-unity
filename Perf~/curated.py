@@ -1,5 +1,5 @@
 """The curated view of the tables: the rows of the plan with the figures a reader wants.
-Release IL2CPP with Mono in brackets, development counters beside. Used by report.py."""
+Release IL2CPP with Mono release in brackets, development IL2CPP counters beside (no Mono brackets for development rows). Used by report.py."""
 
 SIDES = ["vectra", "ref", "vg"]
 
@@ -50,7 +50,7 @@ def cell(summary, group, row, metric, side, kind, fmt):
         parts.append(fmt(main["median"], metric) + (f" ±{fmt(spread, metric)}" if spread and len(main["values"]) > 1 else ""))
     else:
         parts.append("-")
-    if mono:
+    if mono and kind == "rel":
         differs = not main
         if main:
             tolerance = max(0.1 * abs(main["median"]), max(mono["values"]) - min(mono["values"]), max(main["values"]) - min(main["values"]))

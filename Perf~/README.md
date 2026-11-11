@@ -73,4 +73,4 @@ The corpus is the 42 Figma SVGs of the 0.7 parity work (`--corpus`); the package
 * `perf.py` build, run, import, size, report; `report.py` and `curated.py` aggregation and the curated tables; `profile_run.py` profiler captures; `hidden_run.py` the hidden-desktop launcher.
 * `Player/` rows and helpers (runtime, assembly `FirstSymbol.VectraPerf`); `Player.Vg/` the bridge to `com.unity.vectorgraphics`.
 * `Editor/Build/` player build and the profile analyzer; `Editor/Import/` the importer timing.
-* `results/` tables of recorded baselines.
+* `results/baseline-0.7.5-curated.md` the curated tables of the 0.7.5 baseline (every metric of every row is in `tables.md` next to the runs, `<work>/Runs/<tag>/`).
