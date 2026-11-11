@@ -1,6 +1,6 @@
 // Vectra performance harness: one player process runs one group of rows and writes a JSON result.
 // Arguments: -perf <group> -side vectra|ref|vg -variants a,b -out <file.json> [-order rev] [-profile <file.raw>]
-// Groups: cold canvas fx svg bool world uitk sprite parse
+// Groups: cold canvas v1n v4n fx svg bool world uitk sprite parse
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -153,6 +153,9 @@ namespace FirstSymbol.VectraPerf
             R.graphicsApi = SystemInfo.graphicsDeviceType.ToString();
             R.colorSpace = QualitySettings.activeColorSpace.ToString();
             R.startMs = Time.realtimeSinceStartupAsDouble * 1000.0 - R0;
+            // A development player draws its console over the scene and re-lays it out every frame: with error lines in it that is allocation and time
+            // that belongs to the player, not to what is measured.
+            Debug.developerConsoleVisible = false;
             ProbeAlloc();
             R.log.Add("alloc_api=" + s_ApiWorks + " gc_frame_counter=" + s_GcFrame.Valid + " debug=" + Debug.isDebugBuild);
             Root = new GameObject("PerfRoot").transform;
@@ -166,6 +169,8 @@ namespace FirstSymbol.VectraPerf
             {
                 case "cold": body = Cold(); break;
                 case "canvas": body = Canvas1000(); break;
+                case "v1n": body = CanvasNoGradient(); break;
+                case "v4n": body = CanvasNoDash(); break;
                 case "fx": body = Fx(); break;
                 case "svg": body = SvgIcons(); break;
                 case "bool": body = Booleans(); break;

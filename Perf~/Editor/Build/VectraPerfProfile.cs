@@ -87,7 +87,7 @@ namespace FirstSymbol.VectraPerf.Editor
                         string threadName = view.threadName;
                         if (thread == 0 && row == null) row = FindRow(view);
                         if (row == null && thread == 0) break;
-                        Walk(view, view.GetRootItemID(), threadName, found, children);
+                        Walk(view, view.GetRootItemID(), threadName, found, children, "");
                         if (thread == 0) frameMain = view.GetItemColumnDataAsFloat(view.GetRootItemID(), HierarchyFrameDataView.columnTotalTime);
                     }
                 }
@@ -175,7 +175,7 @@ namespace FirstSymbol.VectraPerf.Editor
         }
 
         // Self time and self GC allocation per sample name; the GC column of the view is inclusive, so the children are taken off.
-        static void Walk(HierarchyFrameDataView view, int id, string thread, Dictionary<string, Acc> into, List<int> scratch)
+        static void Walk(HierarchyFrameDataView view, int id, string thread, Dictionary<string, Acc> into, List<int> scratch, string parent)
         {
             var kids = new List<int>();
             view.GetItemChildren(id, kids);
@@ -184,7 +184,8 @@ namespace FirstSymbol.VectraPerf.Editor
             string name = view.GetItemName(id);
             if (!name.StartsWith("PerfRow.", StringComparison.Ordinal))
             {
-                string key = thread + "|" + name;
+                // An allocation is named after the sample it happens in, so that its cause can be read.
+                string key = thread + "|" + (name == "GC.Alloc" ? "GC.Alloc <- " + parent : name);
                 if (!into.TryGetValue(key, out var acc)) into[key] = acc = new Acc();
                 acc.self += view.GetItemColumnDataAsFloat(id, HierarchyFrameDataView.columnSelfTime);
                 acc.total += view.GetItemColumnDataAsFloat(id, HierarchyFrameDataView.columnTotalTime);
@@ -192,7 +193,7 @@ namespace FirstSymbol.VectraPerf.Editor
                 acc.gc += Math.Max(0, view.GetItemColumnDataAsFloat(id, HierarchyFrameDataView.columnGcMemory) - gcChildren);
             }
 
-            foreach (int kid in kids) Walk(view, kid, thread, into, scratch);
+            foreach (int kid in kids) Walk(view, kid, thread, into, scratch, name);
         }
     }
 }

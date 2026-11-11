@@ -50,6 +50,8 @@ WORK = args.work
 GROUPS = {
     "cold": ["vectra", "ref", "vg"],
     "canvas": ["vectra", "ref"],
+    "v1n": ["vectra", "ref"],
+    "v4n": ["vectra", "ref"],
     "fx": ["vectra", "ref"],
     "svg": ["vectra", "ref", "vg"],
     "bool": ["vectra"],
@@ -98,14 +100,44 @@ def cpu_load(seconds=2.0):
     return 100.0 * (1 - (i1 - i0) / total) if total else 0.0
 
 
-def wait_quiet(limit=25.0, tries=30):
-    """A timing run needs an idle machine: waits for the load to fall under limit percent."""
+def wait_quiet(limit=25.0, tries=180):
+    """A timing run needs an idle machine: waits (up to half an hour) for the load to fall under limit percent; the machine is shared with other builds."""
     for _ in range(tries):
         load = cpu_load(2.0)
         if load < limit:
             return load
         time.sleep(10)
     return cpu_load(2.0)
+
+
+class LoadSampler:
+    """Samples the whole machine's CPU load while a run is going; the run is flagged when something else was busy."""
+
+    def __init__(self):
+        import threading
+        self.samples, self.stop = [], threading.Event()
+        self.thread = threading.Thread(target=self.loop, daemon=True)
+
+    def loop(self):
+        last = cpu_times()
+        while not self.stop.wait(2.0):
+            now = cpu_times()
+            total = now[1] - last[1]
+            if total:
+                self.samples.append(100.0 * (1 - (now[0] - last[0]) / total))
+            last = now
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *a):
+        self.stop.set()
+        self.thread.join()
+
+    @property
+    def mean(self):
+        return sum(self.samples) / len(self.samples) if self.samples else -1.0
 
 
 # ------------------------------------------------------------------ files
@@ -184,8 +216,10 @@ def harness_stamp():
     for path in paths:
         h.update(os.path.basename(path).encode())
         h.update(open(path, "rb").read())
+    dirs = ["Runtime", "Runtime.UIToolkit", "Runtime.URP", "Runtime.HDRP", "Runtime.Lettera", "Runtime.TextMeshPro"]
     try:
-        h.update(subprocess.check_output(["git", "-C", REPO, "diff", "HEAD", "--", "Runtime", "Runtime.UIToolkit", "Runtime.URP", "Runtime.HDRP", "Runtime.Lettera", "Runtime.TextMeshPro"]))
+        h.update(subprocess.check_output(["git", "-C", REPO, "ls-tree", "HEAD"] + dirs))
+        h.update(subprocess.check_output(["git", "-C", REPO, "diff", "HEAD", "--"] + dirs))
     except Exception:
         pass
     return h.hexdigest()[:12]
@@ -247,7 +281,7 @@ def build(backend, kind, deep=False):
     project = project_of(kind)
     exe = player_exe(backend, kind + ("_deep" if deep else ""))
     stamp_file = os.path.join(os.path.dirname(exe), "harness.stamp")
-    stamp = harness_stamp() + "+" + git_head()
+    stamp = harness_stamp()
     if os.path.exists(exe) and os.path.exists(stamp_file) and open(stamp_file).read() == stamp:
         return exe
     if os.path.exists(os.path.dirname(exe)):
@@ -283,7 +317,9 @@ def run_player(exe, group, side, out, log, rounds_index, extra=()):
     if rounds_index % 2 == 1 and group == "svg":
         cmd += ["-order", "rev"]
     t = time.time()
-    done = subprocess.run(cmd, capture_output=True, text=True)
+    with LoadSampler() as sampler:
+        done = subprocess.run(cmd, capture_output=True, text=True)
+    run_player.last_load = sampler.mean
     return (done.stdout or "").strip(), time.time() - t
 
 
@@ -313,7 +349,8 @@ def command_run():
                         out = os.path.join(folder, f"{group}_{side}_{r}.json")
                         if os.path.exists(out):
                             continue
-                        load = wait_quiet()
+                        # Timing needs a quiet machine; counters and allocation (development players) do not.
+                        load = wait_quiet() if kind in ("rel", "relgamma") else cpu_load(1.0)
                         say(f"{backend}/{kind} round {r} {group}/{side} load {load:.0f}%{' BATTERY' if on_battery() else ''}")
                         status, took = run_player(exe, group, side, out, os.path.join(folder, f"{group}_{side}_{r}.log"), r)
                         ok = os.path.exists(out)
@@ -321,6 +358,7 @@ def command_run():
                         if ok:
                             data = json.load(open(out, encoding="utf-8"))
                             data["load_before"] = load
+                            data["load_during"] = getattr(run_player, "last_load", -1.0)
                             data["battery"] = on_battery()
                             data["seconds"] = took
                             json.dump(data, open(out, "w", encoding="utf-8"))
@@ -355,6 +393,17 @@ def folder_size(path):
     for root, _, files in os.walk(path):
         for f in files:
             total += os.path.getsize(os.path.join(root, f))
+    return total
+
+
+def ship_size(path):
+    """Size of what a player ships: the build folder without the IL2CPP backup (C++ sources) and Burst debug folders, which are not shipped."""
+    total = 0
+    for entry in os.listdir(path):
+        full = os.path.join(path, entry)
+        if "DoNotShip" in entry or "ButDontShip" in entry or entry.endswith(".buildinfo.json"):
+            continue
+        total += folder_size(full) if os.path.isdir(full) else os.path.getsize(full)
     return total
 
 
@@ -440,7 +489,8 @@ def command_size():
         info = json.load(open(out + ".buildinfo.json")) if os.path.exists(out + ".buildinfo.json") else {}
         data = os.path.dirname(out)
         results[name] = {
-            "folder_bytes": folder_size(data),
+            "folder_bytes": ship_size(data),
+            "folder_with_il2cpp_backup_bytes": folder_size(data),
             "game_assembly_bytes": os.path.getsize(os.path.join(data, "GameAssembly.dll")) if os.path.exists(os.path.join(data, "GameAssembly.dll")) else -1,
             "unity_player_bytes": os.path.getsize(os.path.join(data, "UnityPlayer.dll")) if os.path.exists(os.path.join(data, "UnityPlayer.dll")) else -1,
             "data_folder_bytes": folder_size(os.path.join(data, "Size_Data")),

@@ -1,7 +1,40 @@
-"""Profiler captures of a development player and the causes per row. Used by perf.py profile."""
+"""Profiler captures of a development player and the causes per row. Used by perf.py profile.
+perf.py profile --group canvas --sides vectra,ref runs the player with the profiler recording, has a batch editor read the capture
+(VectraPerfProfile) and writes <work>/Profiles/<tag>/causes_<group>.md; an existing analysis is read again, not recomputed (--fresh redoes it)."""
 import json
 import os
-import sys
+
+# Threads that wait, and samples that only say a thread is waiting or are the profiler / development overlay itself: left out of the cause tables.
+THREADS = ("Main Thread", "Render Thread")
+WAITS = {
+    "Semaphore.WaitForSignal", "DXGI.WaitOnSwapChain", "Idle", "WaitForJobGroupID", "Gfx.WaitForPresentOnGfxThread", "Gfx.WaitForRenderThread", "PlayerLoop", "Main Thread",
+    "Profiler.FlushMemoryCounters", "PlayerConnection.Poll", "GUI.Repaint", "WaitForLastPresentation", "Gfx.PresentFrame", "RenderLoop", "GpuRecorder.FrameTick", "PlayerEndOfFrame",
+    "UnityEngine.IMGUIModule.dll!UnityEngine::GUIStyle.GetDimensions() [Invoke]", "Inl_On Record Render Graph", "Render Thread", "GfxDeviceD3D12.WaitForGPU",
+}
+
+
+def keep(sample):
+    return sample["thread"] in THREADS and sample["name"] not in WAITS and sample["name"] != ""
+
+
+def render(data, group, side):
+    lines = []
+    for row in data["rows"]:
+        if row["row"].startswith("CTRL") and group != "canvas":
+            continue
+        lines.append(f"\n#### {group}/{side} {row['row']}: {row['frames']} frames, main thread {row['mainThreadMs']:.2f} ms per frame, slowest frame {row['worstFrameMs']:.1f} ms\n")
+        lines.append("| thread | sample | self ms/frame | total ms/frame | calls/frame | GC B/frame |")
+        lines.append("|---|---|---|---|---|---|")
+        for s in [s for s in row["top"] if keep(s)][:10]:
+            lines.append(f"| {s['thread']} | {s['name']} | {s['selfMsPerFrame']:.3f} | {s['totalMsPerFrame']:.3f} | {s['callsPerFrame']:.1f} | {s['gcBytesPerFrame']:.0f} |")
+        worst = [s for s in row.get("worst", []) if keep(s)][:8]
+        if worst:
+            lines.append("\nslowest frame:\n")
+            lines.append("| thread | sample | self ms | total ms | calls | GC B |")
+            lines.append("|---|---|---|---|---|---|")
+            for s in worst:
+                lines.append(f"| {s['thread']} | {s['name']} | {s['selfMsPerFrame']:.3f} | {s['totalMsPerFrame']:.3f} | {s['callsPerFrame']:.0f} | {s['gcBytesPerFrame']:.0f} |")
+    return lines
 
 
 def run(args, work, build, run_player, sync_harness, unity):
@@ -27,19 +60,7 @@ def run(args, work, build, run_player, sync_harness, unity):
         if not os.path.exists(out):
             print("no analysis for", side, flush=True)
             continue
-        data = json.load(open(out, encoding="utf-8"))
-        for row in data["rows"]:
-            lines.append(f"\n#### {args.group}/{side} {row['row']}: {row['frames']} frames, main thread {row['mainThreadMs']:.2f} ms per frame\n")
-            lines.append("| thread | sample | self ms/frame | total ms/frame | calls/frame | GC B/frame |")
-            lines.append("|---|---|---|---|---|---|")
-            for s in row["top"][:14]:
-                lines.append(f"| {s['thread']} | {s['name']} | {s['selfMsPerFrame']:.3f} | {s['totalMsPerFrame']:.3f} | {s['callsPerFrame']:.1f} | {s['gcBytesPerFrame']:.0f} |")
-            if row.get("worst"):
-                lines.append(f"\nslowest frame of the row: main thread {row['worstFrameMs']:.2f} ms\n")
-                lines.append("| thread | sample | self ms | total ms | calls | GC B |")
-                lines.append("|---|---|---|---|---|---|")
-                for s in row["worst"][:12]:
-                    lines.append(f"| {s['thread']} | {s['name']} | {s['selfMsPerFrame']:.3f} | {s['totalMsPerFrame']:.3f} | {s['callsPerFrame']:.0f} | {s['gcBytesPerFrame']:.0f} |")
+        lines += render(json.load(open(out, encoding="utf-8")), args.group, side)
     text = "\n".join(lines) + "\n"
     open(os.path.join(folder, f"causes_{args.group}.md"), "w", encoding="utf-8").write(text)
-    print(text[:4000])
+    print(text[:3000])

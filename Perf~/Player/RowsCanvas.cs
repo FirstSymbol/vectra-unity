@@ -47,7 +47,17 @@ namespace FirstSymbol.VectraPerf
             }, 0);
 
             // V4: a frame of 1000 that do not change.
-            yield return Frames(Row("V4", "1000 unchanging shapes, steady frames"), "v4", 300, null);
+            var v4 = Row("V4", "1000 unchanging shapes, steady frames");
+            yield return Frames(v4, "v4", 300, null);
+            // What each kind of the mix costs the GPU in geometry: vertices and triangles of the last build of the first shape of each kind.
+            if (Side == "vectra")
+                for (int k = 0; k < 5; k++)
+                {
+                    var stats = ((FirstSymbol.Vectra.VectraShape)graphics[k]).Stats;
+                    v4.Put("kind" + k + "_triangles", stats.triangles);
+                    v4.Put("kind" + k + "_vertices", stats.vertices);
+                }
+
             Mem(mem, "m1", true);
 
             // V3: colour of 100 per frame.
@@ -101,6 +111,57 @@ namespace FirstSymbol.VectraPerf
             Mem(mem, "m2");
         }
 
+        // V1n: V1 without the gradient shapes (kinds 0-3 only), in a process of its own: it shows what the first frame costs when no gradient row is baked.
+        IEnumerator CanvasNoGradient()
+        {
+            var canvas = PerfScene.MakeCanvas(Root);
+            PerfScene.MakeCamera(Root, true);
+            yield return Collect();
+            var container = PerfScene.MakeContainer(canvas.transform, "Items");
+            var row = Row("V1n", "create 1000 of the mix without the gradient shape (index mod 4), first frame");
+            yield return Frames(row, "v1n", 12, i =>
+            {
+                if (i != 0) return;
+                var once = Measure(() =>
+                {
+                    for (int k = 0; k < CanvasCount; k++)
+                    {
+                        int kind = k % 4;
+                        Vector2 pos = GridPos(k, 50, 24f, 4f);
+                        if (Side == "ref") PerfScene.MakeImage(container, "I" + k, PerfScene.KindOf(kind), pos, new Vector2(20, 20), PerfScene.Tint(k));
+                        else PerfScene.MakeVectra(container, kind, pos, new Vector2(20, 20));
+                    }
+                });
+                PutOnce(row, "create", once);
+            }, 0);
+            yield return Frames(row, "v1ns", 120, null);
+        }
+
+        // V4n: V4 without the dashed-stroke shape (kinds 0, 1, 2, 4): the frame of 1000 unchanging shapes when no shape needs stroke geometry.
+        IEnumerator CanvasNoDash()
+        {
+            var canvas = PerfScene.MakeCanvas(Root);
+            PerfScene.MakeCamera(Root, true);
+            yield return Collect();
+            var container = PerfScene.MakeContainer(canvas.transform, "Items");
+            var row = Row("V4n", "1000 unchanging shapes of the mix without the dashed stroke (kinds 0, 1, 2, 4), steady frames");
+            var made = new List<Graphic>();
+            for (int k = 0; k < CanvasCount; k++)
+            {
+                int kind = k % 4 == 3 ? 4 : k % 4;
+                Vector2 pos = GridPos(k, 50, 24f, 4f);
+                if (Side == "ref") made.Add(PerfScene.MakeImage(container, "I" + k, PerfScene.KindOf(kind), pos, new Vector2(20, 20), PerfScene.Tint(k)));
+                else made.Add(PerfScene.MakeVectra(container, kind, pos, new Vector2(20, 20)));
+            }
+
+            yield return Settle(30);
+            yield return Frames(row, "v4n", 300, null);
+            if (Side == "vectra")
+            {
+                row.Put("vertices_total", made.Count);
+            }
+        }
+
         IEnumerator Toggle(PerfRow row, GameObject go, int rounds)
         {
             var offCall = new List<double>();
@@ -113,7 +174,7 @@ namespace FirstSymbol.VectraPerf
             {
                 long t0 = Stopwatch.GetTimestamp();
                 long a0 = AllocNow();
-                go.SetActive(false);
+                using (s_ToggleMarker.Auto()) go.SetActive(false);
                 double call = Ms(Stopwatch.GetTimestamp() - t0);
                 yield return s_EofPublic;
                 double span = Ms(Stopwatch.GetTimestamp() - t0);
@@ -130,7 +191,7 @@ namespace FirstSymbol.VectraPerf
                 yield return null;
                 t0 = Stopwatch.GetTimestamp();
                 a0 = AllocNow();
-                go.SetActive(true);
+                using (s_ToggleMarker.Auto()) go.SetActive(true);
                 call = Ms(Stopwatch.GetTimestamp() - t0);
                 yield return s_EofPublic;
                 span = Ms(Stopwatch.GetTimestamp() - t0);
@@ -157,5 +218,6 @@ namespace FirstSymbol.VectraPerf
         }
 
         static readonly WaitForEndOfFrame s_EofPublic = new WaitForEndOfFrame();
+        static readonly Unity.Profiling.ProfilerMarker s_ToggleMarker = new Unity.Profiling.ProfilerMarker("PerfRow.V11.toggle");
     }
 }

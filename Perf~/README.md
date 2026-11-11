@@ -35,7 +35,9 @@ The harness assemblies carry the define constraint `VECTRA_PERF`; only the harne
 * Frames: vSync off, no frame cap. Per frame the harness records the wall time (frame start to next frame start), the span from the row's action to the end of the same frame (the main-thread work),
   managed allocation on the main thread (`GC.GetAllocatedBytesForCurrentThread`), and the `FrameTimingManager` GPU, main-thread and render-thread times.
   Frame 0 of a row is reported apart (`first_*`): it is where creation and first-use work lands.
-* Memory: process private bytes (Win32), the managed heap, and the sum of `Profiler.GetRuntimeMemorySizeLong` over every live mesh, texture and render texture.
+* Memory: process private bytes (Win32), the managed heap, and the sum of `Profiler.GetRuntimeMemorySizeLong` over every live mesh, texture and render texture (meshes report 0 bytes in release players: read mesh megabytes from the development runs).
+* Load: before each launch the runner waits (up to 30 minutes) for the machine's CPU load to fall under 25%, and samples the load during the run (`load_during` in the result JSON, which includes the player itself). The machine is shared with other builds: a run with a high load is discarded and repeated.
+* The development player's on-screen console is switched off (`Debug.developerConsoleVisible = false`): with error lines in it the console re-lays out every frame and allocates.
 * A row never changes what it measures once published; a new behaviour is a new row.
 
 ## Rows
@@ -43,6 +45,7 @@ The harness assemblies carry the define constraint `VECTRA_PERF`; only the harne
 | id | what | group |
 |---|---|---|
 | V1 | create 1000 shapes (rounded rect, ellipse, star, dashed stroke, gradient) + first frame | canvas |
+| V1n | V1 without the gradient shape, in a process of its own (isolates what the gradient atlas costs the first frame) | v1n |
 | V2 | size of the 1000 changes every frame (full rebuild) | canvas |
 | V3 | colour of 100 changes every frame | canvas |
 | V4 | a frame of 1000 unchanging shapes (CPU, GPU, batches, SetPass) | canvas |
