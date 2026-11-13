@@ -26,17 +26,17 @@ namespace FirstSymbol.Vectra
         VectraHitTester m_HitTester;
         // Like uGUI's own graphics, every shape fills one shared worker mesh and hands it to its CanvasRenderer, which
         // copies the data: no mesh per shape.
-        static Mesh s_Mesh;
+        static Mesh s_WorkerMesh;
 
         static Mesh WorkerMesh()
         {
-            if (s_Mesh == null)
+            if (s_WorkerMesh == null)
             {
-                s_Mesh = new Mesh { name = "Vectra Shape", hideFlags = HideFlags.HideAndDontSave };
-                s_Mesh.MarkDynamic();
+                s_WorkerMesh = new Mesh { name = "Vectra Shape", hideFlags = HideFlags.HideAndDontSave };
+                s_WorkerMesh.MarkDynamic();
             }
 
-            return s_Mesh;
+            return s_WorkerMesh;
         }
         float m_LastScale;
         Texture m_LastTexture;
