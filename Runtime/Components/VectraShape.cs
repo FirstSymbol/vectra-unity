@@ -64,6 +64,7 @@ namespace FirstSymbol.Vectra
         bool m_Follows;
 
         static readonly HashSet<VectraShape> s_StyleUsers = new HashSet<VectraShape>();
+        static int s_StyleUsersPeak;
         static bool s_StyleHooked;
 
         public VectraShapeContent Content => m_Content;
@@ -205,6 +206,7 @@ namespace FirstSymbol.Vectra
             VectraAtlases.Register(this);
             HookStyles();
             s_StyleUsers.Add(this);
+            if (s_StyleUsers.Count > s_StyleUsersPeak) s_StyleUsersPeak = s_StyleUsers.Count;
             m_Follows = false;
             VectraWatch.Add(this, transform, VectraWatch.GroupShape, false);
         }
@@ -214,6 +216,12 @@ namespace FirstSymbol.Vectra
             VectraWatch.Remove(this);
             VectraAtlases.Unregister(this);
             s_StyleUsers.Remove(this);
+            // The set keeps the size of its largest day: give it back when the last shape is gone.
+            if (s_StyleUsers.Count == 0 && s_StyleUsersPeak > 256)
+            {
+                s_StyleUsers.TrimExcess();
+                s_StyleUsersPeak = 0;
+            }
             base.OnDisable();
         }
 

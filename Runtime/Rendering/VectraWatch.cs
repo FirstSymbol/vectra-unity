@@ -334,6 +334,20 @@ namespace FirstSymbol.Vectra.Rendering
             }
 
             if (polledGone) s_Polled.RemoveAll(s_IsGone);
+            if (removed > 0 && s_Items.Count == 0 && s_Pending.Count == 0) ReleaseStorage();
+        }
+
+        // Nothing is registered any more: give back what the lists grew to (a thousand components leave about 40 KB of managed capacity).
+        static void ReleaseStorage()
+        {
+            if (s_Items.Capacity <= 256) return;
+            s_Items.Capacity = 0;
+            s_Groups.Capacity = 0;
+            s_Modes.Capacity = 0;
+            s_RetiredAt.Capacity = 0;
+            s_Polled.Capacity = 0;
+            s_Run.Capacity = 0;
+            s_Pending.Capacity = 0;
         }
 
         static void Reserve(int needed)
