@@ -36,6 +36,24 @@ namespace FirstSymbol.Vectra.UIToolkit
             return ppp * sc;
         }
 
+        static StyleSheet s_Sheet;
+        static bool s_SheetLoaded;
+
+        /// <summary>The default style sheet of the elements (a lookup in Resources once, not once per element).</summary>
+        public static StyleSheet DefaultSheet
+        {
+            get
+            {
+                if (s_Sheet == null && !s_SheetLoaded)
+                {
+                    s_SheetLoaded = true;
+                    s_Sheet = Resources.Load<StyleSheet>("Vectra/VectraElement");
+                }
+
+                return s_Sheet;
+            }
+        }
+
         public static bool Usable(Rect r) => r.width > 0.01f && r.height > 0.01f && !float.IsNaN(r.width) && !float.IsNaN(r.height);
 
         // Static events of the model, one subscription for all elements.
@@ -89,6 +107,8 @@ namespace FirstSymbol.Vectra.UIToolkit
             s_Shapes.Clear();
             s_Svgs.Clear();
             s_Hooked = false;
+            s_Sheet = null;
+            s_SheetLoaded = false;
         }
     }
 
@@ -148,7 +168,7 @@ namespace FirstSymbol.Vectra.UIToolkit
         public VectraElement()
         {
             AddToClassList(ussClassName);
-            var sheet = Resources.Load<StyleSheet>("Vectra/VectraElement");
+            var sheet = VectraUitk.DefaultSheet;
             if (sheet != null) styleSheets.Add(sheet);
             generateVisualContent = OnGenerate;
             RegisterCallback<AttachToPanelEvent>(OnAttach);

@@ -66,7 +66,7 @@ namespace FirstSymbol.Vectra.UIToolkit
         {
             AddToClassList(ussClassName);
             AddToClassList(VectraElement.ussClassName);
-            var sheet = Resources.Load<StyleSheet>("Vectra/VectraElement");
+            var sheet = VectraUitk.DefaultSheet;
             if (sheet != null) styleSheets.Add(sheet);
             generateVisualContent = OnGenerate;
             RegisterCallback<AttachToPanelEvent>(OnAttach);

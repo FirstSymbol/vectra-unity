@@ -44,6 +44,7 @@ namespace FirstSymbol.Vectra.UIToolkit
         public const int MaxSize = 4096;
 
         static readonly List<SurfacePage> s_Pages = new List<SurfacePage>();
+        static readonly Stack<SurfaceShelf> s_ShelfPool = new Stack<SurfaceShelf>();
         static CommandBuffer s_Cmd;
         static Material s_ClearMaterial;
         static Mesh s_Quad;
@@ -95,7 +96,12 @@ namespace FirstSymbol.Vectra.UIToolkit
             }
 
             if (page.nextY + hr > page.height) return false;
-            var s = new SurfaceShelf { y = page.nextY, height = hr };
+            // Shelves come and go as sizes change (an animated size frees a row and asks for another); reuse them with their free lists.
+            var s = s_ShelfPool.Count > 0 ? s_ShelfPool.Pop() : new SurfaceShelf();
+            s.y = page.nextY;
+            s.height = hr;
+            s.cursor = 0;
+            s.live = 0;
             page.nextY += hr;
             page.shelves.Add(s);
             return Take(page, s, 0, w, w, h, out region, true);
@@ -151,6 +157,8 @@ namespace FirstSymbol.Vectra.UIToolkit
                 if (last.live > 0) break;
                 page.shelves.RemoveAt(page.shelves.Count - 1);
                 page.nextY = last.y;
+                last.free.Clear();
+                s_ShelfPool.Push(last);
             }
 
             if (page.live <= 0 && s_Pages.Count > 1) DestroyPage(page);
@@ -184,6 +192,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             }
 
             s_Blocks.Clear();
+            s_ShelfPool.Clear();
             for (int i = s_Pages.Count - 1; i >= 0; i--) DestroyPage(s_Pages[i]);
             s_Pages.Clear();
             s_Cmd?.Release();
