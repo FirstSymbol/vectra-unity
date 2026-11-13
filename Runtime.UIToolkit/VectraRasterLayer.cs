@@ -71,9 +71,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             // Local space (y up) covered by the region.
             var area = Rect.MinMaxRect(x0 / s - center.x, center.y - y1 / s, x1 / s - center.x, center.y - y0 / s);
             var material = VectraMaterials.GetUI(blend);
-            var mesh = VectraSurfaces.NextMesh();
-            buf.Upload(mesh);
-            m_Ready = VectraSurfaces.Queue(m_Region, material, renderer.mainTexture, area);
+            m_Ready = VectraSurfaces.Queue(m_Region, material, renderer.mainTexture, area, buf);
             var ps = m_Region.PageSize;
             m_Uv = Rect.MinMaxRect((float)m_Region.x / ps.x, (float)m_Region.y / ps.y,
                 (float)(m_Region.x + m_Region.w) / ps.x, (float)(m_Region.y + m_Region.h) / ps.y);

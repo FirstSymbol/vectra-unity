@@ -84,6 +84,94 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             }
         }
 
+        static Color32[] ReadPage(RenderTexture rt)
+        {
+            var prev = RenderTexture.active;
+            RenderTexture.active = rt;
+            var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false, false);
+            tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+            tex.Apply(false);
+            var pixels = tex.GetPixels32();
+            Object.DestroyImmediate(tex);
+            RenderTexture.active = prev;
+            return pixels;
+        }
+
+        // Every slot of a run is cleared before the first picture is drawn, so a picture that is still queued for a slot that was given back
+        // must not be drawn under the next owner's picture.
+        [Test]
+        public void ASlotGivenBackAndTakenAgainInOneBatch_ShowsOnlyTheNewPicture()
+        {
+            VectraSurfaces.DestroyAll();
+            var red = new VectraElement { Shape = VectraElementShape.Rectangle, Fill = Color.red };
+            var star = new VectraElement { Shape = VectraElementShape.Star, Fill = Color.blue };
+            var frame = new ShapeFrame { rect = new Rect(-12f, -12f, 24f, 24f), pixelSize = 1f };
+            using var a = new VectraRasterLayer();
+            using var b = new VectraRasterLayer();
+            a.renderer.Build(red.Content.ToInput(frame, Color.white, true));
+            a.Rasterize(new Vector2(12f, 12f), 1f);
+            Assert.AreEqual(1, VectraSurfaces.PendingCount);
+            a.Release();
+            b.renderer.Build(star.Content.ToInput(frame, Color.white, true));
+            b.Rasterize(new Vector2(12f, 12f), 1f);
+            VectraSurfaces.Flush();
+            Assert.AreEqual(0, VectraSurfaces.PendingCount);
+            var page = (RenderTexture)b.Texture;
+            var pixels = ReadPage(page);
+            int redCount = 0, blueCount = 0;
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                var c = pixels[i];
+                if (c.a > 0 && c.r > 128 && c.b < 128) redCount++;
+                if (c.a > 0 && c.b > 128 && c.r < 128) blueCount++;
+            }
+
+            Assert.AreEqual(0, redCount, "the picture of the slot's old owner shows");
+            Assert.Greater(blueCount, 50, "the new picture is missing");
+        }
+
+        // The slots of many elements are cleared by one draw: what each element shows must be what it showed when its slot was cleared on its own.
+        [Test]
+        public void ManySlotsOfOnePage_ClearedTogether_LookLikeClearedOneByOne()
+        {
+            VectraSurfaces.DestroyAll();
+            var star = new VectraElement { Shape = VectraElementShape.Star, Fill = Color.blue };
+            var frame = new ShapeFrame { rect = new Rect(-12f, -12f, 24f, 24f), pixelSize = 1f };
+            var layers = new List<VectraRasterLayer>();
+            try
+            {
+                // Fill the page with stale content first (the next owners of the slots must clear it).
+                for (int round = 0; round < 2; round++)
+                {
+                    foreach (var l in layers) l.Dispose();
+                    layers.Clear();
+                    for (int i = 0; i < 40; i++)
+                    {
+                        var l = new VectraRasterLayer();
+                        l.renderer.Build((round == 0 ? new VectraElement { Shape = VectraElementShape.Rectangle, Fill = Color.red } : star).Content.ToInput(frame, Color.white, true));
+                        l.Rasterize(new Vector2(12f, 12f), 1f);
+                        layers.Add(l);
+                    }
+
+                    VectraSurfaces.Flush();
+                }
+
+                var pixels = ReadPage((RenderTexture)layers[0].Texture);
+                int redCount = 0;
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    var c = pixels[i];
+                    if (c.a > 0 && c.r > 128 && c.b < 128) redCount++;
+                }
+
+                Assert.AreEqual(0, redCount, "stale pictures of the first round show");
+            }
+            finally
+            {
+                foreach (var l in layers) l.Dispose();
+            }
+        }
+
         [UnityTest]
         public IEnumerator ARebuildThatQueuesAnotherElement_DoesNotStallThePanel()
         {
