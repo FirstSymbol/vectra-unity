@@ -25,6 +25,7 @@ namespace FirstSymbol.Vectra.Geometry
             NativeArray<half> dst, int dstStride, int dstX, int dstY)
         {
             if (width <= 0 || height <= 0) return;
+            CheckBlock(dst.Length, width, height, dstStride, dstX, dstY);
             range = math.max(range, 1e-6f);
             float2 size = math.max(region.Size, new float2(1e-6f));
             float2 texel = size / new float2(width, height);
@@ -140,6 +141,14 @@ namespace FirstSymbol.Vectra.Geometry
             cellStart.Dispose();
             cellItems.Dispose();
             fill.Dispose();
+        }
+
+        // The texels are written through pointers: a block that does not fit would corrupt memory instead of throwing like the indexer.
+        [System.Diagnostics.Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        static void CheckBlock(int length, int width, int height, int stride, int x, int y)
+        {
+            if (x < 0 || y < 0 || (long)(y + height - 1) * stride + x + width > length)
+                throw new System.ArgumentException("The distance block does not fit the destination");
         }
 
         // sqrt, sign, clamp and half conversion of four texels, as the scalar code does them.

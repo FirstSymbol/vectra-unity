@@ -20,10 +20,11 @@ namespace FirstSymbol.Vectra.Geometry
 
     /// <summary>
     /// Blends two baked half-float distance fields of equal size with a smooth boolean (smooth minimum of the distances). The result
-    /// replaces <c>acc</c>; the arithmetic is the same single-precision sequence as the managed loop it replaced, so the fields are
-    /// bit for bit the same.
+    /// replaces <c>acc</c>; the arithmetic is the same single-precision sequence, with the same half rounding, as the managed loop it replaced.
+    /// Checked bit for bit against that loop compiled by IL2CPP (8 million texels, all four operations) and against IEEE single precision. The
+    /// Mono editor evaluates float expressions at higher precision and can differ by one half-ulp in rare texels.
     /// </summary>
-    public static class SdfCombine
+    internal static class SdfCombine
     {
         /// <param name="acc">Left operand and result.</param>
         /// <param name="other">Right operand.</param>
@@ -69,9 +70,18 @@ namespace FirstSymbol.Vectra.Geometry
             }
         }
 
-        // The same conversions as `(half)x` and `(float)h` of Unity.Mathematics.
         static float Unpack(ushort h) => math.f16tof32(h);
-        static ushort Pack(float r) => (ushort)math.f32tof16(math.clamp(r, -1f, 1f));
+
+        // The software conversion of Unity.Mathematics written out: Burst replaces a call to math.f32tof16 by the hardware instruction, which rounds
+        // exact ties to even where this rounds them up (the managed (half) cast of the loop this replaced did the same as this). Values are in [-1, 1].
+        static ushort Pack(float r)
+        {
+            float x = math.clamp(r, -1f, 1f);
+            uint ux = math.asuint(x);
+            uint uux = ux & 0x7FFFF000u;
+            uint h = (uint)(math.asuint(math.min(math.asfloat(uux) * 1.92592994e-34f, 260042752.0f)) + 0x1000) >> 13;
+            return (ushort)(h | ((ux & ~0x7FFFF000u) >> 16));
+        }
 
         static float SMin(float a, float b, float k)
         {

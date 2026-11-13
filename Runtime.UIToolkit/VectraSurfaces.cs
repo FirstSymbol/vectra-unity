@@ -225,12 +225,22 @@ namespace FirstSymbol.Vectra.UIToolkit
         /// <summary>Draws still waiting for <see cref="Flush"/>.</summary>
         public static int PendingCount => s_PendingCount;
 
+        static bool s_Subscribed;
+
         /// <summary>
         /// The mesh the next <see cref="Queue"/> call draws: upload the shape into it first. Meshes are shared by every element (a draw only
         /// needs its mesh until the batch runs), so nothing is kept per element.
         /// </summary>
         public static Mesh NextMesh()
         {
+            if (!s_Subscribed)
+            {
+                // Queued draws were recorded against the atlas layout of the moment: they run before an atlas moves anything.
+                s_Subscribed = true;
+                VectraAtlases.BeforeLayoutChange -= Flush;
+                VectraAtlases.BeforeLayoutChange += Flush;
+            }
+
             if (s_PendingCount >= BatchSize) Flush();
             var mesh = s_BatchMeshes[s_PendingCount];
             if (mesh == null) s_BatchMeshes[s_PendingCount] = mesh = new Mesh { name = "Vectra UI Toolkit", hideFlags = HideFlags.HideAndDontSave };
@@ -254,7 +264,7 @@ namespace FirstSymbol.Vectra.UIToolkit
         {
             var key = main != null ? main : Texture2D.whiteTexture;
             if (s_Blocks.TryGetValue(key, out var block) && block != null) return block;
-            if (s_Blocks.Count > 64) s_Blocks.Clear();
+            if (s_Blocks.Count > 64) s_Blocks.Clear(); // also drops the keys of destroyed textures
             block = new MaterialPropertyBlock();
             block.SetTexture(s_MainTex, key);
             s_Blocks[key] = block;
@@ -344,6 +354,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             // still hold a region notice the lost texture in their next poll and draw again.
             DestroyAll();
             DrawCount = 0;
+            s_Subscribed = false;
         }
 
 #if UNITY_EDITOR

@@ -149,10 +149,10 @@ namespace FirstSymbol.Vectra.Rendering
         public static bool Acquire(ref SvgPicture current, VectraSvgDocument doc, int from, int to, Rect rect, float pixelSize, VectraQuality quality,
             List<SvgOverride> overrides, SvgAlign? align, float pointScale, bool gamma, int maxSize)
         {
-            if (doc == null || rect.width <= 0f || rect.height <= 0f) return false;
+            if (doc == null || !(rect.width > 0f) || !(rect.height > 0f) || float.IsNaN(pointScale) || float.IsNaN(pixelSize)) return false;
             SvgCompositor.PictureSize(rect, pixelSize, maxSize, out int w, out int h);
             var key = new SvgPictureKey(doc, from, to, rect, w, h, quality, overrides, align, pointScale, gamma, maxSize);
-            if (current != null && current.listed && current.Alive && current.key.Equals(key) && current.SameOverrides(overrides)) return true;
+            if (current != null && current.Alive && current.key.Equals(key) && current.SameOverrides(overrides)) return true;
 
             SvgPicture picture;
             if (s_Map.TryGetValue(key, out picture) && !picture.SameOverrides(overrides))
@@ -222,7 +222,13 @@ namespace FirstSymbol.Vectra.Rendering
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics() => DestroyAll();
+        static void ResetStatics()
+        {
+            // Entering play mode without a domain reload: live components still show their pictures. Only forget the keys; a picture is
+            // destroyed with its last user (before a domain reload and on quit, DestroyAll does it).
+            foreach (var p in s_Map.Values) p.listed = false;
+            s_Map.Clear();
+        }
 
 #if UNITY_EDITOR
         [UnityEditor.InitializeOnLoadMethod]

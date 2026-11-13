@@ -97,14 +97,33 @@ namespace FirstSymbol.Vectra.UIToolkit
             m_Work = work;
             for (int i = 0; i < work.Count; i++) work[i].RunScheduled(this);
             work.Clear();
+            // The pictures are drawn here, in the scheduler's phase, as every raster was before they were batched.
+            VectraSurfaces.Flush();
+            // A rebuild that asked for another one while this item was running: the running one-shot item may not take the request.
+            if (m_Queue.Count > 0 && !m_RebuildPending && m_Rebuild != null)
+            {
+                m_RebuildPending = true;
+                m_Rebuild.ExecuteLater(0);
+            }
         }
 
         void PollAll()
         {
             for (int i = 0; i < m_Clients.Count; i++) m_Clients[i].PollNow();
+            VectraSurfaces.Flush();
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics() => s_Services.Clear();
+        static void ResetStatics()
+        {
+            // Panels that were alive without a domain reload keep scheduled items: stop them, their clients attach again.
+            foreach (var s in s_Services.Values)
+            {
+                s.m_Rebuild?.Pause();
+                s.m_Poll?.Pause();
+            }
+
+            s_Services.Clear();
+        }
     }
 }

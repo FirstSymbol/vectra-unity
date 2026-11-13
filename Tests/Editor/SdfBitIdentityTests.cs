@@ -1,4 +1,5 @@
 using FirstSymbol.Vectra.Geometry;
+using System;
 using NUnit.Framework;
 using Unity.Burst;
 using Unity.Collections;
@@ -10,8 +11,9 @@ namespace FirstSymbol.Vectra.Editor.Tests
 {
     /// <summary>
     /// The distance-field baker and the smooth boolean combine run vectorized Burst code; these tests hold them to the arithmetic of the plain
-    /// scalar loops they replaced, texel for texel (the half-float bits are compared, not a tolerance). The old loops run as Burst jobs here, the
-    /// way they ran in the package (Mono would evaluate float expressions at a higher precision and is not the reference).
+    /// scalar loops they replaced, texel for texel (the half-float bits are compared, not a tolerance). The old baker runs as a Burst job here, the
+    /// way it ran in the package; the old combine loop is evaluated as IEEE single steps (it was managed code: IL2CPP in players). The same comparison against
+    /// the loop compiled by IL2CPP was run in a player (see the commit message).
     /// </summary>
     public class SdfBitIdentityTests
     {
@@ -25,17 +27,6 @@ namespace FirstSymbol.Vectra.Editor.Tests
             [NativeDisableContainerSafetyRestriction] public NativeArray<half> dst;
 
             public void Execute() => ReferenceBake(traps, region, width, height, range, dst, stride, x, y);
-        }
-
-        [BurstCompile(FloatMode = FloatMode.Strict)]
-        struct ReferenceCombineJob : IJob
-        {
-            public NativeArray<half> acc;
-            [ReadOnly] public NativeArray<half> tmp;
-            public BooleanOp op;
-            public float kn;
-
-            public void Execute() => ReferenceCombine(acc, tmp, op, kn);
         }
 
         // ---- the scalar baker as it was before 0.8 ----
@@ -186,10 +177,17 @@ namespace FirstSymbol.Vectra.Editor.Tests
         }
 
         // ---- the combine ----
+        // The old loop evaluated in IEEE single precision step by step (a double operation rounded to float is the correctly rounded single result), which is what
+        // IL2CPP and Burst compute and what Mono, which keeps intermediates wider, does not. The half conversion is the managed one (rounds ties up).
+        static float F(double d) => (float)d;
+
         static float SMin(float a, float b, float k)
         {
-            float h = math.max(k - math.abs(a - b), 0f) / k;
-            return math.min(a, b) - h * h * k * 0.25f;
+            float t = F((double)k - Math.Abs((double)F((double)a - b)));
+            float h = F((double)(t > 0f ? t : 0f) / k);
+            float p = F(F((double)h * h) * (double)k);
+            float mn = a < b ? a : b;
+            return F((double)mn - F((double)p * 0.25));
         }
 
         static void ReferenceCombine(NativeArray<half> acc, NativeArray<half> tmp, BooleanOp op, float kn)
@@ -234,7 +232,7 @@ namespace FirstSymbol.Vectra.Editor.Tests
             {
                 var x = new NativeArray<half>(a, Allocator.TempJob);
                 var y = new NativeArray<half>(a, Allocator.TempJob);
-                new ReferenceCombineJob { acc = x, tmp = b, op = op, kn = kn }.Run();
+                ReferenceCombine(x, b, op, kn);
                 SdfCombine.Run(y, b, op, kn);
                 for (int i = 0; i < n; i++) Assert.AreEqual(x[i].value, y[i].value, $"{op} k={kn} at {i}: a {(float)a[i]} b {(float)b[i]}");
                 x.Dispose();

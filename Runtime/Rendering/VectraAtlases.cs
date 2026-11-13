@@ -27,6 +27,11 @@ namespace FirstSymbol.Vectra.Rendering
         static readonly List<IVectraAtlasClient> s_Scratch = new List<IVectraAtlasClient>();
         static bool s_Hooked;
 
+        /// <summary>Raised before an atlas moves rows or texels (growth of the gradient atlas, growth or reset of the distance-field atlas): work that was recorded against the old layout must run first.</summary>
+        internal static event Action BeforeLayoutChange;
+
+        internal static void NotifyLayoutChange() => BeforeLayoutChange?.Invoke();
+
         public static void Register(IVectraAtlasClient client)
         {
             EnsureHooks();
@@ -344,6 +349,7 @@ namespace FirstSymbol.Vectra.Rendering
             while (newHeight < MaxHeight && newHeight - CountUsed() < needed + 1) newHeight *= 2;
             if (newHeight == s_Height) newHeight = math.min(s_Height * 2, MaxHeight);
             if (newHeight == s_Height) return;
+            VectraAtlases.NotifyLayoutChange();
             var pixels = new Color[Width * newHeight];
             Array.Copy(s_Pixels, pixels, s_Pixels.Length);
             var used = new bool[newHeight];
@@ -823,6 +829,7 @@ namespace FirstSymbol.Vectra.Rendering
 
         static void GrowTo(int size)
         {
+            VectraAtlases.NotifyLayoutChange();
             var data = new NativeArray<half>(size * size, Allocator.Persistent);
             Fill(data, (half)1f);
             for (int y = 0; y < s_Size; y++)
@@ -837,6 +844,7 @@ namespace FirstSymbol.Vectra.Rendering
         public static void Reset()
         {
             Ensure();
+            VectraAtlases.NotifyLayoutChange();
             ResetShelves();
             Fill(s_Data, (half)1f);
             s_Generation++;
