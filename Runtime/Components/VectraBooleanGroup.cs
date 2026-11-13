@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using FirstSymbol.Vectra.Geometry;
+using FirstSymbol.Vectra.Rendering;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -13,7 +14,7 @@ namespace FirstSymbol.Vectra
     [ExecuteAlways]
     [DisallowMultipleComponent]
     [AddComponentMenu("Vectra/Vectra Boolean Group")]
-    public class VectraBooleanGroup : MonoBehaviour
+    public class VectraBooleanGroup : MonoBehaviour, IVectraTicked
     {
         [Tooltip("Blend radius for smooth booleans (0 = exact).")]
         [SerializeField, Min(0f)] float m_Smoothness;
@@ -23,6 +24,22 @@ namespace FirstSymbol.Vectra
         int m_LastHash;
         bool m_Dirty = true;
         readonly List<BooleanOperand> m_Operands = new List<BooleanOperand>();
+
+        struct ChildRefs
+        {
+            public Transform transform;
+            public VectraShape shape;
+            public VectraRenderer renderer;
+            public VectraBooleanOperand operand;
+        }
+
+        // The components of the children, found once instead of three lookups per child per frame. The list is made again when the children
+        // change and every few ticks (a component added to a child has no notification).
+        readonly List<ChildRefs> m_Children = new List<ChildRefs>();
+        bool m_ChildrenKnown;
+        int m_TicksToRefresh;
+        int m_WatchSlot = -1;
+        bool m_Always;
 
         public float Smoothness
         {
@@ -36,52 +53,116 @@ namespace FirstSymbol.Vectra
 
         public void MarkDirty() => m_Dirty = true;
 
-        void OnEnable() => m_Dirty = true;
-        void OnValidate() => m_Dirty = true;
-        void OnTransformChildrenChanged() => m_Dirty = true;
+        void OnEnable()
+        {
+            m_Dirty = true;
+            m_ChildrenKnown = false;
+            m_Always = false;
+            VectraWatch.Add(this, transform, VectraWatch.GroupOther, false);
+        }
+
+        void OnValidate()
+        {
+            m_Dirty = true;
+            m_ChildrenKnown = false;
+        }
+
+        void OnTransformChildrenChanged()
+        {
+            m_Dirty = true;
+            m_ChildrenKnown = false;
+        }
 
         void OnDisable()
         {
+            VectraWatch.Remove(this);
             // Show the operands again when the group stops combining them.
             for (int i = 0; i < transform.childCount; i++) SetHidden(transform.GetChild(i), false);
         }
 
-        void LateUpdate()
+        int IVectraTicked.WatchSlot
         {
+            get => m_WatchSlot;
+            set => m_WatchSlot = value;
+        }
+
+        bool IVectraTicked.WatchPoll() => false;
+
+        // The old LateUpdate: the children (matrices, rects, geometry) are compared every frame, so the group asks to be ticked every frame.
+        bool IVectraTicked.WatchTick()
+        {
+            if (!m_Always)
+            {
+                m_Always = true;
+                VectraWatch.SetAlways(this, true);
+            }
+
             int hash = ComputeChildrenHash();
-            if (!m_Dirty && hash == m_LastHash) return;
+            if (!m_Dirty && hash == m_LastHash) return false;
             m_Dirty = false;
             m_LastHash = hash;
             Sync();
+            return false;
+        }
+
+        void RefreshChildren()
+        {
+            m_Children.Clear();
+            var self = transform;
+            // Indexed loop: enumerating a Transform allocates.
+            for (int ci = 0; ci < self.childCount; ci++)
+            {
+                var child = self.GetChild(ci);
+                var refs = new ChildRefs { transform = child };
+                if (child.TryGetComponent(out VectraShape s)) refs.shape = s;
+                else if (child.TryGetComponent(out VectraRenderer vr)) refs.renderer = vr;
+                if (child.TryGetComponent(out VectraBooleanOperand op)) refs.operand = op;
+                m_Children.Add(refs);
+            }
+
+            m_ChildrenKnown = true;
+            m_TicksToRefresh = 16;
         }
 
         int ComputeChildrenHash()
         {
+            if (m_ChildrenKnown && --m_TicksToRefresh <= 0) m_ChildrenKnown = false;
+            if (!m_ChildrenKnown) RefreshChildren();
             var h = new HashBuilder(17);
             h.Add(m_Smoothness);
             h.Add(m_HideOperands);
-            // Indexed loop: enumerating a Transform allocates.
-            for (int ci = 0; ci < transform.childCount; ci++)
+            var self = transform;
+            var toLocal = self.worldToLocalMatrix;
+            for (int ci = 0; ci < m_Children.Count; ci++)
             {
-                var child = transform.GetChild(ci);
-                if (!child.gameObject.activeSelf) continue;
-                var m = transform.worldToLocalMatrix * child.localToWorldMatrix;
-                h.Add(m.m00); h.Add(m.m01); h.Add(m.m03);
-                h.Add(m.m10); h.Add(m.m11); h.Add(m.m13);
-                if (child.TryGetComponent(out VectraShape s))
+                var refs = m_Children[ci];
+                var child = refs.transform;
+                if (child == null)
                 {
-                    var r = s.rectTransform.rect;
-                    h.Add(r.x); h.Add(r.y); h.Add(r.width); h.Add(r.height);
-                    h.Add(s.Geometry?.ComputeHash() ?? 0);
-                }
-                else if (child.TryGetComponent(out VectraRenderer vr))
-                {
-                    var r = vr.LocalRect;
-                    h.Add(r.x); h.Add(r.y); h.Add(r.width); h.Add(r.height);
-                    h.Add(vr.Geometry?.ComputeHash() ?? 0);
+                    // A child was destroyed: look again next frame.
+                    m_ChildrenKnown = false;
+                    m_Dirty = true;
+                    continue;
                 }
 
-                if (child.TryGetComponent(out VectraBooleanOperand op)) h.Add((int)op.operation);
+                if (!child.gameObject.activeSelf) continue;
+                var m = toLocal * child.localToWorldMatrix;
+                h.Add(m.m00); h.Add(m.m01); h.Add(m.m03);
+                h.Add(m.m10); h.Add(m.m11); h.Add(m.m13);
+                if (refs.shape != null)
+                {
+                    var r = refs.shape.rectTransform.rect;
+                    h.Add(r.x); h.Add(r.y); h.Add(r.width); h.Add(r.height);
+                    h.Add(refs.shape.Geometry?.ComputeHash() ?? 0);
+                }
+                else if (refs.renderer != null)
+                {
+                    var r = refs.renderer.LocalRect;
+                    h.Add(r.x); h.Add(r.y); h.Add(r.width); h.Add(r.height);
+                    h.Add(refs.renderer.Geometry?.ComputeHash() ?? 0);
+                }
+
+                if (refs.operand != null) h.Add((int)refs.operand.operation);
             }
 
             return h.Value;
