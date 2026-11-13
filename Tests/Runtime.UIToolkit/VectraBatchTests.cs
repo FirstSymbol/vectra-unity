@@ -84,6 +84,15 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             }
         }
 
+        // The fill is written to the content directly: Fill is applied by the element's own rebuild.
+        static VectraElement Solid(VectraElementShape shape, Color color)
+        {
+            var e = new VectraElement { Shape = shape };
+            e.Fills[0].paint = VectraPaint.Solid(color);
+            e.SetShapeDirty();
+            return e;
+        }
+
         static Color32[] ReadPage(RenderTexture rt)
         {
             var prev = RenderTexture.active;
@@ -103,17 +112,20 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
         public void ASlotGivenBackAndTakenAgainInOneBatch_ShowsOnlyTheNewPicture()
         {
             VectraSurfaces.DestroyAll();
-            var red = new VectraElement { Shape = VectraElementShape.Rectangle, Fill = Color.red };
-            var star = new VectraElement { Shape = VectraElementShape.Star, Fill = Color.blue };
+            var red = Solid(VectraElementShape.Rectangle, Color.red);
+            var star = Solid(VectraElementShape.Star, Color.blue);
             var frame = new ShapeFrame { rect = new Rect(-12f, -12f, 24f, 24f), pixelSize = 1f };
             using var a = new VectraRasterLayer();
             using var b = new VectraRasterLayer();
+            // Both are built first: a build can grow an atlas, which runs the batch (the draw of the first would be gone before the second is queued).
             a.renderer.Build(red.Content.ToInput(frame, Color.white, true));
+            b.renderer.Build(star.Content.ToInput(frame, Color.white, true));
+            VectraSurfaces.Flush();
             a.Rasterize(new Vector2(12f, 12f), 1f);
             Assert.AreEqual(1, VectraSurfaces.PendingCount);
             a.Release();
-            b.renderer.Build(star.Content.ToInput(frame, Color.white, true));
             b.Rasterize(new Vector2(12f, 12f), 1f);
+            Assert.AreEqual(2, VectraSurfaces.PendingCount, "the draw of the old owner is still counted (it is skipped when the batch runs)");
             VectraSurfaces.Flush();
             Assert.AreEqual(0, VectraSurfaces.PendingCount);
             var page = (RenderTexture)b.Texture;
@@ -135,12 +147,13 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
         public void ManySlotsOfOnePage_ClearedTogether_LookLikeClearedOneByOne()
         {
             VectraSurfaces.DestroyAll();
-            var star = new VectraElement { Shape = VectraElementShape.Star, Fill = Color.blue };
+            var faint = Solid(VectraElementShape.Rectangle, new Color(0f, 0f, 1f, 0.004f));
+            var red = Solid(VectraElementShape.Rectangle, Color.red);
             var frame = new ShapeFrame { rect = new Rect(-12f, -12f, 24f, 24f), pixelSize = 1f };
             var layers = new List<VectraRasterLayer>();
             try
             {
-                // Fill the page with stale content first (the next owners of the slots must clear it).
+                // The first round leaves red pictures; the second takes the same slots (same size) with a nearly transparent picture, which leaves what is under it: the red must have been cleared.
                 for (int round = 0; round < 2; round++)
                 {
                     foreach (var l in layers) l.Dispose();
@@ -148,7 +161,7 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
                     for (int i = 0; i < 40; i++)
                     {
                         var l = new VectraRasterLayer();
-                        l.renderer.Build((round == 0 ? new VectraElement { Shape = VectraElementShape.Rectangle, Fill = Color.red } : star).Content.ToInput(frame, Color.white, true));
+                        l.renderer.Build((round == 0 ? red : faint).Content.ToInput(frame, Color.white, true));
                         l.Rasterize(new Vector2(12f, 12f), 1f);
                         layers.Add(l);
                     }
