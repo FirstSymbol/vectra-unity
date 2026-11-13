@@ -182,6 +182,7 @@ namespace FirstSymbol.Vectra
         {
             base.OnCanvasHierarchyChanged();
             EnsureChannels();
+            VectraWatch.Request(this);
         }
 
         protected override void OnTransformParentChanged()
@@ -346,6 +347,7 @@ namespace FirstSymbol.Vectra
         bool IVectraTicked.WatchTick()
         {
             var c = canvas;
+            if (c != null) VectraWatch.ObserveCanvas(c.rootCanvas);
             bool follows = VectraScreenDensity.HasExtraCameras || (c != null && c.rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay);
             if (follows != m_Follows)
             {

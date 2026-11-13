@@ -268,6 +268,7 @@ namespace FirstSymbol.Vectra
         bool IVectraTicked.WatchTick()
         {
             bool follows = VectraScreenDensity.CanvasFollowsViews(canvas);
+            if (canvas != null) VectraWatch.ObserveCanvas(canvas.rootCanvas);
             if (follows != m_Follows)
             {
                 m_Follows = follows;

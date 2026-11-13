@@ -34,10 +34,10 @@ namespace FirstSymbol.Vectra
         }
 
         // The components of the children, found once instead of three lookups per child per frame. The list is made again when the children
-        // change and every few ticks (a component added to a child has no notification).
+        // change or when a Vectra component is enabled or disabled somewhere.
         readonly List<ChildRefs> m_Children = new List<ChildRefs>();
         bool m_ChildrenKnown;
-        int m_TicksToRefresh;
+        int m_SeenEpoch;
         int m_WatchSlot = -1;
         bool m_Always;
 
@@ -121,12 +121,13 @@ namespace FirstSymbol.Vectra
             }
 
             m_ChildrenKnown = true;
-            m_TicksToRefresh = 16;
+            m_SeenEpoch = VectraWatch.Epoch;
         }
 
         int ComputeChildrenHash()
         {
-            if (m_ChildrenKnown && --m_TicksToRefresh <= 0) m_ChildrenKnown = false;
+            // Any Vectra component enabled or disabled anywhere (a shape or an operand added to a child) makes the group look again.
+            if (m_ChildrenKnown && m_SeenEpoch != VectraWatch.Epoch) m_ChildrenKnown = false;
             if (!m_ChildrenKnown) RefreshChildren();
             var h = new HashBuilder(17);
             h.Add(m_Smoothness);

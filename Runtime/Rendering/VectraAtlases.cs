@@ -202,19 +202,22 @@ namespace FirstSymbol.Vectra.Rendering
             Shader.SetGlobalTexture(VectraAtlases.GradientsId, s_Texture);
         }
 
-        /// <summary>V coordinate of the centre of the first row in the current texture.</summary>
+        /// <summary>
+        /// V coordinate of the centre of the first row in the current texture (changes when the atlas grows). Meshes drawn with the Vectra
+        /// shaders must store <see cref="MeshRowV"/> instead: the shaders scale mesh V by MaxHeight / texture height.
+        /// </summary>
         public static float RowV(in GradientRows rows) => (rows.row + 0.5f) / math.max(s_Height, 1);
 
-        /// <summary>V distance between the first and the last row of a block in the current texture.</summary>
+        /// <summary>V distance between the first and the last row of a block in the current texture (see <see cref="MeshBlockSpanV"/> for meshes).</summary>
         public static float BlockSpanV(in GradientRows rows) => (rows.count - 1f) / math.max(s_Height, 1);
 
         /// <summary>
         /// What meshes store: the row coordinate for an atlas of <see cref="MaxHeight"/> rows. The shader scales it by
         /// MaxHeight / texture height (powers of two: exact), so growing the texture never changes a mesh.
         /// </summary>
-        internal static float MeshRowV(in GradientRows rows) => (rows.row + 0.5f) * (1f / MaxHeight);
+        public static float MeshRowV(in GradientRows rows) => (rows.row + 0.5f) * (1f / MaxHeight);
 
-        internal static float MeshBlockSpanV(in GradientRows rows) => (rows.count - 1f) * (1f / MaxHeight);
+        public static float MeshBlockSpanV(in GradientRows rows) => (rows.count - 1f) * (1f / MaxHeight);
 
         /// <summary>Acquires (or shares) the rows needed by <paramref name="paint"/>.</summary>
         public static GradientRows Acquire(VectraPaint paint, in ColorAdjust adjust)
@@ -536,7 +539,8 @@ namespace FirstSymbol.Vectra.Rendering
             {
                 if (s_DirtyMax <= s_DirtyMin) return;
                 // Rows baked since the last upload: send only those (a UI Toolkit element flushes after every bake).
-                if (s_UseHalf && SystemInfo.copyTextureSupport != CopyTextureSupport.None)
+                // WebGL has no dependable RGBAHalf texture copy: it uploads the whole texture, as before.
+                if (s_UseHalf && SystemInfo.copyTextureSupport != CopyTextureSupport.None && Application.platform != RuntimePlatform.WebGLPlayer)
                 {
                     UploadRows(s_DirtyMin, s_DirtyMax);
                     s_DirtyMin = int.MaxValue;
@@ -601,6 +605,12 @@ namespace FirstSymbol.Vectra.Rendering
             data.Dispose();
             s_Staging.Apply(false, false);
             Graphics.CopyTexture(s_Staging, 0, 0, 0, 0, Width, n, s_Texture, 0, 0, 0, from);
+            // A big burst of rows must not keep a big staging texture for the rest of the session.
+            if (s_Staging.height > 64)
+            {
+                UnityEngine.Object.DestroyImmediate(s_Staging);
+                s_Staging = null;
+            }
         }
 
         internal static void Dispose()

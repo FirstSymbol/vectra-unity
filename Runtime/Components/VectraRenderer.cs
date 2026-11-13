@@ -41,14 +41,7 @@ namespace FirstSymbol.Vectra
         static bool s_StyleHooked;
 
         public VectraShapeContent Content => m_Content;
-        public VectraBuildStats Stats
-        {
-            get
-            {
-                EnsureBuilt();
-                return m_Renderer?.stats ?? default;
-            }
-        }
+        public VectraBuildStats Stats => m_Renderer?.stats ?? default;
 
         /// <summary>The drawn geometry (the shared <see cref="VectraShapeContent.shapeAsset"/> when set). Setting it detaches the asset.</summary>
         public VectraShapeGeometry Geometry
@@ -136,13 +129,6 @@ namespace FirstSymbol.Vectra
             VectraWatch.Request(this);
         }
 
-        // A mesh is built once, when the object is first drawn (or asked about), not once for the defaults and once more for the settings
-        // that follow the AddComponent.
-        void EnsureBuilt()
-        {
-            if (m_Dirty && isActiveAndEnabled) Rebuild();
-        }
-
         void OnEnable()
         {
             m_MeshFilter = GetComponent<MeshFilter>();
@@ -176,6 +162,8 @@ namespace FirstSymbol.Vectra
             VectraWatch.PreTick -= OnWatchPreTick;
             VectraWatch.PreTick += OnWatchPreTick;
             VectraWatch.Add(this, transform, VectraWatch.GroupRenderer, false);
+            // The mesh, bounds and collider exist as soon as the component does (Start, FixedUpdate and physics queries rely on it).
+            Rebuild();
         }
 
         void OnDisable()
@@ -261,7 +249,7 @@ namespace FirstSymbol.Vectra
                 var rot = t.rotation;
                 bool ortho = cam.orthographic;
                 float size = cam.orthographicSize, fov = cam.fieldOfView, near = cam.nearClipPlane;
-                int height = cam.pixelHeight, id = cam.GetInstanceID();
+                int height = cam.pixelHeight, id = cam.GetHashCode();
                 if (!s_CameraKnown || id != s_CameraId || pos != s_CameraPosition || rot != s_CameraRotation || ortho != s_CameraOrtho ||
                     size != s_CameraSize || fov != s_CameraFov || near != s_CameraNear || height != s_CameraHeight)
                     changed = true;

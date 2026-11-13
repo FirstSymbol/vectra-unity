@@ -46,6 +46,7 @@ namespace FirstSymbol.Vectra.Rendering
             [NativeDisableParallelForRestriction] public NativeArray<byte> always;
             [NativeDisableParallelForRestriction] public NativeArray<byte> carry;
             [NativeDisableParallelForRestriction] public NativeArray<byte> retired;
+            [NativeDisableParallelForRestriction] public NativeArray<byte> next;
 
             public void Execute(int i, TransformAccess t)
             {
@@ -66,8 +67,9 @@ namespace FirstSymbol.Vectra.Rendering
                     last[i] = m;
                 }
 
-                flags[i] = (byte)(changed | always[i] != 0 | carry[i] != 0 ? 1 : 0);
+                flags[i] = (byte)(changed | always[i] != 0 | carry[i] != 0 | next[i] != 0 ? 1 : 0);
                 carry[i] = 0;
+                next[i] = 0;
             }
         }
 
@@ -87,7 +89,7 @@ namespace FirstSymbol.Vectra.Rendering
         static readonly List<IVectraTicked> s_Run = new List<IVectraTicked>();
         static TransformAccessArray s_Transforms;
         static NativeArray<float4x4> s_Last;
-        static NativeArray<byte> s_Flags, s_Always, s_Carry, s_Retired;
+        static NativeArray<byte> s_Flags, s_Always, s_Carry, s_Retired, s_Next;
         static int s_Capacity;
         static int s_RetiredCount;
         static bool s_Hooked;
@@ -113,13 +115,14 @@ namespace FirstSymbol.Vectra.Rendering
         /// <summary>How many items ran their check in the latest tick (diagnostics, tests).</summary>
         public static int LastTicked { get; private set; }
 
-        static int s_TickedNow;
+        static int s_TickedNow, s_TickedTotal;
 
         /// <summary>Registers <paramref name="item"/>; it is ticked for the first time in the next tick.</summary>
         public static void Add(IVectraTicked item, Transform transform, byte group, bool polled)
         {
             int slot = item.WatchSlot;
             if (slot >= 0 || slot == -2) return;
+            Epoch++;
             EnsureHooks();
             if (slot <= -3)
             {
@@ -146,6 +149,7 @@ namespace FirstSymbol.Vectra.Rendering
         {
             int slot = item.WatchSlot;
             if (slot == -1 || slot <= -3) return;
+            Epoch++;
             if (slot == -2)
             {
                 item.WatchSlot = -1; // still waiting: the pending entry is skipped when the slot is not -2
@@ -161,6 +165,7 @@ namespace FirstSymbol.Vectra.Rendering
             s_Retired[slot] = 1;
             s_Always[slot] = 0;
             s_Carry[slot] = 0;
+            s_Next[slot] = 0;
             s_Flags[slot] = 0;
             s_RetiredAt[slot] = s_Frame;
             s_RetiredCount++;
@@ -197,10 +202,14 @@ namespace FirstSymbol.Vectra.Rendering
             if (!s_Hooked)
             {
                 s_Hooked = true;
+#if !UNITY_EDITOR
                 Application.quitting += Dispose;
+#endif
 #if UNITY_EDITOR
                 UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += Dispose;
                 UnityEditor.EditorApplication.quitting += Dispose;
+                // The scene that holds the driver may be closed while others stay open: the editor's update brings the driver back.
+                UnityEditor.EditorApplication.update += EditorEnsureDriver;
 #endif
                 // A mesh asked for before the first frame ends (Camera.Render by hand, a test) is built by whoever renders it.
                 Camera.onPreCull += OnPreCull;
@@ -221,8 +230,12 @@ namespace FirstSymbol.Vectra.Rendering
         /// <summary>Runs the ticks of items that were marked dirty since the last tick, before something renders them.</summary>
         static void FlushRequests()
         {
-            if (s_Running || (s_Items.Count == 0 && s_Pending.Count == 0)) return;
+            if (s_Running) return;
+            if (s_Items.Count == 0 && s_Pending.Count == 0) return;
+            int before = s_TickedTotal;
             RunDirty();
+            // A build at render time may have baked or grown atlas rows: upload them before this camera draws.
+            if (s_TickedTotal != before) VectraAtlases.Flush();
         }
 
         static void FlushPending()
@@ -253,6 +266,7 @@ namespace FirstSymbol.Vectra.Rendering
                 s_Last[slot] = new float4x4(float.NaN);
                 s_Always[slot] = 0;
                 s_Carry[slot] = 1;
+                s_Next[slot] = 0;
                 s_Flags[slot] = 0;
                 s_Retired[slot] = 0;
                 item.WatchSlot = slot;
@@ -284,6 +298,7 @@ namespace FirstSymbol.Vectra.Rendering
                     s_Last[slot] = s_Last[last];
                     s_Always[slot] = s_Always[last];
                     s_Carry[slot] = s_Carry[last];
+                    s_Next[slot] = s_Next[last];
                     s_Flags[slot] = s_Flags[last];
                     s_Retired[slot] = s_Retired[last];
                     moved.WatchSlot = s_Retired[slot] != 0 ? -3 - slot : slot;
@@ -313,6 +328,7 @@ namespace FirstSymbol.Vectra.Rendering
             s_Always = Grow(s_Always, cap);
             s_Carry = Grow(s_Carry, cap);
             s_Retired = Grow(s_Retired, cap);
+            s_Next = Grow(s_Next, cap);
             s_Capacity = cap;
         }
 
@@ -342,6 +358,7 @@ namespace FirstSymbol.Vectra.Rendering
             s_Frame++;
             s_TickedNow = 0;
             PreTick?.Invoke();
+            CheckCanvases();
             if (s_RetiredCount > 0 && (s_Frame & 3) == 0) RemoveRetired();
             FlushPending();
             int count = s_Items.Count;
@@ -367,7 +384,7 @@ namespace FirstSymbol.Vectra.Rendering
 
             using (s_JobMarker.Auto())
             {
-                var job = new ChangedJob { last = s_Last, flags = s_Flags, always = s_Always, carry = s_Carry, retired = s_Retired };
+                var job = new ChangedJob { last = s_Last, flags = s_Flags, always = s_Always, carry = s_Carry, retired = s_Retired, next = s_Next };
                 job.ScheduleReadOnly(s_Transforms, 128).Complete();
             }
 
@@ -441,6 +458,7 @@ namespace FirstSymbol.Vectra.Rendering
             // Ticking may register or remove items; s_Run is a copy of who to tick, items that left are skipped.
             s_Running = true;
             s_TickedNow += s_Run.Count;
+            s_TickedTotal += s_Run.Count;
             try
             {
                 for (int k = 0; k < s_Run.Count; k++)
@@ -449,7 +467,7 @@ namespace FirstSymbol.Vectra.Rendering
                     if (item.WatchSlot < 0) continue;
                     try
                     {
-                        if (item.WatchTick() && item.WatchSlot >= 0 && s_Carry.IsCreated) s_Carry[item.WatchSlot] = 1;
+                        if (item.WatchTick() && item.WatchSlot >= 0 && s_Next.IsCreated) s_Next[item.WatchSlot] = 1; // next frame, not again now
                     }
                     catch (Exception e)
                     {
@@ -483,6 +501,7 @@ namespace FirstSymbol.Vectra.Rendering
             if (s_Always.IsCreated) s_Always.Dispose();
             if (s_Carry.IsCreated) s_Carry.Dispose();
             if (s_Retired.IsCreated) s_Retired.Dispose();
+            if (s_Next.IsCreated) s_Next.Dispose();
             s_Capacity = 0;
             if (s_Driver != null)
             {
@@ -493,12 +512,72 @@ namespace FirstSymbol.Vectra.Rendering
             s_Driver = null;
         }
 
+        // Enter Play Mode with domain and scene reload off keeps the objects of the edit-mode scene enabled, so their registrations (and the
+        // PreTick subscriptions, which Unity does not clear either) must survive: nothing is reset here, only the driver is made sure of.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics()
+        static void OnSubsystemRegistration()
         {
-            // Supports "Enter Play Mode" without domain reload.
-            Dispose();
-            PreTick = null;
+            if (s_Items.Count > 0 || s_Pending.Count > 0) EnsureHooks();
+        }
+
+        /// <summary>Test hook: what Unity does at the start of Enter Play Mode without reloads.</summary>
+        internal static void SimulateSubsystemRegistration() => OnSubsystemRegistration();
+
+        internal static bool HasDriver => s_Driver != null;
+
+        internal static void EditorEnsureDriver()
+        {
+            if (s_Driver == null && (s_Items.Count > 0 || s_Pending.Count > 0)) EnsureHooks();
+        }
+        internal static void DestroyDriverForTests()
+        {
+            if (s_Driver != null) UnityEngine.Object.DestroyImmediate(s_Driver.gameObject);
+            s_Driver = null;
+        }
+
+        /// <summary>Incremented whenever a registered component is enabled or disabled: groups that cache their children's components look again.</summary>
+        public static int Epoch;
+
+        // Root canvases whose render mode or camera decides how often their components must check themselves (no notification exists for them).
+        static readonly Dictionary<Canvas, long> s_Canvases = new Dictionary<Canvas, long>();
+        static readonly List<Canvas> s_CanvasScratch = new List<Canvas>();
+
+        /// <summary>Lets the registry watch the root canvas of a component; a change of its render mode or world camera ticks everything.</summary>
+        public static void ObserveCanvas(Canvas root)
+        {
+            if (root != null && !s_Canvases.ContainsKey(root)) s_Canvases[root] = CanvasState(root);
+        }
+
+        static long CanvasState(Canvas c) => (long)c.renderMode << 32 | (uint)(c.worldCamera != null ? c.worldCamera.GetHashCode() : 0);
+
+        static void CheckCanvases()
+        {
+            if (s_Canvases.Count == 0) return;
+            s_CanvasScratch.Clear();
+            bool changed = false;
+            foreach (var kv in s_Canvases) s_CanvasScratch.Add(kv.Key);
+            for (int i = 0; i < s_CanvasScratch.Count; i++)
+            {
+                var c = s_CanvasScratch[i];
+                if (c == null)
+                {
+                    s_Canvases.Remove(c);
+                    continue;
+                }
+
+                long now = CanvasState(c);
+                if (s_Canvases[c] == now) continue;
+                s_Canvases[c] = now;
+                changed = true;
+            }
+
+            if (changed) RequestAll();
+        }
+
+        static void RequestAll()
+        {
+            for (int i = 0; i < s_Items.Count; i++)
+                if (s_Retired[i] == 0) s_Carry[i] = 1;
         }
     }
 
