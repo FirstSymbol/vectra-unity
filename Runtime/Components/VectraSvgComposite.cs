@@ -15,11 +15,11 @@ namespace FirstSymbol.Vectra
     {
         VectraSvgImage m_Owner;
         int m_From, m_To;
-        RenderTexture m_Texture;
-        int m_Key;
+        // The picture may be shared with other components that draw the same pixels (SvgPictures).
+        SvgPicture m_Picture;
 
         /// <summary>The composited picture (premultiplied alpha), null until it was rendered.</summary>
-        public RenderTexture Texture => m_Texture;
+        public RenderTexture Texture => m_Picture?.texture;
 
         internal void Setup(VectraSvgImage owner, int from, int to)
         {
@@ -37,20 +37,27 @@ namespace FirstSymbol.Vectra
             SetMaterialDirty();
         }
 
-        public override Texture mainTexture => m_Texture != null ? m_Texture : Texture2D.whiteTexture;
+        public override Texture mainTexture
+        {
+            get
+            {
+                var t = m_Picture?.texture;
+                return t != null ? t : Texture2D.whiteTexture;
+            }
+        }
 
         public override Material defaultMaterial => SvgCompositor.LayerMaterial ?? base.defaultMaterial;
 
         protected override void OnDestroy()
         {
-            SvgCompositor.Free(ref m_Texture);
+            SvgPictures.Release(ref m_Picture);
             base.OnDestroy();
         }
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {
             vh.Clear();
-            if (m_Texture == null) return;
+            if (m_Picture?.texture == null) return;
             var r = rectTransform.rect;
             var c = m_Owner != null ? m_Owner.color : color;
             vh.AddVert(new Vector3(r.xMin, r.yMin), c, new Vector2(0f, 0f));
@@ -63,7 +70,7 @@ namespace FirstSymbol.Vectra
 
         protected override void UpdateGeometry()
         {
-            if (m_Owner != null) m_Owner.RenderComposite(m_From, m_To, ref m_Texture, ref m_Key);
+            if (m_Owner != null) m_Owner.RenderComposite(m_From, m_To, ref m_Picture);
             base.UpdateGeometry();
             canvasRenderer.SetMaterial(materialForRendering, mainTexture);
         }

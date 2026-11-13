@@ -131,8 +131,7 @@ namespace FirstSymbol.Vectra.Rendering
             List<SvgOverride> overrides, SvgAlign? align, float pointScale, ref RenderTexture texture, int maxSize = 4096, bool gamma = false)
         {
             if (doc == null || rect.width <= 0f || rect.height <= 0f) return false;
-            float ps = Mathf.Max(pixelSize, 1e-6f);
-            int w = Mathf.Clamp(Mathf.CeilToInt(rect.width / ps), 1, maxSize), h = Mathf.Clamp(Mathf.CeilToInt(rect.height / ps), 1, maxSize);
+            PictureSize(rect, pixelSize, maxSize, out int w, out int h);
             if (texture == null || texture.width != w || texture.height != h || !texture.IsCreated())
             {
                 if (texture != null)
@@ -152,6 +151,14 @@ namespace FirstSymbol.Vectra.Rendering
                 tint = Color.white, quality = quality, overrides = overrides, align = align, pointScale = pointScale, gamma = gamma
             }, texture);
             return true;
+        }
+
+        /// <summary>The size in texels of the picture <see cref="RenderStep"/> draws for a rect at a pixel size.</summary>
+        public static void PictureSize(Rect rect, float pixelSize, int maxSize, out int width, out int height)
+        {
+            float ps = Mathf.Max(pixelSize, 1e-6f);
+            width = Mathf.Clamp(Mathf.CeilToInt(rect.width / ps), 1, maxSize);
+            height = Mathf.Clamp(Mathf.CeilToInt(rect.height / ps), 1, maxSize);
         }
 
         /// <summary>Releases a texture made by <see cref="RenderStep"/> or <see cref="Allocate"/>.</summary>
