@@ -14,7 +14,6 @@ namespace FirstSymbol.Vectra.UIToolkit
     sealed class VectraRasterLayer : IDisposable
     {
         public readonly VectraShapeRenderer renderer = new VectraShapeRenderer();
-        Mesh m_Mesh;
         SurfaceRegion m_Region;
         Rect m_Quad;
         Rect m_Uv;
@@ -36,7 +35,14 @@ namespace FirstSymbol.Vectra.UIToolkit
         /// Rasterizes what <see cref="renderer"/> has built. <paramref name="center"/> is where the local origin sits in
         /// element space (y down); <paramref name="pixelsPerPoint"/> is the screen density the layer is drawn for.
         /// </summary>
+        static readonly Unity.Profiling.ProfilerMarker s_RasterizeMarker = new Unity.Profiling.ProfilerMarker("Vectra.Uitk.Rasterize");
+
         public void Rasterize(Vector2 center, float pixelsPerPoint, ShapeBlendMode blend = ShapeBlendMode.Normal)
+        {
+            using (s_RasterizeMarker.Auto()) RasterizeCore(center, pixelsPerPoint, blend);
+        }
+
+        void RasterizeCore(Vector2 center, float pixelsPerPoint, ShapeBlendMode blend)
         {
             rasterCount++;
             var buf = renderer.buffer;
@@ -64,10 +70,10 @@ namespace FirstSymbol.Vectra.UIToolkit
             m_Quad = new Rect(x0 / s, y0 / s, w / s, h / s);
             // Local space (y up) covered by the region.
             var area = Rect.MinMaxRect(x0 / s - center.x, center.y - y1 / s, x1 / s - center.x, center.y - y0 / s);
-            if (m_Mesh == null) m_Mesh = new Mesh { name = "Vectra UI Toolkit", hideFlags = HideFlags.HideAndDontSave };
-            buf.Upload(m_Mesh);
             var material = VectraMaterials.GetUI(blend);
-            m_Ready = VectraSurfaces.Draw(m_Region, m_Mesh, material, renderer.mainTexture, area);
+            var mesh = VectraSurfaces.NextMesh();
+            buf.Upload(mesh);
+            m_Ready = VectraSurfaces.Queue(m_Region, material, renderer.mainTexture, area);
             var ps = m_Region.PageSize;
             m_Uv = Rect.MinMaxRect((float)m_Region.x / ps.x, (float)m_Region.y / ps.y,
                 (float)(m_Region.x + m_Region.w) / ps.x, (float)(m_Region.y + m_Region.h) / ps.y);
@@ -76,6 +82,8 @@ namespace FirstSymbol.Vectra.UIToolkit
         /// <summary>Adds the layer's quad to the element being drawn.</summary>
         public void Emit(MeshGenerationContext mgc, Color32 tint)
         {
+            // The picture must be in the page before the panel draws a quad that shows it.
+            VectraSurfaces.Flush();
             var tex = m_Region.Texture;
             if (!m_Ready || tex == null) return;
             var q = m_Quad;
@@ -113,13 +121,6 @@ namespace FirstSymbol.Vectra.UIToolkit
         {
             Release();
             renderer.Dispose();
-            if (m_Mesh != null)
-            {
-                if (Application.isPlaying) UnityEngine.Object.Destroy(m_Mesh);
-                else UnityEngine.Object.DestroyImmediate(m_Mesh);
-            }
-
-            m_Mesh = null;
         }
     }
 }

@@ -163,6 +163,9 @@ namespace FirstSymbol.Vectra.Rendering
         static readonly ProfilerMarker s_PathMarker = new ProfilerMarker("Vectra.BuildPath+Flatten");
         static readonly ProfilerMarker s_TessellateMarker = new ProfilerMarker("Vectra.Tessellate");
         static readonly ProfilerMarker s_SdfMarker = new ProfilerMarker("Vectra.BakeSdf");
+        static readonly ProfilerMarker s_SmoothPrepMarker = new ProfilerMarker("Vectra.SmoothSdf.Prepare");
+        static readonly ProfilerMarker s_SmoothBakeMarker = new ProfilerMarker("Vectra.SmoothSdf.Bake");
+        static readonly ProfilerMarker s_SmoothCombineMarker = new ProfilerMarker("Vectra.SmoothSdf.Combine");
         static readonly ProfilerMarker s_StrokeMarker = new ProfilerMarker("Vectra.Stroke");
 
         public void Build(in VectraBuildInput input)
@@ -703,6 +706,7 @@ namespace FirstSymbol.Vectra.Rendering
             m_SdfKey = key;
             m_PolyKey = m_FillKey = 0;
 
+            s_SmoothPrepMarker.Begin();
             var poly = new Polylines(Allocator.TempJob, 256);
             var ops = s_SmoothOperands;
             shape.FlattenOperands(m_Frame, tol, ref poly, ops);
@@ -711,6 +715,7 @@ namespace FirstSymbol.Vectra.Rendering
             {
                 poly.Dispose();
                 VectraSdfAtlas.Free(ref m_Sdf);
+                s_SmoothPrepMarker.End();
                 return;
             }
 
@@ -743,9 +748,11 @@ namespace FirstSymbol.Vectra.Rendering
             {
                 foreach (var t in traps) t.Dispose();
                 VectraSdfAtlas.Free(ref m_Sdf);
+                s_SmoothPrepMarker.End();
                 return;
             }
 
+            s_SmoothPrepMarker.End();
             float k2 = math.max(shape.smoothness, 1e-4f);
             float range = math.max(reach, k2 * 2f) + m_Frame.pixelSize * 2f;
             var region = bounds.Expanded(range);
@@ -763,28 +770,16 @@ namespace FirstSymbol.Vectra.Rendering
                 }
             }
 
-            var acc = new NativeArray<half>(w * hh, Allocator.TempJob);
-            var tmp = new NativeArray<half>(w * hh, Allocator.TempJob);
+            // Every texel is written by the first bake, and by each later bake into tmp: no clearing.
+            var acc = new NativeArray<half>(w * hh, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var tmp = new NativeArray<half>(w * hh, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             float kn = k2 / range;
             for (int k = 0; k < n; k++)
             {
-                VectraGeometry.BakeSdf(traps[k].AsArray(), region, w, hh, range, k == 0 ? acc : tmp, w, 0, 0);
+                using (s_SmoothBakeMarker.Auto())
+                    VectraGeometry.BakeSdf(traps[k].AsArray(), region, w, hh, range, k == 0 ? acc : tmp, w, 0, 0);
                 if (k == 0) continue;
-                var op = ops[k].op;
-                for (int i = 0; i < acc.Length; i++)
-                {
-                    float a = acc[i], b = tmp[i];
-                    float r;
-                    switch (op)
-                    {
-                        case BooleanOp.Subtract: r = -SMin(-a, b, kn); break;
-                        case BooleanOp.Intersect: r = -SMin(-a, -b, kn); break;
-                        case BooleanOp.Exclude: r = math.max(math.min(a, b), -math.max(a, b)); break;
-                        default: r = SMin(a, b, kn); break;
-                    }
-
-                    acc[i] = (half)math.clamp(r, -1f, 1f);
-                }
+                using (s_SmoothCombineMarker.Auto()) SdfCombine.Run(acc, tmp, ops[k].op, kn);
             }
 
             var dst = VectraSdfAtlas.Data;
@@ -801,11 +796,6 @@ namespace FirstSymbol.Vectra.Rendering
             m_SdfRange = range;
         }
 
-        static float SMin(float a, float b, float k)
-        {
-            float h = math.max(k - math.abs(a - b), 0f) / k;
-            return math.min(a, b) - h * h * k * 0.25f;
-        }
         /// <summary>Local size of the unit a pixel-mode stroke is measured in.</summary>
         float StrokePixel => m_Frame.pixelSize * (m_Frame.pointScale > 0f ? m_Frame.pointScale : 1f);
 

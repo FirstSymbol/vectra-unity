@@ -563,20 +563,19 @@ namespace FirstSymbol.Vectra
             m_Generated.Add(new Generated { go = go, composite = composite });
         }
 
-        /// <summary>Renders the layers of [from, to) into <paramref name="texture"/> for the current size and density; skipped when nothing changed since <paramref name="key"/>.</summary>
-        internal bool RenderComposite(int from, int to, ref RenderTexture texture, ref int key)
+        /// <summary>
+        /// Takes the picture of the layers of [from, to) for the current size, density and overrides into <paramref name="picture"/>: the same one when
+        /// nothing changed, the shared picture of another component that draws the same pixels, or a new render. Pictures are counted and
+        /// freed with their last user (<see cref="SvgPictures"/>).
+        /// </summary>
+        internal bool RenderComposite(int from, int to, ref SvgPicture picture)
         {
             if (m_Document == null) return false;
             var rect = rectTransform.rect;
             float px = PictureSize();
             var align = m_PreserveAspect ? (SvgAlign?)null : SvgAlign.None;
-            int k = System.HashCode.Combine(System.HashCode.Combine(rect.width, rect.height, px, (int)m_Quality, m_PreserveAspect, from, to), m_Document.contentVersion, Gamma, PointScale());
-            foreach (var o in m_Overrides)
-                if (o != null) k = System.HashCode.Combine(k, o.selector, o.hide, o.overrideFill, o.fill, o.overrideStroke, o.stroke);
-            if (texture != null && texture.IsCreated() && k == key) return true;
-            key = k;
             m_CompositePixelSize = px;
-            return SvgCompositor.RenderStep(m_Document, from, to, rect, px, m_Quality, m_Overrides, align, PointScale(), ref texture, 4096, Gamma);
+            return SvgPictures.Acquire(ref picture, m_Document, from, to, rect, px, m_Quality, m_Overrides, align, PointScale(), Gamma, 4096);
         }
 
         /// <summary>Sets up a text object of <paramref name="backend"/> for an SVG text element placed in a rect of this image's size.</summary>
