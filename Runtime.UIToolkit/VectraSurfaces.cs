@@ -284,14 +284,13 @@ namespace FirstSymbol.Vectra.UIToolkit
             }
 
             int k = s_PendingCount++;
-            s_Submeshes[k] = new SubMeshDescriptor(s_StageIndices.Length, ic, MeshTopology.Triangles)
-            {
-                baseVertex = s_StageVertices.Length,
-                firstVertex = s_StageVertices.Length,
-                vertexCount = vc
-            };
+            int firstVertex = s_StageVertices.Length, firstIndex = s_StageIndices.Length;
+            // The indices carry the offset of the shape's vertices themselves: a base vertex per submesh is not available on every platform (GLES, WebGL 2).
+            s_Submeshes[k] = new SubMeshDescriptor(firstIndex, ic, MeshTopology.Triangles) { firstVertex = firstVertex, vertexCount = vc };
             s_StageVertices.AddRange(buffer.vertices.AsArray());
-            s_StageIndices.AddRange(buffer.indices.AsArray());
+            s_StageIndices.ResizeUninitialized(firstIndex + ic);
+            var source = buffer.indices.AsArray();
+            for (int i = 0; i < ic; i++) s_StageIndices[firstIndex + i] = source[i] + firstVertex;
             s_Pending[k] = new PendingDraw { region = region, material = material, main = main, area = area };
             return true;
         }
