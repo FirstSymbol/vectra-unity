@@ -229,7 +229,7 @@ namespace FirstSymbol.Vectra
             float R = math.max(frame.MinHalf, 1e-6f);
             int n = math.max(sides, 3);
             float r = math.min(cornerRadius, R * 0.99f);
-            ShapePaths.InflatedPolygon(b, StarShape.StarPoints(R - r, n, math.cos(math.PI / n), true), r);
+            ShapePaths.InflatedPolygon(b, StarShape.StarPoints(ShapePaths.Scratch(n), R - r, n, math.cos(math.PI / n), true), r);
             b.transform = saved;
         }
 
@@ -250,10 +250,12 @@ namespace FirstSymbol.Vectra
         public override string DisplayName => "Star";
 
         /// <summary>Star vertices (first one at +Y), counter-clockwise. A polygon omits the inner vertices.</summary>
-        public static float2[] StarPoints(float R, int n, float k, bool polygon)
+        public static float2[] StarPoints(float R, int n, float k, bool polygon) =>
+            StarPoints(new float2[polygon ? n : n * 2], R, n, k, polygon);
+
+        internal static float2[] StarPoints(float2[] pts, float R, int n, float k, bool polygon)
         {
-            int count = polygon ? n : n * 2;
-            var pts = new float2[count];
+            int count = pts.Length;
             float an = math.PI / n;
             for (int i = 0; i < count; i++)
             {
@@ -279,7 +281,8 @@ namespace FirstSymbol.Vectra
             var saved = EnterShapeSpace(frame, b);
             float R = math.max(frame.MinHalf, 1e-6f);
             float r = math.min(cornerRadius, R * 0.5f);
-            ShapePaths.InflatedPolygon(b, StarPoints(R - r, math.max(points, 2), innerRatio, false), r);
+            int n = math.max(points, 2);
+            ShapePaths.InflatedPolygon(b, StarPoints(ShapePaths.Scratch(n * 2), R - r, n, innerRatio, false), r);
             b.transform = saved;
         }
 

@@ -188,7 +188,7 @@ namespace FirstSymbol.Vectra
             if (points == null || points.Count < 2) return;
             var saved = b.transform;
             if (rotation != 0f) b.transform = saved * Affine2.Rotate(math.radians(rotation), frame.Center);
-            var pts = new float2[points.Count];
+            var pts = ShapePaths.Scratch(points.Count);
             for (int i = 0; i < pts.Length; i++)
                 pts[i] = coordinates == PathCoordinates.Local ? (float2)points[i] : frame.FromNormalized(points[i]);
 

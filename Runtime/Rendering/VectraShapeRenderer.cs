@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using FirstSymbol.Vectra.Geometry;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using Unity.Profiling;
 using UnityEngine;
@@ -94,6 +95,24 @@ namespace FirstSymbol.Vectra.Rendering
         List<GradientRows> m_Rows = new List<GradientRows>();
         List<GradientRows> m_NextRows = new List<GradientRows>();
 
+        /// <summary>
+        /// Set by components that rewrite vertex colours when only the tint changed (see <see cref="TryRecolor"/>): every
+        /// emitted run of vertices is recorded with the colour it was built from.
+        /// </summary>
+        internal bool recordColors;
+        /// <summary>Number of full builds, for tests.</summary>
+        internal int buildCount;
+        struct ColorRun
+        {
+            public int start, count;
+            public Color baseColor;
+            public float alphaScale;
+        }
+
+        ColorRun[] m_Runs = System.Array.Empty<ColorRun>();
+        int m_RunCount;
+        bool m_RunsUsable;
+
         // Per-build scratch.
         ShapeFrame m_Frame;
         bool m_World;
@@ -119,9 +138,10 @@ namespace FirstSymbol.Vectra.Rendering
 
         public VectraShapeRenderer()
         {
-            m_Path = new NativePath(Allocator.Persistent, 32);
-            m_Poly = new Polylines(Allocator.Persistent, 128);
-            m_Fill = new NativeList<Trapezoid>(64, Allocator.Persistent);
+            // Most shapes are analytic and never touch these; they start small and grow once for path shapes.
+            m_Path = new NativePath(Allocator.Persistent, 4);
+            m_Poly = new Polylines(Allocator.Persistent, 16);
+            m_Fill = new NativeList<Trapezoid>(8, Allocator.Persistent);
             m_Builder = new PathBuilder(m_Path);
         }
 
@@ -153,6 +173,9 @@ namespace FirstSymbol.Vectra.Rendering
         void BuildCore(in VectraBuildInput input)
         {
             long startTicks = Stopwatch.GetTimestamp();
+            buildCount++;
+            m_RunCount = 0;
+            m_RunsUsable = recordColors && !m_Batch;
             if (!m_Batch)
             {
                 buffer.Clear();
@@ -268,6 +291,8 @@ namespace FirstSymbol.Vectra.Rendering
                             needSdf = true;
                             break;
                         case VectraCustomEffect ce:
+                            // User code runs on every build; it is not skipped by a colour-only update.
+                            m_RunsUsable = false;
                             (ce.Order == VectraEffectOrder.BehindFill ? s_Before : ce.Order == VectraEffectOrder.AboveFill ? s_After : s_Top).Add(e);
                             if (ce.NeedsDistanceField)
                             {
@@ -788,7 +813,7 @@ namespace FirstSymbol.Vectra.Rendering
         {
             while (m_StrokeTraps.Count <= index)
             {
-                m_StrokeTraps.Add(new NativeList<Trapezoid>(64, Allocator.Persistent));
+                m_StrokeTraps.Add(new NativeList<Trapezoid>(16, Allocator.Persistent));
                 m_StrokeKeys.Add(0);
             }
 
@@ -828,8 +853,16 @@ namespace FirstSymbol.Vectra.Rendering
                 if (clipMode == 0 && m_ExternalClip.HasValue)
                     VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, m_ExternalClip.Value, m_ExternalClipRule, 1, ref traps);
                 else
-                    VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, default, geometry.FillRule, clipMode, ref traps,
-                        clipMode != 0);
+                {
+                    // Equal outlines and stroke settings (icons of one size, a size that alternates) share one result.
+                    ulong cacheKey = VectraStrokeCache.Fingerprint(m_Poly, p, dash, profile, clipMode, geometry.FillRule, clipMode != 0, out ulong cacheCheck);
+                    if (!VectraStrokeCache.TryGet(cacheKey, cacheCheck, ref traps))
+                    {
+                        VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, default, geometry.FillRule, clipMode, ref traps,
+                            clipMode != 0);
+                        VectraStrokeCache.Offer(cacheKey, cacheCheck, traps);
+                    }
+                }
             }
             dash.Dispose();
             profile.Dispose();
@@ -962,11 +995,14 @@ namespace FirstSymbol.Vectra.Rendering
             public float param;
             public Color32 color;
             public bool additive;
+            /// <summary>The colour before the tint and the factor the paint's opacity applies to the tint's alpha.</summary>
+            public Color baseColor;
+            public float alphaScale;
         }
 
         ResolvedPaint Resolve(VectraPaint paint)
         {
-            var r = new ResolvedPaint { toPaint = Affine2.Identity, param = 1f, additive = paint.blend == LayerBlend.Additive };
+            var r = new ResolvedPaint { toPaint = Affine2.Identity, param = 1f, additive = paint.blend == LayerBlend.Additive, baseColor = Color.white, alphaScale = paint.opacity };
             float2 mn = m_Frame.Min;
             float2 size = math.max(m_Frame.Size, 1e-6f);
             var normalized = Affine2.Scale(1f / size) * Affine2.Translate(-mn);
@@ -988,6 +1024,7 @@ namespace FirstSymbol.Vectra.Rendering
                     }
 
                     r.param = VectraColorSpace.Linear ? math.pow(intensity, 2.2f) : intensity;
+                    r.baseColor = c;
                     r.color = ToVertex(c * tint);
                     return r;
                 }
@@ -995,7 +1032,8 @@ namespace FirstSymbol.Vectra.Rendering
                 {
                     r.kind = PaintKind.Texture;
                     mainTexture = paint.texture;
-                    r.color = ToVertex(m_Adjust.Apply(paint.ResolvedColor) * tint);
+                    r.baseColor = m_Adjust.Apply(paint.ResolvedColor);
+                    r.color = ToVertex(r.baseColor * tint);
                     // SVG patterns map document space straight to texture space (like SVG gradients).
                     r.toPaint = paint.useCustomMapping ? paint.customMapping : TextureMapping(paint, mn, size);
                     r.spread = (paint.textureFit == TextureFit.Tile ? 1 : 0) | (paint.sharpTexels ? 2 : 0);
@@ -1148,7 +1186,7 @@ namespace FirstSymbol.Vectra.Rendering
             return c;
         }
 
-        Color32 SolidColor(Color c, out float intensity)
+        Color32 SolidColor(Color c, out float intensity, out Color baseColor)
         {
             c = m_Adjust.Apply(c);
             intensity = math.max(math.max(c.r, c.g), math.max(c.b, 1f));
@@ -1161,6 +1199,7 @@ namespace FirstSymbol.Vectra.Rendering
 
             if (VectraColorSpace.Linear) intensity = math.pow(intensity, 2.2f);
             var t = m_Tint;
+            baseColor = c;
             return ToVertex(c * new Color(t.r, t.g, t.b, t.a));
         }
 
@@ -1200,7 +1239,9 @@ namespace FirstSymbol.Vectra.Rendering
             float2 he = m_A.halfExtents + extent + m_Margin + m_ModReach;
             float2 pOffset = m_A.localToShape.ApplyVector(offsetLocal);
             var c = Constants(m_A.kind, layer, rp, m_A.style, m_A.s1, new float4(m_A.s2, lp), additive);
+            int first = buffer.vertices.Length;
             buffer.AddQuad(-he, he, m_ShapeToLocal, pOffset, c, rp.toPaint);
+            RecordRun(first, rp);
         }
 
         void EmitSdf(LayerKind layer, VectraPaint paint, float2 lp, float2 offsetLocal, bool glow = false, bool additive = false)
@@ -1216,7 +1257,9 @@ namespace FirstSymbol.Vectra.Rendering
             if (glow) rp.spread = 1;
             var c = Constants(ShapeKind.SdfTexture, layer, rp, 0, SdfParams1(), SdfParams2(lp), additive);
             float2 pMin = m_SdfBounds.min - m_Origin, pMax = m_SdfBounds.max - m_Origin;
+            int first = buffer.vertices.Length;
             buffer.AddQuad(pMin, pMax, m_ShapeToLocal, offsetLocal, c, rp.toPaint);
+            RecordRun(first, rp);
         }
 
         float4 SdfParams1()
@@ -1254,7 +1297,9 @@ namespace FirstSymbol.Vectra.Rendering
                 c.s0 = 0f;
             }
 
+            int first = buffer.vertices.Length;
             buffer.AddTrapezoids(traps.AsArray(), m_Origin, m_Margin, c, rp.toPaint);
+            RecordRun(first, rp);
             stats.trapezoids += traps.Length;
         }
 
@@ -1290,7 +1335,42 @@ namespace FirstSymbol.Vectra.Rendering
                 c.s0 = 0f;
             }
 
+            int first = buffer.vertices.Length;
             buffer.AddTrapezoids(traps.AsArray(), m_Origin, m_Margin, c, rp.toPaint);
+            RecordRun(first, rp);
+        }
+
+        void RecordRun(int first, in ResolvedPaint rp)
+        {
+            if (!m_RunsUsable) return;
+            int count = buffer.vertices.Length - first;
+            if (count <= 0) return;
+            if (m_RunCount == m_Runs.Length) System.Array.Resize(ref m_Runs, math.max(4, m_RunCount * 2));
+            m_Runs[m_RunCount++] = new ColorRun { start = first, count = count, baseColor = rp.baseColor, alphaScale = rp.alphaScale };
+        }
+
+        /// <summary>
+        /// Rewrites the vertex colours of the last build for a new tint, giving exactly what a full build with that tint
+        /// writes (same colour arithmetic on the colours the layers were built from). False when the last build cannot be
+        /// recoloured; the caller then builds. Only valid while nothing but the tint changed since that build.
+        /// </summary>
+        internal unsafe bool TryRecolor(Color tint)
+        {
+            if (!recordColors || !m_RunsUsable || m_RunCount == 0 || m_World || !buffer.vertices.IsCreated) return false;
+            m_Tint = tint;
+            var vertices = (VectraVertex*)NativeArrayUnsafeUtility.GetUnsafePtr(buffer.vertices.AsArray());
+            int length = buffer.vertices.Length;
+            for (int i = 0; i < m_RunCount; i++)
+            {
+                var run = m_Runs[i];
+                if (run.start + run.count > length) return false;
+                Color t = tint;
+                t.a *= run.alphaScale;
+                Color32 color = ToVertex(run.baseColor * t);
+                for (int v = run.start, end = run.start + run.count; v < end; v++) vertices[v].color = color;
+            }
+
+            return true;
         }
 
         void EmitEffect(VectraEffect e, bool analytic)
@@ -1429,14 +1509,16 @@ namespace FirstSymbol.Vectra.Rendering
 
         ResolvedPaint SolidPaint(Color c, LayerBlend blend)
         {
-            var col = SolidColor(c, out float intensity);
+            var col = SolidColor(c, out float intensity, out Color baseColor);
             return new ResolvedPaint
             {
                 kind = PaintKind.Solid,
                 toPaint = Affine2.Identity,
                 param = intensity,
                 color = col,
-                additive = blend == LayerBlend.Additive
+                additive = blend == LayerBlend.Additive,
+                baseColor = baseColor,
+                alphaScale = 1f
             };
         }
 

@@ -24,7 +24,20 @@ namespace FirstSymbol.Vectra
 
         VectraShapeRenderer m_Renderer;
         VectraHitTester m_HitTester;
-        Mesh m_Mesh;
+        // Like uGUI's own graphics, every shape fills one shared worker mesh and hands it to its CanvasRenderer, which
+        // copies the data: no mesh per shape.
+        static Mesh s_Mesh;
+
+        static Mesh WorkerMesh()
+        {
+            if (s_Mesh == null)
+            {
+                s_Mesh = new Mesh { name = "Vectra Shape", hideFlags = HideFlags.HideAndDontSave };
+                s_Mesh.MarkDynamic();
+            }
+
+            return s_Mesh;
+        }
         float m_LastScale;
         Texture m_LastTexture;
         int m_WatchSlot = -1;
@@ -190,12 +203,6 @@ namespace FirstSymbol.Vectra
             m_Renderer = null;
             m_HitTester?.Dispose();
             m_HitTester = null;
-            if (m_Mesh != null)
-            {
-                if (Application.isPlaying) Destroy(m_Mesh);
-                else DestroyImmediate(m_Mesh);
-            }
-
             base.OnDestroy();
         }
 
@@ -254,6 +261,51 @@ namespace FirstSymbol.Vectra
             var s = transform.lossyScale;
             return math.max(math.abs(s.x), math.abs(s.y));
         }
+
+        // True until a build has run for the current content; anything that dirties the vertices other than the colour
+        // property sets it. A tint change alone rewrites the vertex colours of the last build.
+        bool m_FullBuild = true;
+        bool m_InColorSetter;
+
+        public override Color color
+        {
+            get => base.color;
+            set
+            {
+                m_InColorSetter = true;
+                try { base.color = value; }
+                finally { m_InColorSetter = false; }
+            }
+        }
+
+        // What the last full build read besides the content; a tint-only rewrite needs all of it unchanged.
+        Rect m_BuiltRect;
+        float m_BuiltPixel, m_BuiltDetailPixel, m_BuiltMaskReach;
+        bool m_BuiltRequireDistance;
+
+        void BeginFrame(out ShapeFrame frame, out bool requireDistance, out float reach)
+        {
+            frame = Frame;
+            frame.detailPixelSize = DetailPixelSize(frame.pixelSize);
+            requireDistance = false;
+            reach = 0f;
+            if (TryGetComponent(out VectraMask mask) && mask.IsSoft)
+            {
+                requireDistance = true;
+                reach = mask.Softness * 2f + Mathf.Abs(mask.Inset);
+            }
+        }
+
+        public override void SetVerticesDirty()
+        {
+            // The flag covers only the colour property's own call, not callbacks that run inside base.SetVerticesDirty.
+            bool colorOnly = m_InColorSetter;
+            m_InColorSetter = false;
+            if (!colorOnly) m_FullBuild = true;
+            base.SetVerticesDirty();
+        }
+
+        internal VectraShapeRenderer BuiltRenderer => m_Renderer;
 
         int IVectraTicked.WatchSlot
         {
@@ -342,11 +394,10 @@ namespace FirstSymbol.Vectra
         void UpdateGeometryCore()
         {
             s_Rebuilds++;
-            if (m_Renderer == null) m_Renderer = new VectraShapeRenderer();
-            if (m_Mesh == null)
+            if (m_Renderer == null)
             {
-                m_Mesh = new Mesh { name = "Vectra Shape", hideFlags = HideFlags.HideAndDontSave };
-                m_Mesh.MarkDynamic();
+                m_Renderer = new VectraShapeRenderer { recordColors = true };
+                m_FullBuild = true;
             }
 
             if (rectTransform == null || rectTransform.rect.width < 0f || rectTransform.rect.height < 0f)
@@ -355,19 +406,36 @@ namespace FirstSymbol.Vectra
                 return;
             }
 
-            var frame = Frame;
-            frame.detailPixelSize = DetailPixelSize(frame.pixelSize);
+            BeginFrame(out var frame, out bool requireDistance, out float reach);
+            // The geometry depends on the pixel size (margins, tolerance, pixel strokes): only an identical frame may keep it.
+            if (!m_FullBuild && frame.rect == m_BuiltRect && frame.pixelSize == m_BuiltPixel &&
+                frame.detailPixelSize == m_BuiltDetailPixel && requireDistance == m_BuiltRequireDistance &&
+                reach == m_BuiltMaskReach && m_Renderer.TryRecolor(color))
+            {
+                var recolored = WorkerMesh();
+                m_Renderer.buffer.Upload(recolored);
+                canvasRenderer.SetMesh(recolored);
+                return;
+            }
+
+            m_BuiltRect = frame.rect;
+            m_BuiltPixel = frame.pixelSize;
+            m_BuiltDetailPixel = frame.detailPixelSize;
+            m_BuiltRequireDistance = requireDistance;
+            m_BuiltMaskReach = reach;
             m_BuiltDetail = frame.FlattenSize;
             var input = m_Content.ToInput(frame, color, false);
-            if (TryGetComponent(out VectraMask mask) && mask.IsSoft)
+            if (requireDistance)
             {
                 input.requireDistance = true;
-                input.distanceReach = mask.Softness * 2f + Mathf.Abs(mask.Inset);
+                input.distanceReach = reach;
             }
 
             m_Renderer.Build(input);
-            m_Renderer.buffer.Upload(m_Mesh);
-            canvasRenderer.SetMesh(m_Mesh);
+            m_FullBuild = false;
+            var mesh = WorkerMesh();
+            m_Renderer.buffer.Upload(mesh);
+            canvasRenderer.SetMesh(mesh);
             m_LastScale = CurrentScale();
 
             if (m_LastTexture != m_Renderer.mainTexture)
