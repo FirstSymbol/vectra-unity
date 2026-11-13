@@ -45,7 +45,6 @@ namespace FirstSymbol.Vectra.UIToolkit
 
         static readonly List<SurfacePage> s_Pages = new List<SurfacePage>();
         static CommandBuffer s_Cmd;
-        static MaterialPropertyBlock s_Block;
         static Material s_ClearMaterial;
         static Mesh s_Quad;
         static readonly int s_MainTex = Shader.PropertyToID("_MainTex");
@@ -176,6 +175,15 @@ namespace FirstSymbol.Vectra.UIToolkit
 
         public static void DestroyAll()
         {
+            System.Array.Clear(s_Pending, 0, s_Pending.Length);
+            s_PendingCount = 0;
+            for (int i = 0; i < s_BatchMeshes.Length; i++)
+            {
+                DestroyHelper(s_BatchMeshes[i]);
+                s_BatchMeshes[i] = null;
+            }
+
+            s_Blocks.Clear();
             for (int i = s_Pages.Count - 1; i >= 0; i--) DestroyPage(s_Pages[i]);
             s_Pages.Clear();
             s_Cmd?.Release();
@@ -186,45 +194,111 @@ namespace FirstSymbol.Vectra.UIToolkit
             s_ClearMaterial = null;
         }
 
-        /// <summary>
-        /// Draws <paramref name="mesh"/> into the region. <paramref name="area"/> is the local-space rectangle (y up) that
-        /// the region's pixels cover. The region is cleared by drawing a transparent quad into its viewport and the shape is
-        /// drawn straight into the page: no scissor clear and no texture copy, which some platforms (WebGL 2) do not offer
-        /// for render textures.
-        /// </summary>
-        static readonly Unity.Profiling.ProfilerMarker s_DrawMarker = new Unity.Profiling.ProfilerMarker("Vectra.Uitk.Draw");
+        /// <summary>Scratch meshes a batch of draws is built over; a full pool runs the batch.</summary>
+        public const int BatchSize = 32;
 
-        public static bool Draw(in SurfaceRegion region, Mesh mesh, Material material, Texture main, Rect area)
+        struct PendingDraw
         {
-            using (s_DrawMarker.Auto()) return DrawCore(region, mesh, material, main, area);
+            public SurfaceRegion region;
+            public Material material;
+            public Texture main;
+            public Rect area;
         }
 
-        static bool DrawCore(in SurfaceRegion region, Mesh mesh, Material material, Texture main, Rect area)
+        static readonly PendingDraw[] s_Pending = new PendingDraw[BatchSize];
+        static readonly Mesh[] s_BatchMeshes = new Mesh[BatchSize];
+        static int s_PendingCount;
+        static readonly Dictionary<Texture, MaterialPropertyBlock> s_Blocks = new Dictionary<Texture, MaterialPropertyBlock>();
+
+        /// <summary>Draws still waiting for <see cref="Flush"/>.</summary>
+        public static int PendingCount => s_PendingCount;
+
+        /// <summary>
+        /// The mesh the next <see cref="Queue"/> call draws: upload the shape into it first. Meshes are shared by every element (a draw only
+        /// needs its mesh until the batch runs), so nothing is kept per element.
+        /// </summary>
+        public static Mesh NextMesh()
         {
-            if (!region.IsValid || mesh == null || material == null) return false;
-            var clear = ClearMaterial;
-            if (clear == null) return false;
-            VectraAtlases.Flush();
-            s_Cmd ??= new CommandBuffer { name = "Vectra UI Toolkit" };
-            s_Block ??= new MaterialPropertyBlock();
-            s_Quad ??= MakeQuad();
-            var cmd = s_Cmd;
-            var page = region.page;
-            var previous = RenderTexture.active;
-            cmd.SetRenderTarget(page.texture);
-            cmd.SetViewport(new Rect(region.x, region.y, region.w, region.h));
-            cmd.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.identity);
-            cmd.DrawMesh(s_Quad, Matrix4x4.identity, clear, 0, 0);
-            var proj = Matrix4x4.Ortho(area.xMin, area.xMax, area.yMin, area.yMax, -1f, 1f);
-            cmd.SetViewProjectionMatrices(Matrix4x4.identity, GL.GetGPUProjectionMatrix(proj, true));
-            s_Block.Clear();
-            s_Block.SetTexture(s_MainTex, main != null ? main : Texture2D.whiteTexture);
-            cmd.DrawMesh(mesh, Matrix4x4.identity, material, 0, 0, s_Block);
-            Graphics.ExecuteCommandBuffer(cmd);
-            cmd.Clear();
-            Graphics.SetRenderTarget(previous);
-            DrawCount++;
+            if (s_PendingCount >= BatchSize) Flush();
+            var mesh = s_BatchMeshes[s_PendingCount];
+            if (mesh == null) s_BatchMeshes[s_PendingCount] = mesh = new Mesh { name = "Vectra UI Toolkit", hideFlags = HideFlags.HideAndDontSave };
+            return mesh;
+        }
+
+        /// <summary>
+        /// Queues the draw of the mesh from <see cref="NextMesh"/> into the region; false when it cannot be drawn. <paramref name="area"/> is the
+        /// local-space rectangle (y up) that the region's pixels cover. The batch runs before any element shows a region (<see cref="Flush"/>).
+        /// </summary>
+        public static bool Queue(in SurfaceRegion region, Material material, Texture main, Rect area)
+        {
+            if (!region.IsValid || material == null || ClearMaterial == null || s_PendingCount >= BatchSize) return false;
+            s_Pending[s_PendingCount++] = new PendingDraw { region = region, material = material, main = main, area = area };
             return true;
+        }
+
+        static readonly Unity.Profiling.ProfilerMarker s_DrawMarker = new Unity.Profiling.ProfilerMarker("Vectra.Uitk.Draw");
+
+        static MaterialPropertyBlock BlockFor(Texture main)
+        {
+            var key = main != null ? main : Texture2D.whiteTexture;
+            if (s_Blocks.TryGetValue(key, out var block) && block != null) return block;
+            if (s_Blocks.Count > 64) s_Blocks.Clear();
+            block = new MaterialPropertyBlock();
+            block.SetTexture(s_MainTex, key);
+            s_Blocks[key] = block;
+            return block;
+        }
+
+        /// <summary>
+        /// Draws the queued shapes into their regions with one command buffer. A region is cleared by drawing a transparent quad into its
+        /// viewport and the shape is drawn straight into the page: no scissor clear and no texture copy, which some platforms (WebGL 2) do not
+        /// offer for render textures.
+        /// </summary>
+        public static void Flush()
+        {
+            int n = s_PendingCount;
+            if (n == 0) return;
+            s_PendingCount = 0;
+            using (s_DrawMarker.Auto())
+            {
+                var clear = ClearMaterial;
+                if (clear != null)
+                {
+                    VectraAtlases.Flush();
+                    s_Cmd ??= new CommandBuffer { name = "Vectra UI Toolkit" };
+                    s_Quad ??= MakeQuad();
+                    var cmd = s_Cmd;
+                    var previous = RenderTexture.active;
+                    SurfacePage current = null;
+                    var identity = Matrix4x4.identity;
+                    for (int i = 0; i < n; i++)
+                    {
+                        ref var d = ref s_Pending[i];
+                        var page = d.region.page;
+                        if (page == null || page.texture == null) continue;
+                        if (!ReferenceEquals(page, current))
+                        {
+                            cmd.SetRenderTarget(page.texture);
+                            current = page;
+                        }
+
+                        cmd.SetViewport(new Rect(d.region.x, d.region.y, d.region.w, d.region.h));
+                        cmd.SetViewProjectionMatrices(identity, identity);
+                        cmd.DrawMesh(s_Quad, identity, clear, 0, 0);
+                        var area = d.area;
+                        var proj = Matrix4x4.Ortho(area.xMin, area.xMax, area.yMin, area.yMax, -1f, 1f);
+                        cmd.SetViewProjectionMatrices(identity, GL.GetGPUProjectionMatrix(proj, true));
+                        cmd.DrawMesh(s_BatchMeshes[i], identity, d.material, 0, 0, BlockFor(d.main));
+                        DrawCount++;
+                    }
+
+                    Graphics.ExecuteCommandBuffer(cmd);
+                    cmd.Clear();
+                    Graphics.SetRenderTarget(previous);
+                }
+            }
+
+            System.Array.Clear(s_Pending, 0, n);
         }
 
         static Material ClearMaterial
@@ -254,7 +328,6 @@ namespace FirstSymbol.Vectra.UIToolkit
             // Without a domain reload (Enter Play Mode options) the pages of the last session are still alive; elements that
             // still hold a region notice the lost texture in their next poll and draw again.
             DestroyAll();
-            s_Block = null;
             DrawCount = 0;
         }
 
