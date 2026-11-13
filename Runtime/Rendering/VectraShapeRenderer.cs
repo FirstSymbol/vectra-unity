@@ -1006,8 +1006,8 @@ namespace FirstSymbol.Vectra.Rendering
                     r.kind = PaintKind.Freeform;
                     var rows = VectraGradientAtlas.Acquire(paint, m_Adjust);
                     m_NextRows.Add(rows);
-                    r.v = VectraGradientAtlas.RowV(rows);
-                    r.param = VectraGradientAtlas.BlockSpanV(rows);
+                    r.v = VectraGradientAtlas.MeshRowV(rows);
+                    r.param = VectraGradientAtlas.MeshBlockSpanV(rows);
                     r.toPaint = normalized;
                     r.color = ToVertex(tint);
                     return r;
@@ -1017,7 +1017,7 @@ namespace FirstSymbol.Vectra.Rendering
             {
                 var rows = VectraGradientAtlas.Acquire(paint, m_Adjust);
                 m_NextRows.Add(rows);
-                r.v = VectraGradientAtlas.RowV(rows);
+                r.v = VectraGradientAtlas.MeshRowV(rows);
                 r.color = ToVertex(tint);
                 r.spread = (int)paint.spread;
             }

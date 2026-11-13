@@ -122,7 +122,9 @@ namespace FirstSymbol.Vectra.Rendering
         static Color[] s_Pixels;
         static bool[] s_Used;
         static int s_Height;
-        static bool s_Dirty;
+        static bool s_Dirty; // the whole texture must be uploaded
+        static int s_DirtyMin = int.MaxValue, s_DirtyMax; // otherwise only rows [min, max) changed
+        static Texture2D s_Staging;
         static bool s_UseHalf;
         static bool s_Warned;
         static readonly Dictionary<int, Entry> s_Entries = new Dictionary<int, Entry>();
@@ -195,14 +197,24 @@ namespace FirstSymbol.Vectra.Rendering
                 anisoLevel = 0
             };
             s_Dirty = true;
+            s_DirtyMin = int.MaxValue;
+            s_DirtyMax = 0;
             Shader.SetGlobalTexture(VectraAtlases.GradientsId, s_Texture);
         }
 
-        /// <summary>V coordinate of the centre of the first row.</summary>
+        /// <summary>V coordinate of the centre of the first row in the current texture.</summary>
         public static float RowV(in GradientRows rows) => (rows.row + 0.5f) / math.max(s_Height, 1);
 
-        /// <summary>V distance between the first and the last row of a block.</summary>
+        /// <summary>V distance between the first and the last row of a block in the current texture.</summary>
         public static float BlockSpanV(in GradientRows rows) => (rows.count - 1f) / math.max(s_Height, 1);
+
+        /// <summary>
+        /// What meshes store: the row coordinate for an atlas of <see cref="MaxHeight"/> rows. The shader scales it by
+        /// MaxHeight / texture height (powers of two: exact), so growing the texture never changes a mesh.
+        /// </summary>
+        internal static float MeshRowV(in GradientRows rows) => (rows.row + 0.5f) * (1f / MaxHeight);
+
+        internal static float MeshBlockSpanV(in GradientRows rows) => (rows.count - 1f) * (1f / MaxHeight);
 
         /// <summary>Acquires (or shares) the rows needed by <paramref name="paint"/>.</summary>
         public static GradientRows Acquire(VectraPaint paint, in ColorAdjust adjust)
@@ -352,8 +364,6 @@ namespace FirstSymbol.Vectra.Rendering
             s_Used = used;
             s_Height = newHeight;
             CreateTexture();
-            // Row V coordinates depend on the height: everybody rebuilds.
-            VectraAtlases.InvalidateClients();
         }
 
         static int CountUsed()
@@ -499,7 +509,11 @@ namespace FirstSymbol.Vectra.Rendering
                 s_Pixels[(row + y) * Width + x] = c;
             }
 
-            s_Dirty = true;
+            if (!s_Dirty)
+            {
+                if (row < s_DirtyMin) s_DirtyMin = row;
+                if (row + count > s_DirtyMax) s_DirtyMax = row + count;
+            }
         }
 
         static readonly Unity.Profiling.ProfilerMarker s_FlushMarker = new Unity.Profiling.ProfilerMarker("Vectra.GradientAtlas.Flush");
@@ -518,8 +532,22 @@ namespace FirstSymbol.Vectra.Rendering
             }
 
             Shader.SetGlobalTexture(VectraAtlases.GradientsId, s_Texture);
-            if (!s_Dirty) return;
+            if (!s_Dirty)
+            {
+                if (s_DirtyMax <= s_DirtyMin) return;
+                // Rows baked since the last upload: send only those (a UI Toolkit element flushes after every bake).
+                if (s_UseHalf && SystemInfo.copyTextureSupport != CopyTextureSupport.None)
+                {
+                    UploadRows(s_DirtyMin, s_DirtyMax);
+                    s_DirtyMin = int.MaxValue;
+                    s_DirtyMax = 0;
+                    return;
+                }
+            }
+
             s_Dirty = false;
+            s_DirtyMin = int.MaxValue;
+            s_DirtyMax = 0;
             if (s_UseHalf)
             {
                 var data = new NativeArray<half>(Width * s_Height * 4, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
@@ -543,10 +571,46 @@ namespace FirstSymbol.Vectra.Rendering
             s_Texture.Apply(false, false);
         }
 
+        static void UploadRows(int from, int to)
+        {
+            int n = to - from;
+            if (s_Staging == null || s_Staging.height < n)
+            {
+                int h = math.max((n + 15) & ~15, s_Staging != null ? s_Staging.height : 0);
+                if (s_Staging != null) UnityEngine.Object.DestroyImmediate(s_Staging);
+                s_Staging = new Texture2D(Width, h, TextureFormat.RGBAHalf, false, true)
+                {
+                    name = "Vectra Gradient Staging",
+                    hideFlags = HideFlags.HideAndDontSave,
+                    filterMode = FilterMode.Point
+                };
+            }
+
+            var data = new NativeArray<half>(Width * s_Staging.height * 4, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+            int src = from * Width;
+            for (int i = 0; i < n * Width; i++)
+            {
+                var c = s_Pixels[src + i];
+                data[i * 4] = (half)c.r;
+                data[i * 4 + 1] = (half)c.g;
+                data[i * 4 + 2] = (half)c.b;
+                data[i * 4 + 3] = (half)c.a;
+            }
+
+            s_Staging.SetPixelData(data, 0);
+            data.Dispose();
+            s_Staging.Apply(false, false);
+            Graphics.CopyTexture(s_Staging, 0, 0, 0, 0, Width, n, s_Texture, 0, 0, 0, from);
+        }
+
         internal static void Dispose()
         {
             if (s_Texture != null) UnityEngine.Object.DestroyImmediate(s_Texture);
             s_Texture = null;
+            if (s_Staging != null) UnityEngine.Object.DestroyImmediate(s_Staging);
+            s_Staging = null;
+            s_DirtyMin = int.MaxValue;
+            s_DirtyMax = 0;
             s_Pixels = null;
             s_Used = null;
             s_Height = 0;
