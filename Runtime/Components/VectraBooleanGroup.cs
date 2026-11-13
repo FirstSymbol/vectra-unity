@@ -22,7 +22,9 @@ namespace FirstSymbol.Vectra
 
         int m_LastHash;
         bool m_Dirty = true;
+        // Operand objects are reused between syncs (the owner's boolean shape holds them), so a sync does not allocate.
         readonly List<BooleanOperand> m_Operands = new List<BooleanOperand>();
+        int m_OperandCount;
 
         public float Smoothness
         {
@@ -90,7 +92,7 @@ namespace FirstSymbol.Vectra
         /// <summary>Rebuilds the operand list from the children and pushes it to the owner shape.</summary>
         public void Sync()
         {
-            m_Operands.Clear();
+            m_OperandCount = 0;
             // Indexed loop: enumerating a Transform allocates.
             for (int ci = 0; ci < transform.childCount; ci++)
             {
@@ -112,14 +114,14 @@ namespace FirstSymbol.Vectra
                 if (geometry == null || geometry is BooleanShape) continue;
                 var m = transform.worldToLocalMatrix * child.localToWorldMatrix;
                 var op = child.TryGetComponent(out VectraBooleanOperand o) ? o.operation : BooleanOp.Union;
-                m_Operands.Add(new BooleanOperand
-                {
-                    geometry = geometry,
-                    operation = op,
-                    rect = rect,
-                    absolute = true,
-                    transform = new Affine2(m.m00, m.m10, m.m01, m.m11, m.m03, m.m13)
-                });
+                if (m_OperandCount == m_Operands.Count) m_Operands.Add(new BooleanOperand());
+                var operand = m_Operands[m_OperandCount++];
+                operand.enabled = true;
+                operand.geometry = geometry;
+                operand.operation = op;
+                operand.rect = rect;
+                operand.absolute = true;
+                operand.transform = new Affine2(m.m00, m.m10, m.m01, m.m11, m.m03, m.m13);
                 SetHidden(child, m_HideOperands);
             }
 
@@ -142,7 +144,7 @@ namespace FirstSymbol.Vectra
         {
             target.smoothness = m_Smoothness;
             target.operands.Clear();
-            target.operands.AddRange(m_Operands);
+            for (int i = 0; i < m_OperandCount; i++) target.operands.Add(m_Operands[i]);
         }
 
         static void SetHidden(Transform child, bool hidden)
