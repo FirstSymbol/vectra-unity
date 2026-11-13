@@ -4,6 +4,32 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-11-13
+
+Performance release: what Vectra costs was measured against plain uGUI, UI Toolkit, `SpriteRenderer` and `com.unity.vectorgraphics` (harness in `Perf~/`, figures in `Documentation~/Performance.md`) and the costly paths were rebuilt. Output is unchanged: the Figma corpus, the harness scenes, world shapes, booleans, SVG icons and UI Toolkit panels render the same pixels and meshes as in 0.7.5 (two exceptions below), in Linear and Gamma projects and with the package as a folder under `Assets/Plugins`. Windows IL2CPP release, median of 5, 0.7.5 to 0.8.0: creating 1,000 Canvas shapes 522 to 101 ms; rebuilding them 28.7 to 14.4 ms; a steady frame of 1,000 shapes 1.07 to 0.73 ms of main thread; 5,000 world shapes 7.0 to 2.0 ms a frame; 300 SVG icons first frame 218 to 53 ms; 100 smooth booleans 124 to 34 ms; resizing 1,000 UI Toolkit elements 43 to 16 ms and their memory 135 to 57 MB.
+
+### Fixed
+- Creating many gradient shapes in one frame logged "Trying to add ... for graphic rebuild while we are already inside a graphic rebuild loop" once per shape and atlas growth (2,000 errors and about 30 MB of garbage for 1,000 shapes) and could leave shapes unbuilt for a frame: the gradient atlas now grows without asking shapes to rebuild. Scenes that hit this are the one place where 0.8.0 draws differently from 0.7.5 (correctly).
+- Rebuilding boolean shapes, star and polygon paths and `VectraBooleanGroup` children, and resizing UI Toolkit elements, no longer allocate managed memory.
+
+### Changed
+- Meshes are uploaded with one interleaved vertex buffer write (same bytes as before) instead of six channel setters and six temporary arrays.
+- A tint change on a `VectraShape` (colour, alpha, fades) rewrites the vertex colours of the last build when nothing else changed since that build; anything else builds as before.
+- Stroke tessellation (dashes and other heavy strokes) is cached per distinct outline and stroke setting and shared between shapes.
+- Canvas shapes share one worker mesh, as uGUI's own graphics do, and start with small scratch lists: 1,000 Canvas shapes take 40 MB instead of 56, 5,000 world shapes 259 MB instead of 303. Deactivating 1,000 Canvas shapes costs about 1 ms more than before (uGUI's `Image` costs the same).
+- `VectraShape`, `VectraRenderer`, `VectraSvgImage` and `VectraBooleanGroup` no longer poll in `LateUpdate`: one registry runs one job per frame over their transforms, and only components that moved, depend on a camera or have a pending debounce check themselves. Same rebuild triggers in the same frame as before. A dirtied `VectraRenderer` builds once per frame (before the first camera culls if that comes first); the mesh, bounds and generated collider still exist right after `OnEnable`, `AddComponent` and `Instantiate`.
+- Gradient atlas rows baked after an upload are sent to the GPU alone (WebGL uploads the whole atlas).
+- Identical composited SVG instances (same document, size, density, overrides and colour blending) share one render texture and one composite: 300 icons draw 8 pictures instead of 300 (1.8 MB less).
+- Distance-field baking is vectorized and the smooth boolean combine runs in Burst; results are bit-identical to the managed code under IL2CPP (checked over 8 million texels).
+- UI Toolkit: one rebuild and one poll scheduler item per panel instead of two per element (the scheduler's linear removal made resizing 1,000 elements cost 50 ms), rasters drawn in batches over one staged mesh with one clear per page run, the default style sheet looked up once, surface shelves reused, slots a multiple of 8 px wide. A gradient in a UI Toolkit element at a panel scale that is not a whole number can differ from 0.7.5 by at most 3 levels in its dither.
+- Destroying all Vectra components gives back the registry, the worker mesh and their memory.
+- ProfilerMarkers on the build path (`Vectra.Build`, `Tessellate`, `BakeSdf`, `Stroke`, `MeshUpload`, atlas flushes, SVG parse and composite, UI Toolkit raster); no cost in players without the profiler.
+- New `Documentation~/Performance.md` (EN/RU) with the figures and the known costs; the harness that measured them is in `Perf~/`.
+
+### Upgrade notes
+- Gradient rows in Vectra meshes are stored for an atlas of 4096 rows and the Vectra shaders scale them to the texture height (`GradientV` in `VectraCore.hlsl`). Code that writes mesh V for the Vectra shaders (`LayerConstants.paintV`, `VectraMeshBuffer.AddQuad`) must use `VectraGradientAtlas.MeshRowV` / `MeshBlockSpanV` (now public) instead of `RowV` / `BlockSpanV`, which keep their meaning (rows of the current texture, for sampling it yourself). Custom HLSL that samples `_VectraGradients` with Vectra mesh V must call `GradientV(v)` first. `IVectraAtlasClient.OnAtlasInvalidated` is no longer called when the gradient atlas grows; it still is when the SDF atlas resets.
+- A shape edited without `SetVerticesDirty` / `SetShapeDirty` (as the docs require) is no longer refreshed by a following colour change alone.
+
 ## [0.7.5] - 2026-11-11
 
 ### Fixed
