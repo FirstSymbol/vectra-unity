@@ -257,6 +257,30 @@ namespace FirstSymbol.Vectra
             return math.max(math.abs(s.x), math.abs(s.y));
         }
 
+        // True until a build has run for the current content; anything that dirties the vertices other than the colour
+        // property sets it. A tint change alone rewrites the vertex colours of the last build.
+        bool m_FullBuild = true;
+        bool m_InColorSetter;
+
+        public override Color color
+        {
+            get => base.color;
+            set
+            {
+                m_InColorSetter = true;
+                try { base.color = value; }
+                finally { m_InColorSetter = false; }
+            }
+        }
+
+        public override void SetVerticesDirty()
+        {
+            if (!m_InColorSetter) m_FullBuild = true;
+            base.SetVerticesDirty();
+        }
+
+        internal VectraShapeRenderer BuiltRenderer => m_Renderer;
+
         void LateUpdate()
         {
             // Pixel-size dependent tessellation and anti-aliasing margins follow large scale changes.
@@ -320,10 +344,23 @@ namespace FirstSymbol.Vectra
 
         void UpdateGeometryCore()
         {
-            if (m_Renderer == null) m_Renderer = new VectraShapeRenderer();
+            if (m_Renderer == null)
+            {
+                m_Renderer = new VectraShapeRenderer { recordColors = true };
+                m_FullBuild = true;
+            }
+
             if (rectTransform == null || rectTransform.rect.width < 0f || rectTransform.rect.height < 0f)
             {
                 canvasRenderer.Clear();
+                return;
+            }
+
+            if (!m_FullBuild && m_Renderer.TryRecolor(color))
+            {
+                var recolored = WorkerMesh();
+                m_Renderer.buffer.Upload(recolored);
+                canvasRenderer.SetMesh(recolored);
                 return;
             }
 
@@ -338,6 +375,7 @@ namespace FirstSymbol.Vectra
             }
 
             m_Renderer.Build(input);
+            m_FullBuild = false;
             var mesh = WorkerMesh();
             m_Renderer.buffer.Upload(mesh);
             canvasRenderer.SetMesh(mesh);
