@@ -93,6 +93,15 @@ namespace FirstSymbol.VectraPerf.Editor
                 }
 
                 if (row == null) continue;
+                // The deactivation and the reactivation frame of V11 carry the same marker; a deactivation runs OnDisable.
+                if (row.StartsWith("V11", StringComparison.Ordinal))
+                {
+                    bool off = false;
+                    foreach (var key in found.Keys)
+                        if (key.Contains("OnDisable")) { off = true; break; }
+                    row += off ? ".off" : ".on";
+                }
+
                 if (!perRow.TryGetValue(row, out var acc)) perRow[row] = acc = new Dictionary<string, Acc>();
                 foreach (var pair in found)
                 {
