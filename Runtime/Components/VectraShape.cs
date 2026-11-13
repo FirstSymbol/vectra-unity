@@ -14,7 +14,7 @@ namespace FirstSymbol.Vectra
     [ExecuteAlways]
     [RequireComponent(typeof(CanvasRenderer))]
     [AddComponentMenu("Vectra/Vectra Shape (UI)")]
-    public class VectraShape : MaskableGraphic, ILayoutElement, IVectraAtlasClient, IVectraShape
+    public class VectraShape : MaskableGraphic, ILayoutElement, IVectraAtlasClient, IVectraShape, IVectraTicked
     {
         [SerializeField] VectraShapeContent m_Content = new VectraShapeContent();
         [Tooltip("Use the exact outline for raycasts instead of the rect.")]
@@ -27,8 +27,10 @@ namespace FirstSymbol.Vectra
         Mesh m_Mesh;
         float m_LastScale;
         Texture m_LastTexture;
+        int m_WatchSlot = -1;
+        bool m_Follows;
 
-        static readonly List<VectraShape> s_StyleUsers = new List<VectraShape>();
+        static readonly HashSet<VectraShape> s_StyleUsers = new HashSet<VectraShape>();
         static bool s_StyleHooked;
 
         public VectraShapeContent Content => m_Content;
@@ -170,11 +172,13 @@ namespace FirstSymbol.Vectra
             VectraAtlases.Register(this);
             HookStyles();
             s_StyleUsers.Add(this);
-            m_LastScale = CurrentScale();
+            m_Follows = false;
+            VectraWatch.Add(this, transform, VectraWatch.GroupShape, false);
         }
 
         protected override void OnDisable()
         {
+            VectraWatch.Remove(this);
             VectraAtlases.Unregister(this);
             s_StyleUsers.Remove(this);
             base.OnDisable();
@@ -226,6 +230,7 @@ namespace FirstSymbol.Vectra
         {
             base.OnCanvasHierarchyChanged();
             EnsureChannels();
+            VectraWatch.Request(this);
         }
 
         protected override void OnTransformParentChanged()
@@ -250,8 +255,26 @@ namespace FirstSymbol.Vectra
             return math.max(math.abs(s.x), math.abs(s.y));
         }
 
-        void LateUpdate()
+        int IVectraTicked.WatchSlot
         {
+            get => m_WatchSlot;
+            set => m_WatchSlot = value;
+        }
+
+        bool IVectraTicked.WatchPoll() => false;
+
+        // The old LateUpdate. VectraWatch calls it when the transform moved, every frame while a camera or an editor view can change what
+        // the shape needs, and once in a while for every shape (state that has no notification, such as a canvas changing its render mode).
+        bool IVectraTicked.WatchTick()
+        {
+            bool follows = VectraScreenDensity.CanvasFollowsViews(canvas);
+            if (canvas != null) VectraWatch.ObserveCanvas(canvas.rootCanvas);
+            if (follows != m_Follows)
+            {
+                m_Follows = follows;
+                VectraWatch.SetAlways(this, follows);
+            }
+
             // Pixel-size dependent tessellation and anti-aliasing margins follow large scale changes.
             float s = CurrentScale();
             bool fine = m_Content.HasPixelStrokes;
@@ -267,6 +290,8 @@ namespace FirstSymbol.Vectra
                 float now = VectraScreenDensity.CanvasDensest(transform, canvas, px);
                 if (VectraScreenDensity.Drifted(now < px ? now : px, m_BuiltDetail, ref m_NextDetailCheck, Time.unscaledTime)) SetVerticesDirty();
             }
+
+            return false;
         }
 
         /// <summary>Size of a screen pixel in this graphic's local units.</summary>
@@ -311,8 +336,12 @@ namespace FirstSymbol.Vectra
             using (s_UpdateMarker.Auto()) UpdateGeometryCore();
         }
 
+        /// <summary>Meshes built by all shapes since the domain loaded (diagnostics, tests).</summary>
+        internal static int s_Rebuilds;
+
         void UpdateGeometryCore()
         {
+            s_Rebuilds++;
             if (m_Renderer == null) m_Renderer = new VectraShapeRenderer();
             if (m_Mesh == null)
             {

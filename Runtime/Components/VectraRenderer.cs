@@ -13,7 +13,7 @@ namespace FirstSymbol.Vectra
     [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     [AddComponentMenu("Vectra/Vectra Renderer (World)")]
-    public class VectraRenderer : MonoBehaviour, IVectraAtlasClient, IVectraShape
+    public class VectraRenderer : MonoBehaviour, IVectraAtlasClient, IVectraShape, IVectraTicked
     {
         [SerializeField] VectraShapeContent m_Content = new VectraShapeContent();
         [SerializeField] Vector2 m_Size = new Vector2(1f, 1f);
@@ -34,8 +34,10 @@ namespace FirstSymbol.Vectra
         bool m_Dirty = true;
         float m_BuiltPixelSize;
         VectraWorldShaderKind m_ShaderKind;
+        int m_WatchSlot = -1;
+        bool m_Follows;
 
-        static readonly List<VectraRenderer> s_StyleUsers = new List<VectraRenderer>();
+        static readonly HashSet<VectraRenderer> s_StyleUsers = new HashSet<VectraRenderer>();
         static bool s_StyleHooked;
 
         public VectraShapeContent Content => m_Content;
@@ -113,13 +115,19 @@ namespace FirstSymbol.Vectra
             return g;
         }
 
-        public void SetDirty() => m_Dirty = true;
+        public void SetDirty() => MarkDirty();
 
         /// <summary>Call after changing geometry, fills, strokes or effects from code.</summary>
-        public void SetShapeDirty() => m_Dirty = true;
+        public void SetShapeDirty() => MarkDirty();
 
         // Animator / Timeline wrote serialized fields directly.
-        void OnDidApplyAnimationProperties() => m_Dirty = true;
+        void OnDidApplyAnimationProperties() => MarkDirty();
+
+        void MarkDirty()
+        {
+            m_Dirty = true;
+            VectraWatch.Request(this);
+        }
 
         void OnEnable()
         {
@@ -149,11 +157,19 @@ namespace FirstSymbol.Vectra
             s_StyleUsers.Add(this);
             ApplyRendererSettings();
             m_Dirty = true;
+            m_Follows = false;
+            s_Alive++;
+            VectraWatch.PreTick -= OnWatchPreTick;
+            VectraWatch.PreTick += OnWatchPreTick;
+            VectraWatch.Add(this, transform, VectraWatch.GroupRenderer, false);
+            // The mesh, bounds and collider exist as soon as the component does (Start, FixedUpdate and physics queries rely on it).
             Rebuild();
         }
 
         void OnDisable()
         {
+            VectraWatch.Remove(this);
+            if (s_Alive > 0) s_Alive--;
             VectraAtlases.Unregister(this);
             s_StyleUsers.Remove(this);
         }
@@ -174,7 +190,7 @@ namespace FirstSymbol.Vectra
         void IVectraAtlasClient.OnAtlasInvalidated()
         {
             m_Renderer?.Invalidate();
-            m_Dirty = true;
+            MarkDirty();
         }
 
         void ApplyRendererSettings()
@@ -188,8 +204,79 @@ namespace FirstSymbol.Vectra
             m_MeshRenderer.receiveShadows = false;
         }
 
-        void LateUpdate()
+        int IVectraTicked.WatchSlot
         {
+            get => m_WatchSlot;
+            set => m_WatchSlot = value;
+        }
+
+        bool IVectraTicked.WatchPoll() => false;
+
+        static int s_Alive;
+        static bool s_CameraKnown;
+        static int s_CameraId;
+        static Vector3 s_CameraPosition;
+        static Quaternion s_CameraRotation;
+        static bool s_CameraOrtho;
+        static float s_CameraSize, s_CameraFov, s_CameraNear;
+        static int s_CameraHeight;
+        static VectraWorldShaderKind s_FrameKind;
+
+        // Once per frame, for every renderer: the shared inputs of the pixel size (the main camera) and of the shader choice. A change asks
+        // all renderers to check themselves; otherwise only the ones whose transform moved do.
+        static void OnWatchPreTick()
+        {
+            if (s_Alive <= 0) return;
+            bool changed = false;
+            var kind = VectraMaterials.CurrentWorldKind;
+            if (kind != s_FrameKind)
+            {
+                s_FrameKind = kind;
+                changed = true;
+            }
+
+            var cam = Camera.main;
+            if (cam == null)
+            {
+                if (s_CameraKnown && s_CameraId != 0) changed = true;
+                s_CameraKnown = true;
+                s_CameraId = 0;
+            }
+            else
+            {
+                var t = cam.transform;
+                var pos = t.position;
+                var rot = t.rotation;
+                bool ortho = cam.orthographic;
+                float size = cam.orthographicSize, fov = cam.fieldOfView, near = cam.nearClipPlane;
+                int height = cam.pixelHeight, id = cam.GetHashCode();
+                if (!s_CameraKnown || id != s_CameraId || pos != s_CameraPosition || rot != s_CameraRotation || ortho != s_CameraOrtho ||
+                    size != s_CameraSize || fov != s_CameraFov || near != s_CameraNear || height != s_CameraHeight)
+                    changed = true;
+                s_CameraKnown = true;
+                s_CameraId = id;
+                s_CameraPosition = pos;
+                s_CameraRotation = rot;
+                s_CameraOrtho = ortho;
+                s_CameraSize = size;
+                s_CameraFov = fov;
+                s_CameraNear = near;
+                s_CameraHeight = height;
+            }
+
+            if (changed) VectraWatch.RequestGroup(VectraWatch.GroupRenderer);
+        }
+
+        // The old LateUpdate; see VectraWatch for when it runs.
+        bool IVectraTicked.WatchTick()
+        {
+            bool follows = VectraScreenDensity.HasExtraCameras;
+            if (follows != m_Follows)
+            {
+                m_Follows = follows;
+                VectraWatch.SetAlways(this, follows);
+            }
+
             // The render pipeline can change while the shape lives (quality levels, editor): switch to its shader.
             if (m_ShaderKind != VectraMaterials.CurrentWorldKind) ApplyRendererSettings();
             if (!m_Dirty && m_PixelSize <= 0f)
@@ -206,6 +293,7 @@ namespace FirstSymbol.Vectra
             }
 
             if (m_Dirty) Rebuild();
+            return false;
         }
 
         float m_BuiltDetail;
@@ -245,8 +333,12 @@ namespace FirstSymbol.Vectra
             using (s_RebuildMarker.Auto()) RebuildCore();
         }
 
+        /// <summary>Meshes built by all renderers since the domain loaded (diagnostics, tests).</summary>
+        internal static int s_Rebuilds;
+
         void RebuildCore()
         {
+            s_Rebuilds++;
             m_Dirty = false;
             if (m_Renderer == null) m_Renderer = new VectraShapeRenderer();
             if (m_Mesh == null)
@@ -302,7 +394,7 @@ namespace FirstSymbol.Vectra
 #if UNITY_EDITOR
         void OnValidate()
         {
-            m_Dirty = true;
+            MarkDirty();
             m_Renderer?.Invalidate();
             if (m_MeshRenderer == null) m_MeshRenderer = GetComponent<MeshRenderer>();
             ApplyRendererSettings();

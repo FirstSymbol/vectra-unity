@@ -17,7 +17,7 @@ namespace FirstSymbol.Vectra
     [ExecuteAlways]
     [RequireComponent(typeof(CanvasRenderer))]
     [AddComponentMenu("Vectra/Vectra SVG Image (UI)")]
-    public class VectraSvgImage : MaskableGraphic, ILayoutElement, IVectraAtlasClient
+    public class VectraSvgImage : MaskableGraphic, ILayoutElement, IVectraAtlasClient, IVectraTicked
     {
         [SerializeField] VectraSvgDocument m_Document;
         [SerializeField] bool m_PreserveAspect = true;
@@ -173,6 +173,8 @@ namespace FirstSymbol.Vectra
             EnsureChannels();
             VectraAtlases.Register(this);
             m_ChildrenDirty = true;
+            m_Follows = false;
+            VectraWatch.Add(this, transform, VectraWatch.GroupOther, true);
         }
 
         // A component added before it is parented under a Canvas (new GameObject + SetParent) has no canvas in OnEnable.
@@ -180,6 +182,7 @@ namespace FirstSymbol.Vectra
         {
             base.OnCanvasHierarchyChanged();
             EnsureChannels();
+            VectraWatch.Request(this);
         }
 
         protected override void OnTransformParentChanged()
@@ -200,6 +203,7 @@ namespace FirstSymbol.Vectra
 
         protected override void OnDisable()
         {
+            VectraWatch.Remove(this);
             VectraAtlases.Unregister(this);
             ClearGenerated();
             base.OnDisable();
@@ -324,7 +328,37 @@ namespace FirstSymbol.Vectra
             renderer.buffer.Upload(mesh);
         }
 
-        void LateUpdate() => RefreshGenerated();
+        int m_WatchSlot = -1;
+        bool m_Follows;
+        bool m_Stay;
+
+        int IVectraTicked.WatchSlot
+        {
+            get => m_WatchSlot;
+            set => m_WatchSlot = value;
+        }
+
+        // Managed state only: what the old LateUpdate noticed without asking Unity.
+        bool IVectraTicked.WatchPoll() =>
+            m_ChildrenDirty || m_LayoutDirty || m_LayersDirty || m_Signature != m_BuiltSignature ||
+            (m_Document != null && m_Document.contentVersion != m_BuiltVersion);
+
+        // The old LateUpdate; see VectraWatch for when it runs. Images whose pictures depend on a camera are ticked every frame.
+        bool IVectraTicked.WatchTick()
+        {
+            var c = canvas;
+            if (c != null) VectraWatch.ObserveCanvas(c.rootCanvas);
+            bool follows = VectraScreenDensity.HasExtraCameras || (c != null && c.rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay);
+            if (follows != m_Follows)
+            {
+                m_Follows = follows;
+                VectraWatch.SetAlways(this, follows);
+            }
+
+            m_Stay = false;
+            RefreshGenerated();
+            return m_Stay;
+        }
 
         /// <summary>Brings the generated children up to date: rebuilds them when the document changed, otherwise only moves them.</summary>
         internal void RefreshGenerated()
@@ -377,6 +411,7 @@ namespace FirstSymbol.Vectra
                     m_NextPictureCheck = Time.unscaledTime + 0.1f;
                     m_LayersDirty = true;
                 }
+                else if (Mathf.Abs(ratio - 1f) > 0.03f) m_Stay = true; // a small step waits for its debounce, nothing else will wake it
             }
 
             if (m_LayersDirty)

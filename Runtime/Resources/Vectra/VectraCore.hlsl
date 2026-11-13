@@ -247,11 +247,18 @@ float SpreadT(float t, uint spread)
     return saturate(t);
 }
 
+// Meshes store gradient rows for an atlas of 4096 rows (VectraGradientAtlas.MaxHeight) so that growing the texture
+// changes no mesh; the scale is exact because the texture height is a power of two.
+float GradientV(float v)
+{
+    return v * (4096.0 * _VectraGradients_TexelSize.y);
+}
+
 float4 SampleGradient(float t, float v)
 {
     float w = _VectraGradients_TexelSize.z;
     float u = (t * (w - 1.0) + 0.5) * _VectraGradients_TexelSize.x;
-    return tex2Dlod(_VectraGradients, float4(u, v, 0.0, 0.0));
+    return tex2Dlod(_VectraGradients, float4(u, GradientV(v), 0.0, 0.0));
 }
 
 float Hash21(float2 p)
@@ -361,7 +368,7 @@ float4 EvaluatePaint(VectraHeader h, float2 g, float2 dgdx, float2 dgdy, float v
         float2 q = saturate(g);
         float wTex = _VectraGradients_TexelSize.z;
         float u = (q.x * (wTex - 1.0) + 0.5) * _VectraGradients_TexelSize.x;
-        return tex2Dlod(_VectraGradients, float4(u, v + q.y * w, 0.0, 0.0)) * vertexColor;
+        return tex2Dlod(_VectraGradients, float4(u, GradientV(v + q.y * w), 0.0, 0.0)) * vertexColor;
     }
 
     if (kind <= PAINT_FOCAL) t = SpreadT(t, h.spread);
