@@ -92,7 +92,10 @@ namespace FirstSymbol.Vectra.UIToolkit
                     return Take(page, shelf, seg.x, seg.y, w, h, out region);
                 }
 
-                if (shelf.cursor + w <= page.width) return Take(page, shelf, shelf.cursor, w, w, h, out region, true);
+                // Slots are a multiple of eight wide like the rows are tall, so that a size that moves by a pixel or two (an animation) finds the
+                // slot it freed instead of scanning a list of slots that are one pixel too small.
+                int slot = (w + 7) & ~7;
+                if (shelf.cursor + slot <= page.width) return Take(page, shelf, shelf.cursor, slot, w, h, out region, true);
             }
 
             if (page.nextY + hr > page.height) return false;
@@ -104,7 +107,7 @@ namespace FirstSymbol.Vectra.UIToolkit
             s.live = 0;
             page.nextY += hr;
             page.shelves.Add(s);
-            return Take(page, s, 0, w, w, h, out region, true);
+            return Take(page, s, 0, (w + 7) & ~7, w, h, out region, true);
         }
 
         static bool Take(SurfacePage page, SurfaceShelf shelf, int x, int slot, int w, int h, out SurfaceRegion region, bool advance = false)
