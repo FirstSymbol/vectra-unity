@@ -855,12 +855,12 @@ namespace FirstSymbol.Vectra.Rendering
                 else
                 {
                     // Equal outlines and stroke settings (icons of one size, a size that alternates) share one result.
-                    ulong cacheKey = VectraStrokeCache.Fingerprint(m_Poly, p, dash, profile, clipMode, geometry.FillRule, clipMode != 0);
-                    if (!VectraStrokeCache.TryGet(cacheKey, ref traps))
+                    ulong cacheKey = VectraStrokeCache.Fingerprint(m_Poly, p, dash, profile, clipMode, geometry.FillRule, clipMode != 0, out ulong cacheCheck);
+                    if (!VectraStrokeCache.TryGet(cacheKey, cacheCheck, ref traps))
                     {
                         VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, default, geometry.FillRule, clipMode, ref traps,
                             clipMode != 0);
-                        VectraStrokeCache.Offer(cacheKey, traps);
+                        VectraStrokeCache.Offer(cacheKey, cacheCheck, traps);
                     }
                 }
             }

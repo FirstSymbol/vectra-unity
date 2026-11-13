@@ -273,9 +273,30 @@ namespace FirstSymbol.Vectra
             }
         }
 
+        // What the last full build read besides the content; a tint-only rewrite needs all of it unchanged.
+        Rect m_BuiltRect;
+        float m_BuiltPixel, m_BuiltDetailPixel, m_BuiltMaskReach;
+        bool m_BuiltRequireDistance;
+
+        void BeginFrame(out ShapeFrame frame, out bool requireDistance, out float reach)
+        {
+            frame = Frame;
+            frame.detailPixelSize = DetailPixelSize(frame.pixelSize);
+            requireDistance = false;
+            reach = 0f;
+            if (TryGetComponent(out VectraMask mask) && mask.IsSoft)
+            {
+                requireDistance = true;
+                reach = mask.Softness * 2f + Mathf.Abs(mask.Inset);
+            }
+        }
+
         public override void SetVerticesDirty()
         {
-            if (!m_InColorSetter) m_FullBuild = true;
+            // The flag covers only the colour property's own call, not callbacks that run inside base.SetVerticesDirty.
+            bool colorOnly = m_InColorSetter;
+            m_InColorSetter = false;
+            if (!colorOnly) m_FullBuild = true;
             base.SetVerticesDirty();
         }
 
@@ -356,7 +377,11 @@ namespace FirstSymbol.Vectra
                 return;
             }
 
-            if (!m_FullBuild && m_Renderer.TryRecolor(color))
+            BeginFrame(out var frame, out bool requireDistance, out float reach);
+            // The geometry depends on the pixel size (margins, tolerance, pixel strokes): only an identical frame may keep it.
+            if (!m_FullBuild && frame.rect == m_BuiltRect && frame.pixelSize == m_BuiltPixel &&
+                frame.detailPixelSize == m_BuiltDetailPixel && requireDistance == m_BuiltRequireDistance &&
+                reach == m_BuiltMaskReach && m_Renderer.TryRecolor(color))
             {
                 var recolored = WorkerMesh();
                 m_Renderer.buffer.Upload(recolored);
@@ -364,14 +389,17 @@ namespace FirstSymbol.Vectra
                 return;
             }
 
-            var frame = Frame;
-            frame.detailPixelSize = DetailPixelSize(frame.pixelSize);
+            m_BuiltRect = frame.rect;
+            m_BuiltPixel = frame.pixelSize;
+            m_BuiltDetailPixel = frame.detailPixelSize;
+            m_BuiltRequireDistance = requireDistance;
+            m_BuiltMaskReach = reach;
             m_BuiltDetail = frame.FlattenSize;
             var input = m_Content.ToInput(frame, color, false);
-            if (TryGetComponent(out VectraMask mask) && mask.IsSoft)
+            if (requireDistance)
             {
                 input.requireDistance = true;
-                input.distanceReach = mask.Softness * 2f + Mathf.Abs(mask.Inset);
+                input.distanceReach = reach;
             }
 
             m_Renderer.Build(input);

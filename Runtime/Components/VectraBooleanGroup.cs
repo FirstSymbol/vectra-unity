@@ -145,6 +145,7 @@ namespace FirstSymbol.Vectra
             target.smoothness = m_Smoothness;
             target.operands.Clear();
             for (int i = 0; i < m_OperandCount; i++) target.operands.Add(m_Operands[i]);
+            for (int i = m_OperandCount; i < m_Operands.Count; i++) m_Operands[i].geometry = null;
         }
 
         static void SetHidden(Transform child, bool hidden)

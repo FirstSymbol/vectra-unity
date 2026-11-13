@@ -249,7 +249,12 @@ namespace FirstSymbol.Vectra.Rendering
             new SanitizeVerticesJob { vertices = verts }.Run();
 
             var format = vc > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16;
-            if (mesh.indexFormat != format) mesh.indexFormat = format;
+            // The format changes only on an empty mesh.
+            if (mesh.indexFormat != format)
+            {
+                mesh.Clear();
+                mesh.indexFormat = format;
+            }
             mesh.SetVertexBufferParams(vc, VectraVertex.Layout);
             mesh.SetVertexBufferData(verts, 0, 0, vc, 0, k_Flags);
             mesh.SetIndices(indices.AsArray(), MeshTopology.Triangles, 0, false);

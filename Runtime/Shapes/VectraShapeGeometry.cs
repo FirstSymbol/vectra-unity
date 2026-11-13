@@ -163,8 +163,9 @@ namespace FirstSymbol.Vectra
         /// A reusable point array of exactly <paramref name="count"/> elements (one per thread and length), so that
         /// rebuilding a path shape does not allocate. Contents are undefined; callers overwrite every element.
         /// </summary>
-        public static float2[] Scratch(int count)
+        internal static float2[] Scratch(int count)
         {
+            if (count < 0) count = 0;
             if (count > 256) return new float2[count];
             t_Scratch ??= new float2[257][];
             return t_Scratch[count] ??= new float2[count];
