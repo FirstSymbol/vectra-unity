@@ -34,7 +34,7 @@ namespace FirstSymbol.Vectra.UIToolkit
     /// UI Toolkit element, so the text-engine seam is not used here.
     /// </summary>
     [UxmlElement("VectraSvgElement")]
-    public partial class VectraSvgElement : VisualElement, IVectraAtlasClient
+    public partial class VectraSvgElement : VisualElement, IVectraAtlasClient, IVectraPanelClient
     {
         public const string ussClassName = "vectra-svg-element";
 
@@ -51,7 +51,8 @@ namespace FirstSymbol.Vectra.UIToolkit
         readonly List<VectraRasterLayer> m_Layers = new List<VectraRasterLayer>();
         readonly List<VisualElement> m_Generated = new List<VisualElement>();
         VectraRasterLayer m_Own;
-        IVisualElementScheduledItem m_Rebuild, m_Poll;
+        VectraPanelService m_Service;
+        int m_ServiceIndex = -1;
         bool m_Dirty = true, m_Scheduled, m_Structure = true;
         int m_Signature;
         Vector2 m_BuiltSize;
@@ -157,8 +158,7 @@ namespace FirstSymbol.Vectra.UIToolkit
         {
             VectraAtlases.Register(this);
             VectraUitk.Register(this);
-            m_Rebuild = schedule.Execute(RebuildNow);
-            m_Poll = schedule.Execute(Poll).Every(250);
+            m_Service = VectraPanelService.Join(this, this);
             m_Dirty = m_Structure = true;
             m_Scheduled = false;
             Schedule();
@@ -168,9 +168,8 @@ namespace FirstSymbol.Vectra.UIToolkit
         {
             VectraAtlases.Unregister(this);
             VectraUitk.Unregister(this);
-            m_Rebuild?.Pause();
-            m_Poll?.Pause();
-            m_Rebuild = m_Poll = null;
+            m_Service?.Leave(this);
+            m_Service = null;
             m_Scheduled = false;
             ClearGenerated();
         }
@@ -189,10 +188,23 @@ namespace FirstSymbol.Vectra.UIToolkit
 
         void Schedule()
         {
-            if (m_Scheduled || m_Rebuild == null) return;
+            if (m_Scheduled || m_Service == null) return;
             m_Scheduled = true;
-            m_Rebuild.ExecuteLater(0);
+            m_Service.Queue(this);
         }
+
+        int IVectraPanelClient.ServiceIndex
+        {
+            get => m_ServiceIndex;
+            set => m_ServiceIndex = value;
+        }
+
+        void IVectraPanelClient.RunScheduled(VectraPanelService service)
+        {
+            if (m_Scheduled && ReferenceEquals(m_Service, service)) RebuildNow();
+        }
+
+        void IVectraPanelClient.PollNow() => Poll();
 
         void Poll()
         {

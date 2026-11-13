@@ -229,7 +229,7 @@ namespace FirstSymbol.Vectra
             float R = math.max(frame.MinHalf, 1e-6f);
             int n = math.max(sides, 3);
             float r = math.min(cornerRadius, R * 0.99f);
-            ShapePaths.InflatedPolygon(b, StarShape.StarPoints(R - r, n, math.cos(math.PI / n), true), r);
+            ShapePaths.InflatedPolygon(b, StarShape.StarPointsScratch(R - r, n, math.cos(math.PI / n), true), r);
             b.transform = saved;
         }
 
@@ -250,10 +250,21 @@ namespace FirstSymbol.Vectra
         public override string DisplayName => "Star";
 
         /// <summary>Star vertices (first one at +Y), counter-clockwise. A polygon omits the inner vertices.</summary>
-        public static float2[] StarPoints(float R, int n, float k, bool polygon)
+        public static float2[] StarPoints(float R, int n, float k, bool polygon) => FillStar(new float2[polygon ? n : n * 2], R, n, k, polygon);
+
+        // The path builders consume the points at once, so one array per size serves every build (a new array per rebuild allocated).
+        static readonly float2[][] s_Scratch = new float2[257][];
+
+        internal static float2[] StarPointsScratch(float R, int n, float k, bool polygon)
         {
             int count = polygon ? n : n * 2;
-            var pts = new float2[count];
+            if (count >= s_Scratch.Length) return StarPoints(R, n, k, polygon);
+            return FillStar(s_Scratch[count] ??= new float2[count], R, n, k, polygon);
+        }
+
+        static float2[] FillStar(float2[] pts, float R, int n, float k, bool polygon)
+        {
+            int count = pts.Length;
             float an = math.PI / n;
             for (int i = 0; i < count; i++)
             {
@@ -279,7 +290,7 @@ namespace FirstSymbol.Vectra
             var saved = EnterShapeSpace(frame, b);
             float R = math.max(frame.MinHalf, 1e-6f);
             float r = math.min(cornerRadius, R * 0.5f);
-            ShapePaths.InflatedPolygon(b, StarPoints(R - r, math.max(points, 2), innerRatio, false), r);
+            ShapePaths.InflatedPolygon(b, StarPointsScratch(R - r, math.max(points, 2), innerRatio, false), r);
             b.transform = saved;
         }
 

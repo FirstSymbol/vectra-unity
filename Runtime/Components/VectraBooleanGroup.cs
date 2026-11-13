@@ -23,6 +23,8 @@ namespace FirstSymbol.Vectra
         int m_LastHash;
         bool m_Dirty = true;
         readonly List<BooleanOperand> m_Operands = new List<BooleanOperand>();
+        // Operand objects are reused from one Sync to the next (a new one allocates it and the default ellipse it starts with).
+        readonly List<BooleanOperand> m_Spare = new List<BooleanOperand>();
 
         public float Smoothness
         {
@@ -112,14 +114,16 @@ namespace FirstSymbol.Vectra
                 if (geometry == null || geometry is BooleanShape) continue;
                 var m = transform.worldToLocalMatrix * child.localToWorldMatrix;
                 var op = child.TryGetComponent(out VectraBooleanOperand o) ? o.operation : BooleanOp.Union;
-                m_Operands.Add(new BooleanOperand
-                {
-                    geometry = geometry,
-                    operation = op,
-                    rect = rect,
-                    absolute = true,
-                    transform = new Affine2(m.m00, m.m10, m.m01, m.m11, m.m03, m.m13)
-                });
+                int n = m_Operands.Count;
+                if (n == m_Spare.Count) m_Spare.Add(new BooleanOperand());
+                var operand = m_Spare[n];
+                operand.enabled = true;
+                operand.geometry = geometry;
+                operand.operation = op;
+                operand.rect = rect;
+                operand.absolute = true;
+                operand.transform = new Affine2(m.m00, m.m10, m.m01, m.m11, m.m03, m.m13);
+                m_Operands.Add(operand);
                 SetHidden(child, m_HideOperands);
             }
 

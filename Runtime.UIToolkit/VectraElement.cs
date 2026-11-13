@@ -125,7 +125,7 @@ namespace FirstSymbol.Vectra.UIToolkit
     /// width and height; with none the element is 100 by 100 (class <c>vectra-element</c> of the default style sheet).
     /// </remarks>
     [UxmlElement("VectraElement")]
-    public partial class VectraElement : VisualElement, IVectraAtlasClient
+    public partial class VectraElement : VisualElement, IVectraAtlasClient, IVectraPanelClient
     {
         public const string ussClassName = "vectra-element";
 
@@ -137,7 +137,8 @@ namespace FirstSymbol.Vectra.UIToolkit
         VectraShapeContent m_Content = NewContent();
         VectraRasterLayer m_Layer;
         VectraHitTester m_HitTester;
-        IVisualElementScheduledItem m_Rebuild, m_Poll;
+        VectraPanelService m_Service;
+        int m_ServiceIndex = -1;
         bool m_Dirty = true;
         bool m_Appearance;
         bool m_Scheduled;
@@ -427,8 +428,7 @@ namespace FirstSymbol.Vectra.UIToolkit
         {
             VectraAtlases.Register(this);
             VectraUitk.Register(this);
-            m_Rebuild = schedule.Execute(RebuildNow);
-            m_Poll = schedule.Execute(Poll).Every(250);
+            m_Service = VectraPanelService.Join(this, this);
             m_Dirty = true;
             m_Scheduled = false;
             Schedule();
@@ -438,9 +438,8 @@ namespace FirstSymbol.Vectra.UIToolkit
         {
             VectraAtlases.Unregister(this);
             VectraUitk.Unregister(this);
-            m_Rebuild?.Pause();
-            m_Poll?.Pause();
-            m_Rebuild = m_Poll = null;
+            m_Service?.Leave(this);
+            m_Service = null;
             m_Scheduled = false;
             m_Layer?.Dispose();
             m_Layer = null;
@@ -480,10 +479,23 @@ namespace FirstSymbol.Vectra.UIToolkit
 
         void Schedule()
         {
-            if (m_Scheduled || m_Rebuild == null) return;
+            if (m_Scheduled || m_Service == null) return;
             m_Scheduled = true;
-            m_Rebuild.ExecuteLater(0);
+            m_Service.Queue(this);
         }
+
+        int IVectraPanelClient.ServiceIndex
+        {
+            get => m_ServiceIndex;
+            set => m_ServiceIndex = value;
+        }
+
+        void IVectraPanelClient.RunScheduled(VectraPanelService service)
+        {
+            if (m_Scheduled && ReferenceEquals(m_Service, service)) RebuildNow();
+        }
+
+        void IVectraPanelClient.PollNow() => Poll();
 
         // Screen density drifted a lot (panel scale, a scale transform) or the texture was lost.
         void Poll()
