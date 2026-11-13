@@ -828,8 +828,16 @@ namespace FirstSymbol.Vectra.Rendering
                 if (clipMode == 0 && m_ExternalClip.HasValue)
                     VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, m_ExternalClip.Value, m_ExternalClipRule, 1, ref traps);
                 else
-                    VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, default, geometry.FillRule, clipMode, ref traps,
-                        clipMode != 0);
+                {
+                    // Equal outlines and stroke settings (icons of one size, a size that alternates) share one result.
+                    ulong cacheKey = VectraStrokeCache.Fingerprint(m_Poly, p, dash, profile, clipMode, geometry.FillRule, clipMode != 0);
+                    if (!VectraStrokeCache.TryGet(cacheKey, ref traps))
+                    {
+                        VectraGeometry.StrokeAndTessellate(m_Poly, p, dash, profile, default, geometry.FillRule, clipMode, ref traps,
+                            clipMode != 0);
+                        VectraStrokeCache.Offer(cacheKey, traps);
+                    }
+                }
             }
             dash.Dispose();
             profile.Dispose();
