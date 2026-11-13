@@ -75,6 +75,8 @@ namespace FirstSymbol.Vectra
             m_ChildrenKnown = false;
         }
 
+        void OnDestroy() => VectraWatch.Discard(this);
+
         void OnDisable()
         {
             VectraWatch.Remove(this);

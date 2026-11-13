@@ -92,6 +92,7 @@ namespace FirstSymbol.Vectra.Rendering
         static NativeArray<byte> s_Flags, s_Always, s_Carry, s_Retired, s_Next;
         static int s_Capacity;
         static int s_RetiredCount;
+        static bool s_PolledDirty;
         static bool s_Hooked;
         static VectraWatchDriver s_Driver;
         static int s_Frame;
@@ -170,6 +171,23 @@ namespace FirstSymbol.Vectra.Rendering
             s_RetiredAt[slot] = s_Frame;
             s_RetiredCount++;
             item.WatchSlot = -3 - slot;
+        }
+
+        /// <summary>
+        /// The component is being destroyed: the registry lets go of it at once (its slot stays until the next removal pass, the job skips it), so
+        /// a destroyed component and everything it holds can be collected without waiting for the slot to be given up.
+        /// </summary>
+        public static void Discard(IVectraTicked item)
+        {
+            int slot = item.WatchSlot;
+            if (slot >= 0 || slot == -2) Remove(item);
+            slot = item.WatchSlot;
+            if (slot > -3) return;
+            slot = -3 - slot;
+            item.WatchSlot = -1;
+            if (slot >= s_Items.Count || !ReferenceEquals(s_Items[slot], item)) return;
+            s_Items[slot] = null;
+            if ((s_Modes[slot] & PolledBit) != 0) s_PolledDirty = true;
         }
 
         /// <summary>Ticks the item every frame (or stops doing so).</summary>
@@ -283,8 +301,9 @@ namespace FirstSymbol.Vectra.Rendering
             bool polledGone = false;
             for (int slot = s_Items.Count - 1; slot >= 0 && removed < MaxRemovalsPerTick; slot--)
             {
-                if (s_Retired[slot] == 0 || s_Frame - s_RetiredAt[slot] < KeepFrames) continue;
                 var item = s_Items[slot];
+                // A destroyed component (its entry was cleared by Discard) cannot be enabled again: no reason to wait.
+                if (s_Retired[slot] == 0 || (item != null && s_Frame - s_RetiredAt[slot] < KeepFrames)) continue;
                 if ((s_Modes[slot] & PolledBit) != 0) polledGone = true;
                 int last = s_Items.Count - 1;
                 s_Transforms.RemoveAtSwapBack(slot);
@@ -301,7 +320,7 @@ namespace FirstSymbol.Vectra.Rendering
                     s_Next[slot] = s_Next[last];
                     s_Flags[slot] = s_Flags[last];
                     s_Retired[slot] = s_Retired[last];
-                    moved.WatchSlot = s_Retired[slot] != 0 ? -3 - slot : slot;
+                    if (moved != null) moved.WatchSlot = s_Retired[slot] != 0 ? -3 - slot : slot;
                 }
 
                 s_Items.RemoveAt(last);
@@ -310,7 +329,7 @@ namespace FirstSymbol.Vectra.Rendering
                 s_RetiredAt.RemoveAt(last);
                 s_Retired[last] = 0;
                 s_RetiredCount--;
-                item.WatchSlot = -1;
+                if (item != null) item.WatchSlot = -1;
                 removed++;
             }
 
@@ -360,6 +379,12 @@ namespace FirstSymbol.Vectra.Rendering
             PreTick?.Invoke();
             CheckCanvases();
             if (s_RetiredCount > 0 && (s_Frame & 3) == 0) RemoveRetired();
+            if (s_PolledDirty)
+            {
+                s_PolledDirty = false;
+                s_Polled.RemoveAll(s_IsGone);
+            }
+
             FlushPending();
             int count = s_Items.Count;
             if (count == 0)
@@ -485,8 +510,10 @@ namespace FirstSymbol.Vectra.Rendering
 
         internal static void Dispose()
         {
-            for (int i = 0; i < s_Items.Count; i++) s_Items[i].WatchSlot = -1;
+            for (int i = 0; i < s_Items.Count; i++)
+                if (s_Items[i] != null) s_Items[i].WatchSlot = -1;
             for (int i = 0; i < s_Pending.Count; i++) s_Pending[i].item.WatchSlot = -1;
+            s_PolledDirty = false;
             s_Items.Clear();
             s_Groups.Clear();
             s_Modes.Clear();

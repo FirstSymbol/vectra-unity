@@ -176,6 +176,7 @@ namespace FirstSymbol.Vectra
 
         void OnDestroy()
         {
+            VectraWatch.Discard(this);
             m_Renderer?.Dispose();
             m_Renderer = null;
             m_HitTester?.Dispose();

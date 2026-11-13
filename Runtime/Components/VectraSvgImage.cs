@@ -211,6 +211,7 @@ namespace FirstSymbol.Vectra
 
         protected override void OnDestroy()
         {
+            VectraWatch.Discard(this);
             m_Renderer?.Dispose();
             m_Renderer = null;
             if (m_Mesh != null)

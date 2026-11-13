@@ -28,8 +28,18 @@ namespace FirstSymbol.Vectra
         // copies the data: no mesh per shape.
         static Mesh s_WorkerMesh;
 
-        static Mesh WorkerMesh()
+        // Shapes that have filled the worker mesh and are not destroyed yet; the mesh goes with the last of them and comes back with the next.
+        static int s_MeshUsers;
+        bool m_UsesWorkerMesh;
+
+        Mesh WorkerMesh()
         {
+            if (!m_UsesWorkerMesh)
+            {
+                m_UsesWorkerMesh = true;
+                s_MeshUsers++;
+            }
+
             if (s_WorkerMesh == null)
             {
                 s_WorkerMesh = new Mesh { name = "Vectra Shape", hideFlags = HideFlags.HideAndDontSave };
@@ -37,6 +47,16 @@ namespace FirstSymbol.Vectra
             }
 
             return s_WorkerMesh;
+        }
+
+        void ReleaseWorkerMesh()
+        {
+            if (!m_UsesWorkerMesh) return;
+            m_UsesWorkerMesh = false;
+            if (--s_MeshUsers > 0 || s_WorkerMesh == null) return;
+            if (Application.isPlaying) Destroy(s_WorkerMesh);
+            else DestroyImmediate(s_WorkerMesh);
+            s_WorkerMesh = null;
         }
         float m_LastScale;
         Texture m_LastTexture;
@@ -199,6 +219,8 @@ namespace FirstSymbol.Vectra
 
         protected override void OnDestroy()
         {
+            VectraWatch.Discard(this);
+            ReleaseWorkerMesh();
             m_Renderer?.Dispose();
             m_Renderer = null;
             m_HitTester?.Dispose();
