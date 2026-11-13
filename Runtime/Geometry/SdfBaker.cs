@@ -1,4 +1,5 @@
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 
 namespace FirstSymbol.Vectra.Geometry
@@ -11,9 +12,16 @@ namespace FirstSymbol.Vectra.Geometry
     {
         const int CellSize = 8;
 
+        // A boundary segment with what DistanceSq derives from it each time (b - a and its squared length), computed once.
+        struct Packed
+        {
+            public float2 a, ab;
+            public float l2;
+        }
+
         /// <param name="region">Area of local space covered by the texel block (texel centers are inset by half a texel).</param>
         /// <param name="dst">Destination texels; the block is written at (<paramref name="dstX"/>, <paramref name="dstY"/>).</param>
-        public static void Bake(NativeArray<Trapezoid> traps, Bounds2 region, int width, int height, float range,
+        public static unsafe void Bake(NativeArray<Trapezoid> traps, Bounds2 region, int width, int height, float range,
             NativeArray<half> dst, int dstStride, int dstX, int dstY)
         {
             if (width <= 0 || height <= 0) return;
@@ -43,7 +51,14 @@ namespace FirstSymbol.Vectra.Geometry
             }
 
             for (int i = 1; i < cellStart.Length; i++) cellStart[i] += cellStart[i - 1];
-            var cellItems = new NativeArray<int>(math.max(cellStart[cellStart.Length - 1], 1), Allocator.Temp);
+            var packed = new NativeArray<Packed>(segments.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+            for (int s = 0; s < segments.Length; s++)
+            {
+                float2 ab = segments[s].b - segments[s].a;
+                packed[s] = new Packed { a = segments[s].a, ab = ab, l2 = math.dot(ab, ab) };
+            }
+
+            var cellItems = new NativeArray<Packed>(math.max(cellStart[cellStart.Length - 1], 1), Allocator.Temp, NativeArrayOptions.UninitializedMemory);
             var fill = new NativeArray<int>(cw * ch, Allocator.Temp, NativeArrayOptions.ClearMemory);
             for (int s = 0; s < segments.Length; s++)
             {
@@ -52,37 +67,91 @@ namespace FirstSymbol.Vectra.Geometry
                 for (int cx = r.x; cx <= r.z; cx++)
                 {
                     int cell = cy * cw + cx;
-                    cellItems[cellStart[cell] + fill[cell]++] = s;
+                    cellItems[cellStart[cell] + fill[cell]++] = packed[s];
                 }
             }
 
             float range2 = range * range;
             float invRange = 1f / range;
+            var items = (Packed*)cellItems.GetUnsafeReadOnlyPtr();
+            var mask = (byte*)inside.GetUnsafeReadOnlyPtr();
+            var outp = (ushort*)dst.GetUnsafePtr();
+            var lane = new float4(0f, 1f, 2f, 3f);
+            // One cell row (eight texels) at a time as two float4: every lane runs the arithmetic of DistanceSq on its own texel,
+            // in the same order, so each texel gets exactly the value the one-texel loop gave.
             for (int y = 0; y < height; y++)
             {
                 int cy = y / CellSize;
-                for (int x = 0; x < width; x++)
+                float py = origin.y + texel.y * y;
+                for (int x0 = 0; x0 < width; x0 += CellSize)
                 {
-                    int cell = cy * cw + x / CellSize;
-                    float2 p = origin + texel * new float2(x, y);
-                    float best = range2;
-                    for (int k = cellStart[cell]; k < cellStart[cell + 1]; k++)
+                    int cell = cy * cw + x0 / CellSize;
+                    float4 pxa = origin.x + texel.x * (x0 + lane);
+                    float4 pxb = origin.x + texel.x * (x0 + 4 + lane);
+                    float4 besta = range2, bestb = range2;
+                    int end = cellStart[cell + 1];
+                    for (int k = cellStart[cell]; k < end; k++)
                     {
-                        var sg = segments[cellItems[k]];
-                        best = math.min(best, DistanceSq(p, sg.a, sg.b));
+                        var sg = items[k];
+                        float apy = py - sg.a.y;
+                        float4 apxa = pxa - sg.a.x;
+                        float4 apxb = pxb - sg.a.x;
+                        float4 ta, tb;
+                        if (sg.l2 > 0f)
+                        {
+                            ta = math.saturate((apxa * sg.ab.x + apy * sg.ab.y) / sg.l2);
+                            tb = math.saturate((apxb * sg.ab.x + apy * sg.ab.y) / sg.l2);
+                        }
+                        else ta = tb = 0f;
+
+                        float4 qxa = apxa - sg.ab.x * ta, qxb = apxb - sg.ab.x * tb;
+                        float4 qya = apy - sg.ab.y * ta, qyb = apy - sg.ab.y * tb;
+                        besta = math.min(besta, qxa * qxa + qya * qya);
+                        bestb = math.min(bestb, qxb * qxb + qyb * qyb);
                     }
 
-                    float d = math.sqrt(best) * invRange;
-                    if (inside[y * width + x] != 0) d = -d;
-                    dst[(dstY + y) * dstStride + dstX + x] = (half)math.clamp(d, -1f, 1f);
+                    byte* m = mask + y * width + x0;
+                    ushort* o = outp + (dstY + y) * dstStride + dstX + x0;
+                    int count = math.min(CellSize, width - x0);
+                    if (count == CellSize)
+                    {
+                        Store(besta, new bool4(m[0] != 0, m[1] != 0, m[2] != 0, m[3] != 0), invRange, o);
+                        Store(bestb, new bool4(m[4] != 0, m[5] != 0, m[6] != 0, m[7] != 0), invRange, o + 4);
+                    }
+                    else
+                    {
+                        // The last cell of a row can be narrower than eight texels.
+                        var ba = besta;
+                        var bb = bestb;
+                        for (int i = 0; i < count; i++)
+                        {
+                            float best = i < 4 ? ba[i] : bb[i - 4];
+                            float d = math.sqrt(best) * invRange;
+                            if (m[i] != 0) d = -d;
+                            o[i] = (ushort)math.f32tof16(math.clamp(d, -1f, 1f));
+                        }
+                    }
                 }
             }
 
             inside.Dispose();
             segments.Dispose();
+            packed.Dispose();
             cellStart.Dispose();
             cellItems.Dispose();
             fill.Dispose();
+        }
+
+        // sqrt, sign, clamp and half conversion of four texels, as the scalar code does them.
+        static unsafe void Store(float4 best, bool4 inside, float invRange, ushort* o)
+        {
+            float4 d = math.sqrt(best) * invRange;
+            d = math.select(d, -d, inside);
+            uint4 h = math.f32tof16(math.clamp(d, -1f, 1f));
+            o[0] = (ushort)h.x;
+            o[1] = (ushort)h.y;
+            o[2] = (ushort)h.z;
+            o[3] = (ushort)h.w;
         }
 
         static void GetCellRange(in Segment s, float range, float2 regionMin, float2 cellSize, int cw, int ch, out int4 r)
