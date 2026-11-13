@@ -29,16 +29,22 @@ namespace FirstSymbol.Vectra.UIToolkit.Tests
             yield return null;
             e.RebuildNow();
             Assert.Greater(VectraSurfaces.PendingCount, 0, "the draw waits in the batch");
-            // 200 more distinct gradients outgrow the 64 rows of the atlas
-            var paints = new List<VectraPaint>();
-            for (int i = 0; i < 200; i++)
+            // Held distinct gradients until the atlas grows: earlier tests of the same run may have left it larger, with cold rows to evict first.
+            int height = VectraGradientAtlas.Height;
+            var held = new List<GradientRows>();
+            for (int i = 0; i < 5000 && VectraGradientAtlas.Height == height; i++)
             {
-                var p = VectraPaint.Linear(new Color(i / 200f, 0.1f, 0.2f), new Color(0.9f, i / 200f, 0.4f), 45f);
-                paints.Add(p);
-                VectraGradientAtlas.Acquire(p, ColorAdjust.Identity);
+                var p = VectraPaint.Linear(new Color((i % 997) / 997f, 0.1f, (i / 997) / 6f), new Color(0.9f, (i % 991) / 991f, 0.4f), 45f);
+                held.Add(VectraGradientAtlas.Acquire(p, ColorAdjust.Identity));
             }
 
+            Assert.AreNotEqual(height, VectraGradientAtlas.Height, "the atlas never grew");
             Assert.AreEqual(0, VectraSurfaces.PendingCount, "the batch ran before the atlas grew");
+            for (int i = 0; i < held.Count; i++)
+            {
+                var r = held[i];
+                VectraGradientAtlas.Release(ref r);
+            }
         }
 
         [UnityTest]
