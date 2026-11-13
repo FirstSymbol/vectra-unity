@@ -294,9 +294,12 @@ namespace FirstSymbol.Vectra.UIToolkit
                             current = page;
                         }
 
-                        cmd.SetViewport(new Rect(d.region.x, d.region.y, d.region.w, d.region.h));
+                        // Clear the whole slot, not only the picture: the quad of the picture is filtered and reads half a texel beyond it.
+                        var r = d.region;
+                        cmd.SetViewport(new Rect(r.x, r.y, r.slotWidth, r.shelf != null ? r.shelf.height : r.h));
                         cmd.SetViewProjectionMatrices(identity, identity);
                         cmd.DrawMesh(s_Quad, identity, clear, 0, 0);
+                        cmd.SetViewport(new Rect(r.x, r.y, r.w, r.h));
                         var area = d.area;
                         var proj = Matrix4x4.Ortho(area.xMin, area.xMax, area.yMin, area.yMax, -1f, 1f);
                         cmd.SetViewProjectionMatrices(identity, GL.GetGPUProjectionMatrix(proj, true));
