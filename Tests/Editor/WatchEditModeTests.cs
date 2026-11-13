@@ -51,8 +51,14 @@ namespace FirstSymbol.Vectra.Editor.Tests
         [Test]
         public void ShaderGradientScale_MatchesTheAtlasMaxHeight()
         {
-            var info = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(VectraGradientAtlas).Assembly);
-            string path = Path.Combine(info.resolvedPath, "Runtime", "Resources", "Vectra", "VectraCore.hlsl");
+            // the package may sit in Assets/Plugins (no PackageInfo for its assemblies): find the file through the asset database
+            string path = null;
+            foreach (var guid in UnityEditor.AssetDatabase.FindAssets("VectraCore"))
+            {
+                string p = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                if (p.EndsWith("/Runtime/Resources/Vectra/VectraCore.hlsl")) path = UnityEditor.FileUtil.GetPhysicalPath(p);
+            }
+
             Assert.IsNotNull(path, "VectraCore.hlsl found");
             var m = Regex.Match(File.ReadAllText(path), @"v \* \((\d+)\.0 \* _VectraGradients_TexelSize\.y\)");
             Assert.IsTrue(m.Success, "GradientV found");

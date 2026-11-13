@@ -23,6 +23,7 @@ namespace FirstSymbol.Vectra.Tests
         public void SetUp()
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) Assert.Ignore("needs a graphics device");
+            if (QualitySettings.activeColorSpace != ColorSpace.Linear) Assert.Ignore("composited pictures exist only in Linear projects: a Gamma project draws with no gamma scope");
             SvgPictures.DestroyAll();
             m_Canvas = new GameObject("Sharing canvas", typeof(Canvas));
             m_Canvas.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
