@@ -192,7 +192,14 @@ namespace FirstSymbol.Vectra.UIToolkit
         /// drawn straight into the page: no scissor clear and no texture copy, which some platforms (WebGL 2) do not offer
         /// for render textures.
         /// </summary>
+        static readonly Unity.Profiling.ProfilerMarker s_DrawMarker = new Unity.Profiling.ProfilerMarker("Vectra.Uitk.Draw");
+
         public static bool Draw(in SurfaceRegion region, Mesh mesh, Material material, Texture main, Rect area)
+        {
+            using (s_DrawMarker.Auto()) return DrawCore(region, mesh, material, main, area);
+        }
+
+        static bool DrawCore(in SurfaceRegion region, Mesh mesh, Material material, Texture main, Rect area)
         {
             if (!region.IsValid || mesh == null || material == null) return false;
             var clear = ClearMaterial;

@@ -36,7 +36,14 @@ namespace FirstSymbol.Vectra.UIToolkit
         /// Rasterizes what <see cref="renderer"/> has built. <paramref name="center"/> is where the local origin sits in
         /// element space (y down); <paramref name="pixelsPerPoint"/> is the screen density the layer is drawn for.
         /// </summary>
+        static readonly Unity.Profiling.ProfilerMarker s_RasterizeMarker = new Unity.Profiling.ProfilerMarker("Vectra.Uitk.Rasterize");
+
         public void Rasterize(Vector2 center, float pixelsPerPoint, ShapeBlendMode blend = ShapeBlendMode.Normal)
+        {
+            using (s_RasterizeMarker.Auto()) RasterizeCore(center, pixelsPerPoint, blend);
+        }
+
+        void RasterizeCore(Vector2 center, float pixelsPerPoint, ShapeBlendMode blend)
         {
             rasterCount++;
             var buf = renderer.buffer;
