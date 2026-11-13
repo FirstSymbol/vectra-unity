@@ -147,8 +147,9 @@ namespace FirstSymbol.Vectra.Rendering
 
         public VectraMeshBuffer()
         {
-            vertices = new NativeList<VectraVertex>(64, Allocator.Persistent);
-            indices = new NativeList<int>(96, Allocator.Persistent);
+            // A rectangle layer is 4 vertices and 6 indices; the lists grow to what a shape needs and keep it.
+            vertices = new NativeList<VectraVertex>(16, Allocator.Persistent);
+            indices = new NativeList<int>(24, Allocator.Persistent);
             bounds = Bounds2.Empty;
         }
 

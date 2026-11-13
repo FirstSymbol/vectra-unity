@@ -119,9 +119,10 @@ namespace FirstSymbol.Vectra.Rendering
 
         public VectraShapeRenderer()
         {
-            m_Path = new NativePath(Allocator.Persistent, 32);
-            m_Poly = new Polylines(Allocator.Persistent, 128);
-            m_Fill = new NativeList<Trapezoid>(64, Allocator.Persistent);
+            // Most shapes are analytic and never touch these; they start small and grow once for path shapes.
+            m_Path = new NativePath(Allocator.Persistent, 4);
+            m_Poly = new Polylines(Allocator.Persistent, 16);
+            m_Fill = new NativeList<Trapezoid>(8, Allocator.Persistent);
             m_Builder = new PathBuilder(m_Path);
         }
 
@@ -788,7 +789,7 @@ namespace FirstSymbol.Vectra.Rendering
         {
             while (m_StrokeTraps.Count <= index)
             {
-                m_StrokeTraps.Add(new NativeList<Trapezoid>(64, Allocator.Persistent));
+                m_StrokeTraps.Add(new NativeList<Trapezoid>(16, Allocator.Persistent));
                 m_StrokeKeys.Add(0);
             }
 

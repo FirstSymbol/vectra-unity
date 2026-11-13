@@ -24,7 +24,20 @@ namespace FirstSymbol.Vectra
 
         VectraShapeRenderer m_Renderer;
         VectraHitTester m_HitTester;
-        Mesh m_Mesh;
+        // Like uGUI's own graphics, every shape fills one shared worker mesh and hands it to its CanvasRenderer, which
+        // copies the data: no mesh per shape.
+        static Mesh s_Mesh;
+
+        static Mesh WorkerMesh()
+        {
+            if (s_Mesh == null)
+            {
+                s_Mesh = new Mesh { name = "Vectra Shape", hideFlags = HideFlags.HideAndDontSave };
+                s_Mesh.MarkDynamic();
+            }
+
+            return s_Mesh;
+        }
         float m_LastScale;
         Texture m_LastTexture;
 
@@ -186,12 +199,6 @@ namespace FirstSymbol.Vectra
             m_Renderer = null;
             m_HitTester?.Dispose();
             m_HitTester = null;
-            if (m_Mesh != null)
-            {
-                if (Application.isPlaying) Destroy(m_Mesh);
-                else DestroyImmediate(m_Mesh);
-            }
-
             base.OnDestroy();
         }
 
@@ -314,12 +321,6 @@ namespace FirstSymbol.Vectra
         void UpdateGeometryCore()
         {
             if (m_Renderer == null) m_Renderer = new VectraShapeRenderer();
-            if (m_Mesh == null)
-            {
-                m_Mesh = new Mesh { name = "Vectra Shape", hideFlags = HideFlags.HideAndDontSave };
-                m_Mesh.MarkDynamic();
-            }
-
             if (rectTransform == null || rectTransform.rect.width < 0f || rectTransform.rect.height < 0f)
             {
                 canvasRenderer.Clear();
@@ -337,8 +338,9 @@ namespace FirstSymbol.Vectra
             }
 
             m_Renderer.Build(input);
-            m_Renderer.buffer.Upload(m_Mesh);
-            canvasRenderer.SetMesh(m_Mesh);
+            var mesh = WorkerMesh();
+            m_Renderer.buffer.Upload(mesh);
+            canvasRenderer.SetMesh(mesh);
             m_LastScale = CurrentScale();
 
             if (m_LastTexture != m_Renderer.mainTexture)
