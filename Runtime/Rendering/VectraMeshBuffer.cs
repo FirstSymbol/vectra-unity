@@ -113,6 +113,29 @@ namespace FirstSymbol.Vectra.Rendering
         }
     }
 
+    [BurstCompile]
+    struct SanitizeVerticesJob : IJob
+    {
+        public NativeArray<VectraVertex> vertices;
+
+        public void Execute()
+        {
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                var v = vertices[i];
+                bool4 ok0 = math.isfinite(v.uv0), ok1 = math.isfinite(v.uv1), ok2 = math.isfinite(v.uv2), ok3 = math.isfinite(v.uv3);
+                bool3 okp = math.isfinite(v.position);
+                if (math.all(okp) & math.all(ok0) & math.all(ok1) & math.all(ok2) & math.all(ok3)) continue;
+                if (!math.all(okp)) v.position = float3.zero;
+                v.uv0 = math.select(float4.zero, v.uv0, ok0);
+                v.uv1 = math.select(float4.zero, v.uv1, ok1);
+                v.uv2 = math.select(float4.zero, v.uv2, ok2);
+                v.uv3 = math.select(float4.zero, v.uv3, ok3);
+                vertices[i] = v;
+            }
+        }
+    }
+
     /// <summary>
     /// Accumulates the vertices of every layer of a shape and uploads them to a <see cref="Mesh"/> in one go.
     /// </summary>
@@ -204,56 +227,33 @@ namespace FirstSymbol.Vectra.Rendering
             using (s_UploadMarker.Auto()) UploadCore(mesh);
         }
 
+        // One interleaved stream in the order of VectraVertex.Layout, which is the order Unity itself uses for these six
+        // channels: the mesh bytes equal what the per-channel setters wrote.
+        const MeshUpdateFlags k_Flags = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices |
+                                        MeshUpdateFlags.DontResetBoneBounds;
+
         void UploadCore(Mesh mesh)
         {
             if (mesh == null) return;
             int vc = vertices.Length;
             int ic = indices.Length;
-            mesh.Clear();
-            if (vc == 0 || ic == 0) return;
-
-            var pos = new NativeArray<Vector3>(vc, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-            var col = new NativeArray<Color32>(vc, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-            var uv0 = new NativeArray<Vector4>(vc, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-            var uv1 = new NativeArray<Vector4>(vc, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-            var uv2 = new NativeArray<Vector4>(vc, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-            var uv3 = new NativeArray<Vector4>(vc, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-            for (int i = 0; i < vc; i++)
+            if (vc == 0 || ic == 0)
             {
-                var v = vertices[i];
-                // Never hand non-finite data to the GPU.
-                if (!math.all(math.isfinite(v.position))) v.position = float3.zero;
-                pos[i] = v.position;
-                col[i] = v.color;
-                uv0[i] = Finite(v.uv0);
-                uv1[i] = Finite(v.uv1);
-                uv2[i] = Finite(v.uv2);
-                uv3[i] = Finite(v.uv3);
+                mesh.Clear();
+                return;
             }
 
-            mesh.indexFormat = vc > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16;
-            mesh.SetVertices(pos);
-            mesh.SetColors(col);
-            mesh.SetUVs(0, uv0);
-            mesh.SetUVs(1, uv1);
-            mesh.SetUVs(2, uv2);
-            mesh.SetUVs(3, uv3);
+            var verts = vertices.AsArray();
+            // Never hand non-finite data to the GPU (rewritten in place; finite data is left alone).
+            new SanitizeVerticesJob { vertices = verts }.Run();
+
+            var format = vc > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16;
+            if (mesh.indexFormat != format) mesh.indexFormat = format;
+            mesh.SetVertexBufferParams(vc, VectraVertex.Layout);
+            mesh.SetVertexBufferData(verts, 0, 0, vc, 0, k_Flags);
             mesh.SetIndices(indices.AsArray(), MeshTopology.Triangles, 0, false);
             var b = bounds.IsValid ? bounds : new Bounds2 { min = float2.zero, max = float2.zero };
             mesh.bounds = new Bounds(new Vector3(b.Center.x, b.Center.y, 0f), new Vector3(b.Size.x, b.Size.y, 0.01f));
-
-            pos.Dispose();
-            col.Dispose();
-            uv0.Dispose();
-            uv1.Dispose();
-            uv2.Dispose();
-            uv3.Dispose();
-        }
-
-        static Vector4 Finite(float4 v)
-        {
-            bool4 ok = math.isfinite(v);
-            return math.select(float4.zero, v, ok);
         }
 
         public void Dispose()
